@@ -11,6 +11,67 @@ so modelling stays consistent, reviewable, and automatable.
 - Prefer small aggregates with clear consistency boundaries.
 - Prefer explicit types (value objects) over primitives for meaningful concepts.
 
+# Strategic Domain Driven Design Clarifier
+
+This is intentionally small and ontology-focused.
+
+## System Boundary Clarification
+
+The domain model is defined within a single bounded context.
+
+A bounded context defines:
+- The scope in which the model is consistent.
+- The vocabulary used inside the model.
+- The ownership of invariants.
+
+External systems MUST NOT leak their models directly into the domain.
+If necessary, mapping or anti-corruption logic MUST be used at the boundary.
+
+# Validity & Invariants
+
+## Always-Valid Principle
+
+Domain objects (Entities, Aggregates, Value Objects) MUST be valid at all times.
+
+## Definition of “valid”:
+
+An object is considered valid if:
+1.	All structural constraints are satisfied (type safety, non-null where required).
+2.	All Value Object invariants hold.
+3.	All state-dependent invariants hold according to the explicit state model.
+
+“Always valid” does NOT mean “fully completed”.
+Partial or evolving states are allowed if they are explicitly modelled (e.g. Pending, Confirmed, Cancelled) and define their own invariants.
+
+## State-Dependent Invariants
+
+Invariants MAY depend on the current lifecycle state.
+
+Example:
+- confirmedAt MAY only be set if status == CONFIRMED.
+- A CancelledBooking MUST NOT allow further modifications.
+
+State transitions MUST enforce invariants atomically.
+
+## Policies vs Invariants
+
+A clear distinction MUST be made between:
+- Invariants → internal consistency rules of the aggregate.
+- Business policies → rules depending on external systems, time, or cross-aggregate information.
+
+Policies MUST NOT require infrastructure access inside the aggregate.
+If required, external information MUST be passed as parameters or handled in Application Services.
+
+## Rehydration Rule
+
+Rehydrating an object from persistence MUST NOT violate invariants.
+
+If historical data violates current invariants, this MUST be handled explicitly via:
+- Data migration
+- Repair use cases
+- Compatibility logic
+
+Silent acceptance of invalid domain state is NOT allowed.
 
 # Building blocks
 
@@ -21,7 +82,7 @@ so modelling stays consistent, reviewable, and automatable.
 *Rules:*
 - Has an ID (usually an ID Value Object).
 - Equality is by identity, not by all fields.
-- Mutable lifecycle is allowed (via behaviour methods), but invariants must always hold.
+- Mutable lifecycle is allowed (via behaviour methods), but invariants must hold.
 
 *Constraints:*
 - Entities are always valid.
@@ -44,11 +105,20 @@ so modelling stays consistent, reviewable, and automatable.
 - No back-references to entities/aggregates.
 - Prefer dedicated types to String/BigDecimal/UUID.
 
-*ID Value Objects*
-Use IDs as value objects when identity appears in more than one place or you want type-safety:
-- OrderId, CustomerId, etc.
-- Wrap UUID (or String) and validate the format.
-- Define the IDs always as inline public record inside the entity it belongs to.
+## Identity
+
+*Definition:* A unique identifier for an entity or aggregate.
+
+Entities and Aggregates MUST have identity.
+
+ID Modelling
+- IDs MUST be modeled as Value Objects.
+- IDs SHOULD NOT be primitive types.
+- Placement depends on reuse:
+  - If only used inside the aggregate → may be defined inline.
+  - If referenced across aggregates → define in a shared domain type package within the bounded context.
+
+IDs MUST be immutable.
 
 
 ## Aggregate
@@ -99,15 +169,18 @@ Constraints:
 
 *Definition:* Orchestrates a use case: loads aggregates, invokes domain behavior, persists, publishes.
 
-*Rules:*
-- Applies authorisation and transaction boundaries.
-- Maps input (command) → domain objects.
-- Uses repositories and outbound ports.
-- Does not contain business rules; it coordinates them.
+*Responsibilities:*
+- Load aggregates via repositories.
+- Execute domain behavior.
+- Pass required external data as parameters.
+- Apply authorization rules at a clearly defined boundary.
+- Persist changes.
+- Trigger event publication.
 
-*Constraints:*
-- Application services can depend on Spring (optional), but should be easy to test without Spring.
+Application Services MUST NOT contain domain invariants.
 
+If orchestration spans multiple aggregates over time or asynchronously,
+a dedicated process manager / saga SHOULD be used.
 
 ## Factory
 
@@ -115,23 +188,39 @@ Constraints:
 
 *Rules:*
 - Prefer static named constructors on the aggregate/value object first.
-- Prefer always the Builder-Pattern if applicable.
 - Use a factory when creation needs:
-- multiple steps
-- generation of IDs
-- collaboration of multiple values
+  - multiple steps
+  - generation of IDs
+  - collaboration of multiple values
 
 *Constraints:*
 - Factories should be immutable and thread-safe.
 - Factories should not have side effects.
 
+Factories are used to guarantee invariant-safe object creation.
+
+*Creation Rules:*
+- Prefer named constructors or static factory methods.
+- Builders SHOULD only be used when:
+- The object has many optional parameters, AND
+- Readability significantly improves, AND
+- Invariants are enforced at build() time.
+
+Half-constructed domain objects MUST NOT exist.
+
+All factories MUST ensure the object is valid upon creation.
+
 ## Repository
 
-*Definition:* Collection-like interface for aggregate roots.
+*Definition:* Repositories abstract persistence for aggregates.
 
 *Rules:*
 - Repositories return and persist aggregate roots, not JPA entities.
 - Keep method names in domain language: findBy(OrderId), save(Order).
+- MUST load, update, save, delete complete aggregates
+- MUST delete complete aggregates with all attached entities and value objects.
+- MUST persist aggregate state atomically.
+- MUST NOT expose partial modification methods.
 
 *Constraints:*
 - Repository interface lives in the domain (or application core).
@@ -139,65 +228,59 @@ Constraints:
 
 ## Domain Event
 
-*Definition:* Something that happened in the domain.
+Domain Events
+
+*Definition:* Domain Events represent facts that happened inside the domain.
 
 *Rules:*
-- Past tense naming: OrderPlaced, PaymentCaptured.
-- Domain events are created by the domain model (usually aggregates).
-- Two kinds:
-- Internal: within the same bounded context/process
-- External: published for other systems/contexts
+- MUST be immutable.
+- MUST be part of the ubiquitous language.
+- MUST describe something that already happened (past tense).
 
-*Publication rule:*
-- Domain model only records events.
-- Application layer decides when/how to publish (usually after commit).
+Domain Events are raised inside aggregates.
 
-## Command
+*Publication:*
+- Application layer is responsible for publishing events AFTER successful transaction commit.
 
-*Definition:* Request to perform a use case (imperative intent).
+*Domain vs Integration Events:*
 
-*Rules:*
-- Named as intent: PlaceOrderCommand.
-- Minimal required fields only.
-- Validate:
-- syntactic validation at the boundary (API)
-- semantic/domain validation in domain objects/aggregate
+A distinction MUST be made between:
+- Domain Event → internal to the bounded context.
+- Integration Event → external communication contract.
 
-*Constraints:*
-- Command objects are immutable.
-- Command objects are serializable (for distributed systems).
+Integration Events MAY be derived from Domain Events but are NOT the same concept.
 
+## Commands & Queries
 
-## Query
-
-*Definition:* Read-side request that does not mutate domain state.
+*Definition:* Commands and Queries represent application boundary inputs.
 
 *Rules:*
-- Keep read models pragmatic. They don’t have to match the write model.
+- MUST be immutable.
+- MUST NOT contain domain behavior.
+- MUST represent intent (Command) or information request (Query).
+- MUST NOT depend on infrastructure types.
 
-*Constraints:*
-- Query objects are immutable.
-- Query objects are serializable (for distributed systems).
+If crossing process boundaries, they MUST be treated as versioned message contracts.
 
+Serializable is NOT a requirement unless required by the transport mechanism.
 
-## Error model
+## Read Models
+
+*Definition:* Read Models are optimized representations for queries.
+They are not part of the transactional aggregate model.
+
+*Rules:*
+- MAY denormalize data.
+- MAY join multiple aggregates.
+- MUST NOT contain domain invariants.
+- MUST NOT mutate domain state.
+
+Read Models exist to optimize query performance and projection use cases.
+
+# Error model
 
 - Use domain exceptions (or Result style) for business rule violations:
-- OrderAlreadyPaid, InsufficientStock
+  - OrderAlreadyPaid, InsufficientStock
 - Distinguish:
-- Domain errors (expected) vs technical errors (unexpected)
-- Domain errors should be mappable to API errors consistently.
-
-Time, randomness, and “now”
-•	Never call Instant.now() in the domain.
-•	Use an outbound port ClockPort or provide time from application service.
-
-⸻
-
-Anti-patterns (explicitly forbidden)
-•	JPA annotations in domain objects.
-•	Calling repositories from aggregates/entities/value objects.
-•	Using primitives for domain concepts when they carry meaning (money, ids, email, etc.).
-•	Cross-aggregate invariants enforced inside one transaction “because it’s convenient”.
-
-⸻
+  - Domain errors (expected) vs technical errors (unexpected)
+  - Domain errors should be mappable to API errors consistently.
