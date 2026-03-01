@@ -19,7 +19,7 @@ reference Bounded Context.
 
 We need to clarify first 
 - Classical Spring Boot application with Vaadin UI? Or just the Backend (would be enough) – IMHO: Let’s see how much time is left after the backend is done
-  - Start with Spring Boot and REST-API
+  - Start with Spring Boot and REST-A
 - Domain Driven Design 101
   - Application Services (aka the Use-Cases)
   - Domain Services (when one Aggregate is not enough)
