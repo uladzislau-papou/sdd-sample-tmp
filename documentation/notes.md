@@ -1,9 +1,14 @@
 ---
 type: note
-goal: take notes and share them
+goal: Humans take notes and share them
+agents: AGENTS MUST IGNORE THIS FILE!
 ---
 
 # Notes
+
+## Impl
+
+Persistance layer can be enhanced by PostgreSQL usage.
 
 ## The Talk
 
