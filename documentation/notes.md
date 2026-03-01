@@ -228,6 +228,286 @@ the action happens and the theory is explained in detail and showcased.
 | 35-40 | Q&A               |
 
 
+### Code und Slides 
+
+Sehr gut. Jetzt kommen wir auf die eigentliche Storyline deines Vortrags:
+Nicht Architektur erklären – sondern eine Business-Story sauber in Architektur übersetzen.
+
+Du brauchst zwei Ebenen:
+1.	Business Feature Story (für Kontext & Einstieg)
+2.	Talk-Flow Version (architektonische Dramaturgie entlang dieser Story)
+
+Ich strukturiere das so, dass du es direkt in deine Slides übernehmen kannst.
+
+⸻
+
+🏔 1. Business Feature Story (Outside-In)
+
+Das ist deine Business-Narration. Keine Technik. Keine Aggregate. Keine Ports.
+
+Alpine Tour Booking – Feature Story
+
+“Ich möchte eine alpine Tour buchen können.
+Wenn meine Buchung akzeptiert wird, soll sie bestätigt werden.
+Wenn ich krank werde, möchte ich sie kündigen können.
+Und am Tag der Tour soll der Guide die Tour starten können.”
+
+Die vier Kernfähigkeiten
+1.	Tour buchen
+•	Ich wähle Tour + Datum
+•	Ich gebe Teilnehmerzahl an
+•	Ich erhalte eine Buchungs-ID
+2.	Tour bestätigen
+•	Meine Buchung wird verbindlich
+•	Ich erhalte eine Bestätigung
+3.	Tour kündigen
+•	Ich kann stornieren
+•	Ich kenne meinen Status
+4.	Tour starten
+•	Der Guide startet die Tour
+•	Buchungen wechseln in aktiven Zustand
+
+⸻
+
+Business-Regeln (noch ohne Technik)
+•	Eine Tour hat begrenzte Plätze
+•	Eine Buchung hat einen Status
+•	Status dürfen sich nur sinnvoll ändern
+•	Man kann keine beendete Tour erneut starten
+•	Man kann keine stornierte Tour starten
+•	Eine Tour kann nur am richtigen Tag gestartet werden
+
+Das ist die komplette Business-Story.
+
+Alles andere ist Architektur.
+
+⸻
+
+🎤 2. Talk-Flow-Version (Architektur entlang der Story)
+
+Jetzt kommt der dramaturgische Teil.
+
+Du erzählst eine durchgehende Story und modellierst Schritt für Schritt.
+
+⸻
+
+🎬 Act 1 – “Ich möchte eine Tour buchen”
+
+Slide: Business Statement
+
+“Ich möchte eine Tour buchen.”
+
+Du fragst ins Publikum:
+
+Was bedeutet das fachlich?
+
+Antwort:
+•	Es entsteht etwas Neues.
+•	Es gibt einen Status.
+•	Es gibt Regeln.
+
+⸻
+
+Slide: Domain Modell entsteht
+
+Du führst ein:
+•	Aggregate: TourBooking
+•	Value Objects: TourId, TourDate, ParticipantCount
+•	Initialer Status: REQUESTED
+
+Wichtig:
+
+“Wo leben die Regeln? Nicht im Controller. Nicht im Service.
+Im Aggregate.”
+
+⸻
+
+Slide: Use Case entsteht
+
+RequestTourBooking
+
+Flow:
+1.	Input validieren (syntactic)
+2.	Kapazität prüfen (Domain Service)
+3.	Aggregate erzeugen
+4.	Persistieren
+5.	Domain Event emittieren
+
+🎯 Hier erklärst du:
+•	Validation Chaos vermeiden
+•	Always-valid Modell
+•	1 Use Case = 1 Transaktion
+
+⸻
+
+🎬 Act 2 – “Meine Buchung wird bestätigt”
+
+Slide: Business Statement
+
+“Eine gebuchte Tour soll bestätigt werden.”
+
+Du fragst:
+
+Was darf hier passieren?
+
+Antwort:
+•	Nur REQUESTED → CONFIRMED
+•	Sonst Fehler
+
+⸻
+
+Slide: State Model
+
+Du zeigst die Status-Transitions:
+
+REQUESTED → CONFIRMED
+REQUESTED → CANCELLED
+CONFIRMED → CANCELLED
+CONFIRMED → ACTIVE
+
+Hier erklärst du:
+•	Anämisches Modell vs echtes Modell
+•	Status-Transitionen gehören ins Aggregate
+
+⸻
+
+Slide: Use Case ConfirmTourBooking
+
+Flow:
+1.	Load
+2.	confirm()
+3.	save
+4.	event
+
+🎯 Hier erklärst du:
+•	Transaktion liegt im Use Case
+•	Repository ist nur Port
+•	Event nach Commit
+
+⸻
+
+🎬 Act 3 – “Ich werde krank”
+
+Slide: Business Statement
+
+“Wenn ich krank werde, muss ich kündigen können.”
+
+Frage:
+
+Wo gehört Storno-Logik hin?
+
+Antwort:
+•	Status-Regeln → Aggregate
+•	Externe Regeln (z.B. Zahlungsrückerstattung) → Application Layer
+
+Hier erklärst du:
+•	Business Invariant vs External Constraint
+•	Domain Service nur wenn cross-aggregate
+
+⸻
+
+Slide: CancelTourBooking
+
+Du betonst:
+
+“Kein Service-Orchestrierungs-Monster.
+Nur: Load → Domain Method → Save.”
+
+⸻
+
+🎬 Act 4 – “Am Tag der Tour startet der Guide”
+
+Jetzt wird es spannend.
+
+Slide: Business Statement
+
+“Am Tag der Tour startet der Guide die Tour.”
+
+Frage:
+
+Was ist die Regel?
+
+Antwort:
+•	Nur CONFIRMED → ACTIVE
+•	Nur wenn heute >= TourDate
+
+Wo gehört das hin?
+
+➡ Ins Aggregate.
+
+⸻
+
+Slide: startTour(now)
+
+Du zeigst:
+•	Preconditions
+•	State change
+•	Domain Event
+
+🎯 Hier kommt dein Architektur-Punch:
+
+“Das Modell weiß selbst, wann es starten darf.”
+
+Nicht:
+•	Controller
+•	Scheduler
+•	Service
+•	If-Kaskade irgendwo im Code
+
+⸻
+
+🎯 Meta-Layer: Was du in jedem Act betonst
+
+Business Story	Architektur-Prinzip
+Buchen	Always-valid Aggregate
+Bestätigen	State Machine im Model
+Kündigen	Invariants vs External Constraints
+Starten	Zeitabhängige Regel im Aggregate
+Alle	1 Use Case = 1 Transaction
+Alle	Events explizit
+
+
+⸻
+
+🧠 Final Slide – The Real Message
+
+Du schließt mit:
+
+“Das ist kein Tour-System.
+Das ist ein Denkmodell.”
+
+Und dann:
+•	Klare Aggregate
+•	Klare Use Cases
+•	Klare Transaktionsgrenzen
+•	Klare Validierungs-Orte
+•	Keine Framework-Abhängigkeit
+•	AI kann damit arbeiten
+
+⸻
+
+💡 Warum diese Story perfekt für deinen Talk ist
+
+Sie ist:
+•	Nicht trivial
+•	Nicht überkomplex
+•	Natürlich sequentiell
+•	Voller State-Transitions
+•	Voller Invariants
+•	Voller Transaktionsfragen
+•	Voller Event-Fragen
+
+Und sie zwingt dich nicht in Hotel-/Payment-Komplexität.
+
+⸻
+
+Wenn du willst, kann ich dir jetzt:
+•	🧱 Eine perfekte Slide-Reihenfolge (Slide-by-Slide mit Titeln & Sprechtext)
+•	🎨 Ein einziges zentrales Diagramm, das du immer wieder referenzierst
+•	🔥 Oder eine “opinionated Closing-Statement Version” für deinen Thought-Leadership-Anspruch
+
+Was brauchst du für die Bühne?
+
 ### Abstract (DE)
 
 Domain Driven Design (DDD) und Ports-and-Adapters (Hexagonal Architecture) sind eine ideale Kombination: 

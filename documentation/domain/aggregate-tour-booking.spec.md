@@ -1,0 +1,176 @@
+# Domain Specification – TourBooking
+
+## Purpose
+
+TourBooking represents a reservation for a guided alpine tour on a specific date.
+It enforces lifecycle rules, participant constraints, and state transitions.
+
+
+## 1. Aggregate Root
+
+Name:
+TourBooking
+
+Description:
+Represents a reservation of participants for a specific TourId and TourDate.
+The aggregate is responsible for enforcing booking lifecycle and participant invariants.
+
+
+## 2. Invariants (Always-Valid)
+
+- Participant count must be >= 1
+- Participant count must not exceed max capacity defined at booking time
+- TourDate must be in the future at creation time
+- Stay period (if modeled) must be logically valid
+- Booking must always be in a valid lifecycle state
+- Status transitions must follow defined rules
+
+Violations MUST result in exception.
+
+
+## 3. State Model
+
+Possible states:
+- REQUESTED
+- CONFIRMED
+- CANCELLED
+- ACTIVE
+- COMPLETED
+
+Allowed transitions:
+- REQUESTED → CONFIRMED
+- REQUESTED → CANCELLED
+- CONFIRMED → CANCELLED
+- CONFIRMED → ACTIVE
+- ACTIVE → COMPLETED
+
+Illegal transitions:
+- CANCELLED → any
+- COMPLETED → any
+- ACTIVE → REQUESTED
+- REQUESTED → ACTIVE
+
+
+## 4. Behavior
+
+Public methods:
+
+- request()
+- confirm()
+- cancel(now)
+- changeParticipants(newCount)
+- startTour(now)
+- completeTour()
+
+Each method MUST describe:
+
+### request()
+Preconditions:
+- Valid TourDate
+- Valid participant count
+
+Postconditions:
+- Status = REQUESTED
+
+Emitted events:
+- TourBookingRequested
+
+
+### confirm()
+Preconditions:
+- Current state = REQUESTED
+
+Postconditions:
+- Status = CONFIRMED
+
+Emitted events:
+- TourBookingConfirmed
+
+
+### cancel(now)
+Preconditions:
+- State = REQUESTED or CONFIRMED
+
+Postconditions:
+- Status = CANCELLED
+
+Emitted events:
+- TourBookingCancelled
+
+
+### changeParticipants(newCount)
+Preconditions:
+- State = REQUESTED or CONFIRMED
+- newCount >= 1
+
+Postconditions:
+- Participant count updated
+
+Emitted events:
+- ParticipantsChanged
+
+
+### startTour(now)
+Preconditions:
+- State = CONFIRMED
+- now >= TourDate
+
+Postconditions:
+- Status = ACTIVE
+
+Emitted events:
+- TourStarted
+
+
+### completeTour()
+Preconditions:
+- State = ACTIVE
+
+Postconditions:
+- Status = COMPLETED
+
+Emitted events:
+- TourCompleted
+
+
+## 5. Domain Events
+
+List of events emitted:
+
+- TourBookingRequested
+- TourBookingConfirmed
+- TourBookingCancelled
+- ParticipantsChanged
+- TourStarted
+- TourCompleted
+
+Describe:
+
+Each event includes:
+- bookingId
+- tourId
+- tourDate
+- participantCount
+- timestamp
+
+
+## 6. Failure Scenarios
+
+Describe expected failures:
+
+- Invalid state transition
+- Invariant violation
+- Participant count invalid
+- Operation on cancelled booking
+- Operation on completed booking
+
+
+## 7. Test Requirements
+
+Must include:
+
+- Invariant tests
+- Transition tests
+- Failure tests
+- Event emission tests
+- State immutability verification
