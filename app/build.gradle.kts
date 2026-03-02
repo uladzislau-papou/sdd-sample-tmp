@@ -10,6 +10,13 @@ plugins {
     application
 }
 
+
+/*
+// Accessing project properties
+println(project.property("myCustomProperty"))
+println(project.findProperty("optionalProperty") ?: "defaultValue")
+ */
+
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
