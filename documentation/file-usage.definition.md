@@ -21,7 +21,8 @@ The documents follow this strict precedence order:
 8. domain-vs-use-case.definition.md
 9. ADRs (`/adr/*.adr.md`)
 10. Concrete Specs (`/domain/*.md`, `/use-cases/*.md`)
-11. notes.md
+11. coding-style.definition.md
+12. notes.md
 
 Higher documents override lower ones.
 
@@ -126,6 +127,12 @@ Must follow `use-case.spec.template.md`.
 ## /adr/*.adr.md
 Records architectural decisions.
 Immutable once accepted.
+
+
+# coding-style.definition.md
+Defines how the actual code should look like.
+Does not introduce any architectural decisions or functionality.
+Changes over time.
 
 
 ## notes.md

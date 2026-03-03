@@ -1,0 +1,205 @@
+# Coding Style Definition (Java) --- AlpineBooking / SDD Reference
+
+## Purpose
+
+This document defines the coding style for the project to ensure: -
+consistent readability and maintainability - predictable navigation
+(package / class roles) - consistent use of modern Java features
+(records, sealed, pattern matching) - consistent JavaDoc usage suitable
+for Spec Driven Development (SDD)
+
+Scope: - Production code (domain, application/use-cases, adapters) -
+Tests (naming and structure)
+
+------------------------------------------------------------------------
+
+## 1. General Principles
+
+### 1.1 Explicit Roles over Cleverness
+
+-   Classes MUST communicate intent by name + package.
+-   Prefer small, role-specific types over large "god classes".
+
+### 1.2 Immutability First
+
+-   Domain and DTO structures SHOULD be immutable.
+-   Mutation is allowed only at boundaries (e.g., UI binding,
+    deserialization) and MUST be isolated.
+
+### 1.3 Always-Valid
+
+-   Domain objects MUST NOT be constructible in an invalid state.
+-   Validation belongs to constructors/factories/value objects.
+
+### 1.4 Null Policy
+
+-   Domain and application layer MUST NOT return null.
+-   Use Optional`<T>`{=html} for absence, not null.
+-   At boundaries (e.g., REST), nulls MUST be normalized immediately.
+
+------------------------------------------------------------------------
+
+## 2. Language Level & Modern Java Policy
+
+Target: Java 21+
+
+### 2.1 record
+
+Use record when: - the type is a pure data carrier - equality is
+structural - it has no lifecycle/state transitions
+
+Records MAY validate invariants in the canonical constructor.
+
+### 2.2 sealed / non-sealed
+
+Use sealed hierarchies when: - the set of subtypes is closed and
+meaningful - you want exhaustive switch handling
+
+Rules: - A sealed root type MUST list permitted subtypes explicitly. -
+Subtypes SHOULD be final unless extensibility is deliberate. - Prefer
+sealed interface for role/contract types.
+
+### 2.3 Pattern matching & switch expressions
+
+-   Prefer switch expressions over cascaded if/else.
+-   Use pattern matching for instanceof where it increases readability.
+
+### 2.4 strictfp
+
+-   strictfp MUST NOT be used by default.
+-   Only allowed if deterministic floating-point behaviour is a business
+    requirement and documented via ADR.
+
+------------------------------------------------------------------------
+
+## 3. Package & Layer Conventions (Hexagonal)
+
+### 3.1 Package naming
+
+-   Base package:
+    com.dominikgaller.`<project>`{=html}.`<context>`{=html}
+-   Packages MUST be lowercase.
+-   No generic util dumping ground.
+
+### 3.2 Layer naming
+
+-   domain --- domain model
+-   application --- use cases / drivers
+-   in --- inbound ports
+-   out --- outbound ports
+-   adapter.\* --- technical adapters
+
+Dependency direction: adapter -\> application -\> domain
+
+### 3.3 REST split
+
+-   \*RestAPI = inbound port
+-   \*Controller = adapter implementing port
+-   Controllers MUST only map, normalize, delegate, translate errors
+
+------------------------------------------------------------------------
+
+## 4. Naming Conventions
+
+### 4.1 Types
+
+-   \*Driver = application service
+-   \*RestAPI = inbound contract
+-   \*Controller = web adapter
+-   \*Repository = outbound port
+-   \*Mapper = pure mapping component
+
+### 4.2 Methods
+
+-   Commands MUST be verbs
+-   Queries MUST start with get*, find*, load\*
+
+### 4.3 Variables
+
+-   Prefer final var for locals when type is obvious
+-   Prefer explicit types in public APIs
+
+------------------------------------------------------------------------
+
+## 5. Modifiers & Structure
+
+### 5.1 Visibility
+
+-   Default to most restrictive visibility
+-   Fields MUST be private final
+
+### 5.2 final usage
+
+-   Parameters SHOULD be final consistently
+-   Local variables SHOULD be final when meaningful
+
+### 5.3 Constructors
+
+-   Prefer constructor injection
+-   Lombok allowed in adapters/application
+-   Domain SHOULD avoid Lombok unless justified
+
+------------------------------------------------------------------------
+
+## 6. Error Handling
+
+### 6.1 Application Layer
+
+-   MUST NOT return null
+-   Use Optional for queries
+-   Use explicit exceptions for command failures
+
+### 6.2 Exception taxonomy
+
+-   NotFoundException -\> HTTP 404
+-   ValidationException -\> HTTP 400
+-   ConflictException -\> HTTP 409
+
+Do NOT use IllegalArgumentException for business semantics.
+
+------------------------------------------------------------------------
+
+## 7. JavaDoc Standard
+
+### 7.1 Required
+
+-   public types in domain, application, in, out
+-   public methods on ports and drivers
+
+### 7.2 Template --- Type
+
+/\*\* \* One sentence purpose. * * Details about invariants and
+semantics. * * SDD: Reference to spec. \*/
+
+### 7.3 Template --- Method
+
+/\*\* \* Verb phrase description. * * @param name Meaning and
+constraints \* @return Meaning (never null) \* @throws Exception when
+condition \*/
+
+------------------------------------------------------------------------
+
+## 8. Boundary Mutation Rules
+
+-   Mutation MAY happen in UI binding layer.
+-   MUST rebuild immutable domain instances before propagation.
+-   MUST NOT leak partially mutated domain objects.
+
+------------------------------------------------------------------------
+
+## 9. Code Hygiene
+
+-   Long-living TODOs MUST reference ticket or ADR.
+-   Use interfaces in signatures, concrete types in construction.
+-   Use streams when they clarify intent.
+
+------------------------------------------------------------------------
+
+## 10. Enforcement
+
+Recommended: - Spotless (formatter) - Checkstyle or ErrorProne -
+ArchUnit for dependency rules
+
+------------------------------------------------------------------------
+
+End of document.
