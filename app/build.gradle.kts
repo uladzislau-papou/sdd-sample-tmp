@@ -25,11 +25,16 @@ repositories {
 
 dependencies {
     implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.jooq)
+    implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.core)
     runtimeOnly(libs.h2)
 
     testImplementation(libs.spring.boot.starter.test)
+    testImplementation(libs.spring.boot.webmvc.test)
+    testImplementation(libs.spring.boot.resttestclient)
+
     testImplementation(libs.assertj.core)
 
     jooqCodegen(libs.h2)
@@ -93,4 +98,14 @@ tasks.named("jooqCodegen") {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+// Spring Boot 4.0.1 BOM pins jOOQ to 3.19.x; force runtime to 3.20.x to match codegen.
+val jooqVersion = libs.versions.jooq.get()
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jooq") {
+            useVersion(jooqVersion)
+        }
+    }
 }

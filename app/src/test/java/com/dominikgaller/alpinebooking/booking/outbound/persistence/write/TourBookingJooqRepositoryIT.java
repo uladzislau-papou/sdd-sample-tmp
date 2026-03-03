@@ -1,0 +1,96 @@
+package com.dominikgaller.alpinebooking.booking.outbound.persistence.write;
+
+import com.dominikgaller.alpinebooking.booking.core.domain.AvailableCapacity;
+import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.ParticipantContact;
+import com.dominikgaller.alpinebooking.booking.core.domain.ParticipantCount;
+import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.TourDate;
+import com.dominikgaller.alpinebooking.booking.core.domain.TourId;
+import org.jooq.DSLContext;
+import org.jooq.exception.DataAccessException;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.time.LocalDate;
+
+import static com.dominikgaller.alpinebooking.jooq.Tables.TOUR_BOOKING;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+
+/**
+ * Persistence integration tests for {@link TourBookingJooqRepository}.
+ *
+ * <p>Starts a minimal Spring context ({@link PersistenceTestApplication}) with H2 in-memory
+ * database (profile {@code test}). Flyway migrations run automatically before each test. Each test method is rolled
+ * back via {@link Transactional}.
+ */
+@SpringBootTest(classes = PersistenceTestApplication.class)
+@ActiveProfiles("test")
+@Transactional
+class TourBookingJooqRepositoryIT {
+
+    private static final Instant NOW = Instant.parse("2026-03-03T12:00:00Z");
+    private static final LocalDate FUTURE_DATE = LocalDate.of(2026, 6, 15);
+
+    @Autowired
+    private TourBookingJooqRepository repository;
+
+    @Autowired
+    private DSLContext dsl;
+
+    // ── Happy path ──────────────────────────────────────────────────────────
+
+    @Test
+    void save_persistsAllFields() {
+        final TourBooking booking = sampleBooking();
+
+        repository.save(booking);
+
+        final var record = dsl.selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.ID.eq(booking.bookingId().value().toString()))
+                .fetchOne();
+
+        assertThat(record).isNotNull();
+        assertThat(record.getId()).isEqualTo(booking.bookingId().value().toString());
+        assertThat(record.getTourId()).isEqualTo(booking.tourId().value());
+        assertThat(record.getTourDate()).isEqualTo(booking.tourDate().value());
+        assertThat(record.getParticipantCount()).isEqualTo(booking.participantCount().value());
+        assertThat(record.getAvailableCapacity()).isEqualTo(booking.availableCapacity().value());
+        assertThat(record.getContactName()).isEqualTo(booking.contact().name());
+        assertThat(record.getContactEmail()).isEqualTo(booking.contact().email());
+        assertThat(record.getStatus()).isEqualTo("REQUESTED");
+    }
+
+    // ── Constraint enforcement ───────────────────────────────────────────────
+
+    @Test
+    void save_duplicateId_throwsDuplicateKeyException() {
+
+        final TourBooking booking = sampleBooking();
+
+        repository.save(booking);
+
+        assertThatExceptionOfType(DuplicateKeyException.class)
+                .isThrownBy(() -> repository.save(booking));
+    }
+
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+    private TourBooking sampleBooking() {
+        return TourBooking.request(
+                BookingId.generate(),
+                new TourId("TOUR-42"),
+                new TourDate(FUTURE_DATE),
+                new ParticipantCount(3),
+                new AvailableCapacity(10),
+                new ParticipantContact("Alice", "alice@example.com"),
+                NOW);
+    }
+}

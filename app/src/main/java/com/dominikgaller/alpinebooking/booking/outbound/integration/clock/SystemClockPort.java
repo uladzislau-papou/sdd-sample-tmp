@@ -1,0 +1,18 @@
+package com.dominikgaller.alpinebooking.booking.outbound.integration.clock;
+
+import com.dominikgaller.alpinebooking.booking.core.outport.ClockPort;
+
+import java.time.Instant;
+
+/**
+ * Production implementation of {@link ClockPort} that delegates to {@link Instant#now()}.
+ *
+ * <p>SDD: See {@code documentation/ports/clock.outport.spec.md}.
+ */
+public class SystemClockPort implements ClockPort {
+
+    @Override
+    public Instant now() {
+        return Instant.now();
+    }
+}

@@ -1,0 +1,41 @@
+package com.dominikgaller.alpinebooking.booking.inbound.rest;
+
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * Translates domain and infrastructure exceptions into HTTP error responses.
+ *
+ * <p>Each handler returns {@code { "error": "<message>" }} with the appropriate HTTP status.
+ *
+ * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md}, section 3.
+ */
+@RestControllerAdvice
+public class BookingExceptionHandler {
+
+    @ExceptionHandler(InvalidBookingRequestException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleInvalidBookingRequest(final InvalidBookingRequestException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(CapacityExceededException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleCapacityExceeded(final CapacityExceededException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(AvailabilityUnavailableException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ErrorResponse handleAvailabilityUnavailable(final AvailabilityUnavailableException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    public record ErrorResponse(String error) {
+    }
+}

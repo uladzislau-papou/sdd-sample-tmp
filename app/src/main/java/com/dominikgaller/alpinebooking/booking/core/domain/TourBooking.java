@@ -1,0 +1,135 @@
+package com.dominikgaller.alpinebooking.booking.core.domain;
+
+import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Aggregate root representing a reservation for a guided alpine tour.
+ *
+ * <p>All invariants are enforced at creation time via the {@link #request} factory.
+ * The aggregate is the only entry point for state changes; it records domain events
+ * internally and exposes them via {@link #pullDomainEvents()}.
+ *
+ * <p>Framework-free: no Spring, no JPA, no IO.
+ *
+ * <p>SDD: See {@code documentation/domain/aggregate-tour-booking.spec.md}.
+ */
+public class TourBooking {
+
+    private final BookingId bookingId;
+    private final TourId tourId;
+    private final TourDate tourDate;
+    private final ParticipantCount participantCount;
+    private final AvailableCapacity availableCapacity;
+    private final ParticipantContact contact;
+    private TourBookingStatus status;
+
+    private final List<TourBookingRequested> domainEvents = new ArrayList<>();
+
+    private TourBooking(
+            final BookingId bookingId,
+            final TourId tourId,
+            final TourDate tourDate,
+            final ParticipantCount participantCount,
+            final AvailableCapacity availableCapacity,
+            final ParticipantContact contact,
+            final TourBookingStatus status) {
+        this.bookingId = bookingId;
+        this.tourId = tourId;
+        this.tourDate = tourDate;
+        this.participantCount = participantCount;
+        this.availableCapacity = availableCapacity;
+        this.contact = contact;
+        this.status = status;
+    }
+
+    /**
+     * Creates a new booking in {@code REQUESTED} state.
+     *
+     * @param bookingId         unique identity; must not be null
+     * @param tourId            tour reference; must not be null
+     * @param tourDate          scheduled date; must be in the future relative to {@code now}
+     * @param participantCount  number of participants; must be >= 1
+     * @param availableCapacity open spots at booking time; must be >= participantCount
+     * @param contact           contact person for the booking; must not be null
+     * @param now               current time used to validate the tour date
+     * @return a valid {@link TourBooking} in {@code REQUESTED} state
+     * @throws InvalidBookingRequestException if {@code tourDate} is not in the future
+     * @throws CapacityExceededException      if {@code participantCount} exceeds {@code availableCapacity}
+     */
+    public static TourBooking request(
+            final BookingId bookingId,
+            final TourId tourId,
+            final TourDate tourDate,
+            final ParticipantCount participantCount,
+            final AvailableCapacity availableCapacity,
+            final ParticipantContact contact,
+            final Instant now) {
+
+        if (!tourDate.isInFuture(now)) {
+            throw new InvalidBookingRequestException(
+                    "Tour date must be in the future, was: " + tourDate.value());
+        }
+        if (participantCount.value() > availableCapacity.value()) {
+            throw new CapacityExceededException(
+                    participantCount.value(), availableCapacity.value());
+        }
+
+        final TourBooking booking = new TourBooking(
+                bookingId, tourId, tourDate, participantCount,
+                availableCapacity, contact, TourBookingStatus.REQUESTED);
+
+        booking.domainEvents.add(new TourBookingRequested(
+                bookingId, tourId, tourDate, participantCount, now));
+
+        return booking;
+    }
+
+    /**
+     * Returns and clears all recorded domain events.
+     *
+     * <p>Calling this method twice returns an empty list on the second call.
+     *
+     * @return unmodifiable snapshot of pending events
+     */
+    public List<TourBookingRequested> pullDomainEvents() {
+        final List<TourBookingRequested> snapshot = Collections.unmodifiableList(
+                new ArrayList<>(domainEvents));
+        domainEvents.clear();
+        return snapshot;
+    }
+
+    public BookingId bookingId() {
+        return bookingId;
+    }
+
+    public TourId tourId() {
+        return tourId;
+    }
+
+    public TourDate tourDate() {
+        return tourDate;
+    }
+
+    public ParticipantCount participantCount() {
+        return participantCount;
+    }
+
+    public AvailableCapacity availableCapacity() {
+        return availableCapacity;
+    }
+
+    public ParticipantContact contact() {
+        return contact;
+    }
+
+    public TourBookingStatus status() {
+        return status;
+    }
+}
