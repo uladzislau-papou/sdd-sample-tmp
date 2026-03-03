@@ -31,22 +31,22 @@
 ## Phase 2: Build Setup
 
 ### 2.1 – Version Catalog
-- [ ] **Task 2.1.1**: Replace `gradle/libs.versions.toml` – add versions and library entries for: Spring Boot 4.x, jOOQ (Java 21 compatible), Flyway, H2, AssertJ. Remove the Guava entry (no longer needed).
+- [x] **Task 2.1.1**: Replace `gradle/libs.versions.toml` – add versions and library entries for: Spring Boot 4.x, jOOQ (Java 21 compatible), Flyway, H2, AssertJ. Remove the Guava entry (no longer needed).
 
 ### 2.2 – Gradle Build Script
-- [ ] **Task 2.2.1**: Replace `app/build.gradle.kts` – apply Spring Boot plugin and Spring Dependency Management plugin; add dependencies: `spring-boot-starter-web`, `spring-boot-starter-jooq`, `spring-boot-starter-test`, `flyway-core`, `h2`, `assertj-core`; set Java toolchain to 21; remove `application` plugin and `mainClass` setting.
-- [ ] **Task 2.2.2**: Configure jOOQ code generation in `app/build.gradle.kts` – run H2 in-process, apply Flyway migrations, generate jOOQ classes into `app/build/generated-src/jooq/main`; make `compileJava` depend on the generation task.
+- [x] **Task 2.2.1**: Replace `app/build.gradle.kts` – apply Spring Boot plugin and Spring Dependency Management plugin; add dependencies: `spring-boot-starter-web`, `spring-boot-starter-jooq`, `spring-boot-starter-test`, `flyway-core`, `h2`, `assertj-core`; set Java toolchain to 21; remove `application` plugin and `mainClass` setting.
+- [x] **Task 2.2.2**: Configure jOOQ code generation in `app/build.gradle.kts` – run H2 in-process, apply Flyway migrations, generate jOOQ classes into `app/build/generated-src/jooq/main`; make `compileJava` depend on the generation task.
 
 ### 2.3 – Application Configuration
-- [ ] **Task 2.3.1**: Create `app/src/main/resources/application.yml` – H2 datasource (file mode for local dev), Flyway enabled, jOOQ SQL dialect H2.
-- [ ] **Task 2.3.2**: Create `app/src/test/resources/application-test.yml` – H2 datasource (in-memory mode), Flyway enabled, same jOOQ dialect.
+- [x] **Task 2.3.1**: Create `app/src/main/resources/application.yml` – H2 datasource (file mode for local dev), Flyway enabled, jOOQ SQL dialect H2.
+- [x] **Task 2.3.2**: Create `app/src/test/resources/application-test.yml` – H2 datasource (in-memory mode), Flyway enabled, same jOOQ dialect.
 
 ### 2.4 – Remove Placeholder Code
-- [ ] **Task 2.4.1**: Delete `app/src/main/java/org/example/App.java`.
-- [ ] **Task 2.4.2**: Delete `app/src/test/java/org/example/AppTest.java`.
+- [x] **Task 2.4.1**: Delete `app/src/main/java/org/example/App.java`.
+- [x] **Task 2.4.2**: Delete `app/src/test/java/org/example/AppTest.java`.
 
 ### 2.5 – Build Verification
-- [ ] **Task 2.5.1**: Run `./gradlew clean build` – verify the project compiles and the jOOQ generation task runs without errors (no domain code yet).
+- [x] **Task 2.5.1**: Run `./gradlew clean build` – verify the project compiles and the jOOQ generation task runs without errors (no domain code yet).
 
 ---
 
