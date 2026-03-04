@@ -1,5 +1,8 @@
 # Use Case Specification – ConfirmTourBooking
 
+## Status
+SPECIFIED
+
 ## Purpose
 
 Confirm an existing tour booking.

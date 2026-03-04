@@ -1,5 +1,8 @@
 # Use Case Specification – RequestTourBooking
 
+## Status
+IMPLEMENTED
+
 ## Purpose
 
 Create a new tour booking request.

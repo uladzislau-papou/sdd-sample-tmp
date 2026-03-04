@@ -1,5 +1,8 @@
 # Use Case Specification – <UseCaseName>
 
+## Status
+SPECIFIED | IMPLEMENTED
+
 ## Purpose
 Describe orchestration logic.
 

@@ -1,5 +1,8 @@
 # Use Case Specification – CancelTourBooking
 
+## Status
+SPECIFIED
+
 ## Purpose
 
 Cancel a booking.

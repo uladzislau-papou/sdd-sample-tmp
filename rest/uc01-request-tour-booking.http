@@ -1,0 +1,47 @@
+### UC01 – Request Tour Booking (happy path)
+POST http://localhost:8080/api/v1/bookings
+Content-Type: application/json
+
+{
+  "tourId": "tour-alpine-001",
+  "tourDate": "2026-06-15",
+  "participantCount": 2,
+  "contactName": "Klaus Kinsky",
+  "contactEmail": "kinsky@example.com"
+}
+
+### UC01 – Validation error: past date (400)
+POST http://localhost:8080/api/v1/bookings
+Content-Type: application/json
+
+{
+  "tourId": "tour-alpine-001",
+  "tourDate": "2020-01-01",
+  "participantCount": 2,
+  "contactName": "Max Mustermann",
+  "contactEmail": "max@example.com"
+}
+
+### UC01 – Validation error: participantCount below minimum (400)
+POST http://localhost:8080/api/v1/bookings
+Content-Type: application/json
+
+{
+  "tourId": "tour-alpine-001",
+  "tourDate": "2026-06-15",
+  "participantCount": 0,
+  "contactName": "Max Mustermann",
+  "contactEmail": "max@example.com"
+}
+
+### UC01 – Validation error: missing required fields (400)
+POST http://localhost:8080/api/v1/bookings
+Content-Type: application/json
+
+{
+  "tourId": "",
+  "tourDate": "2026-06-15",
+  "participantCount": 1,
+  "contactName": "",
+  "contactEmail": ""
+}

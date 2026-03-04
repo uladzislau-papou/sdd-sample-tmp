@@ -1,5 +1,8 @@
 # Use Case Specification – StartTour
 
+## Status
+SPECIFIED
+
 ## Purpose
 
 Mark tour as started.

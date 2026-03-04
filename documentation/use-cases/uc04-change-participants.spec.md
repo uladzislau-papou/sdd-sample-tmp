@@ -1,5 +1,8 @@
 # Use Case Specification – ChangeParticipants
 
+## Status
+SPECIFIED
+
 ## Purpose
 
 Change participant count.

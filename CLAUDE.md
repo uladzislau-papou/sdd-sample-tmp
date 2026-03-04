@@ -42,3 +42,14 @@ Before any implementation, follow the execution loop defined in [`documentation/
 6. Closeout Phase – structured completion report
 
 **No implementation without a spec. No architectural change without an ADR.**
+
+---
+
+## REST Endpoint Documentation
+
+Every implemented REST endpoint **must** have a corresponding JetBrains HTTP Client file in `rest/`.
+
+- One file per use case, named `uc<nn>-<use-case-name>.http`
+- Each file must cover: the happy-path request, and one request per documented error case (400, 409, 502, etc.)
+- Files are updated as part of the **Implement Phase** — not as an afterthought
+- The `rest/` folder is the living contract between the backend and any HTTP client (Postman, IntelliJ, curl)
