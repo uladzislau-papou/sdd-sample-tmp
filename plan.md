@@ -1,485 +1,248 @@
-# Plan – UC01: RequestTourBooking
+# Plan: UC02 – Confirm Tour Booking
 
-## 1. Analysis Summary
-
-### 1.1 Impacted Building Blocks
-
-| Building Block | Name | Status |
-|---|---|---|
-| Aggregate | `TourBooking` | spec exists, no implementation |
-| Value Objects | `BookingId`, `TourId`, `TourDate`, `ParticipantCount`, `AvailableCapacity`, `ParticipantContact` | partially specified, no implementation |
-| Domain Event | `TourBookingRequested` | spec exists, no implementation |
-| Inbound Port | `RequestTourBookingUseCase` | **missing spec**, no implementation |
-| Outbound Port | `TourBookingRepository` | **missing spec**, no implementation |
-| Outbound Port | `AvailabilityChecker` | **missing spec**, no implementation |
-| Outbound Port | `DomainEventPublisher` | **missing spec**, no implementation |
-| Outbound Port | `ClockPort` | referenced in architecture, **missing spec**, no implementation |
-| Application Service | `RequestTourBookingDriver` | no implementation |
-| Persistence Adapter | `TourBookingJooqRepository` | no implementation |
-| REST Adapter | `TourBookingController` | no implementation |
-| Build Setup | Spring Boot, jOOQ, Flyway, H2, AssertJ | **not configured** – build.gradle.kts is a Gradle init skeleton |
-
-### 1.2 Domain Invariants Affected
-
-All invariants of the `TourBooking.request()` factory method:
-- `tourDate` must be in the future at creation time
-- `participantCount` >= 1
-- `participantCount` <= `availableCapacity`
-- Status initialized to `REQUESTED`
-
-### 1.3 ADR Check
-
-| Decision | ADR Status |
-|---|---|
-| Core tech stack (Java 21, Spring Boot, jOOQ, Flyway, H2, AssertJ) | ADR 0001 – Accepted |
-| Domain event publication strategy (post-commit) | **ADR 0002 – Missing** |
+## Status
+PLANNED
 
 ---
 
-## 2. Missing Specifications
+## 1. Spec Analysis
 
-The following specs must be created before or alongside implementation.
-They are included in the task list (Step 1).
+### 1.1 UC02 Spec Gaps
 
-### 2.1 Port Specifications (new directory: `documentation/ports/`)
+The existing spec at `documentation/use-cases/uc02-confirm-tour-booking.spec.md` is underspecified. The following decisions fill the gaps:
 
-#### `request-tour-booking.inport.md`
-**Inport: `RequestTourBookingUseCase`**
-- Method: `RequestTourBookingResult request(RequestTourBookingCommand command)`
-- `RequestTourBookingCommand` fields: `tourId` (String), `tourDate` (LocalDate), `participantCount` (int), `contactName` (String), `contactEmail` (String)
-- `RequestTourBookingResult` fields: `bookingId` (String), `status` (String)
-- Throws: `CapacityExceededException`, `InvalidBookingRequestException`
-- Transactional: yes (boundary at driver)
+| Gap | Decision |
+|-----|----------|
+| REST endpoint | `POST /api/v1/bookings/{bookingId}/confirm` |
+| Success HTTP status | `200 OK` |
+| Success response body | `{ "status": "CONFIRMED" }` |
+| NotFound HTTP status | `404 Not Found` |
+| InvalidState HTTP status | `409 Conflict` |
+| Error response body | `{ "error": "<message>" }` (matches existing pattern) |
+| bookingId validation | UUID format, non-blank path variable |
 
-#### `tour-booking-repository.outport.md`
-**Outport: `TourBookingRepository`**
-- Method: `void save(TourBooking booking)`
-- Persists a new `TourBooking` aggregate atomically.
-- No `update` method required for UC01.
-- Idempotency: not required at this scope.
+**Rationale for `POST /{bookingId}/confirm`:** State transitions on resources are cleanly expressed as POST to a sub-resource action URI. This avoids a generic PATCH that exposes status as a free-form field. Consistent with common REST practice (GitHub, Stripe, etc.).
 
-#### `availability-checker.outport.md`
-**Outport: `AvailabilityChecker`**
-- Method: `AvailableCapacity checkAvailability(TourId tourId, TourDate tourDate)`
-- Returns `AvailableCapacity` (wraps int).
-- Throws: `AvailabilityUnavailableException` on infrastructure failure.
-- Note: Does NOT throw on capacity exceeded – the aggregate enforces the invariant.
-- Reference implementation: `StubAvailabilityChecker` – returns fixed unlimited capacity.
+### 1.2 Missing Port Spec Additions
 
-#### `domain-event-publisher.outport.md`
-**Outport: `DomainEventPublisher`**
-- Method: `void publish(TourBookingRequested event)`
-- Called by the driver WITHIN the transaction (see ADR 0002 for strategy).
-- Reference implementation: `LoggingDomainEventPublisher` – logs event to SLF4J.
+`TourBookingRepository` (currently save-only) needs two new operations for UC02:
+- `findById(BookingId) → Optional<TourBooking>` — load aggregate from DB
+- `update(TourBooking)` — persist status change
 
-#### `clock.outport.md`
-**Outport: `ClockPort`**
-- Method: `Instant now()`
-- Used by the driver to provide current time to the aggregate factory.
-- Reference implementation: `SystemClockPort` – delegates to `Instant.now()`.
-
-### 2.2 Specification Gaps in Existing Docs (to be supplemented)
-
-#### `ParticipantContact` structure (not defined in domain spec)
-Proposed value object fields:
-- `name`: String (non-blank)
-- `email`: String (non-blank, basic format check)
-
-This supplements `documentation/domain/aggregate-tour-booking.spec.md`.
-
-#### `AvailableCapacity` value object (not mentioned in domain spec)
-- Wraps an `int`.
-- Invariant: value >= 0.
-- Required to store the max capacity snapshot in the aggregate at booking time.
-
-This supplements `documentation/domain/aggregate-tour-booking.spec.md`.
-
-#### REST endpoint contract (not defined in UC01 spec)
-Proposed HTTP contract:
-- Method: `POST`
-- Path: `/api/v1/bookings`
-- Request body: `{ "tourId": "...", "tourDate": "YYYY-MM-DD", "participantCount": N, "contactName": "...", "contactEmail": "..." }`
-- Response body (201 Created): `{ "bookingId": "...", "status": "REQUESTED" }`
-- Error responses: `400 Bad Request` (validation), `409 Conflict` (capacity exceeded), `502 Bad Gateway` (availability check failure)
-
-### 2.3 Missing ADR
-
-#### ADR 0002 – Domain Event Publication Strategy
-
-**Context:** `modelling.definition.md` states that domain events MUST be published AFTER successful transaction commit. Spring `@Transactional` boundaries make this non-trivial.
-
-**Decision (proposed):** The driver calls `DomainEventPublisher.publish(event)` **inside** the `@Transactional` boundary. The reference implementation of `DomainEventPublisher` delegates to Spring's `ApplicationEventPublisher`. A `@TransactionalEventListener(phase = AFTER_COMMIT)` listener in the `listeners` package receives the Spring application event and performs the actual side-effect (logging for now). This satisfies the post-commit requirement without an external broker.
-
-**ADR Status:** Must be created and confirmed before implementation of Step 5 (Driver).
+`DomainEventPublisher` currently types its method to `TourBookingRequested`. UC02 introduces a second event (`TourBookingConfirmed`), requiring generalization.
 
 ---
 
-## 3. Risks
+## 2. Cross-Cutting Change: DomainEvent Generalization
 
-| Risk | Mitigation |
-|---|---|
-| jOOQ code generation requires Flyway migration to run first during build | Configure jOOQ generation as a Gradle task that depends on the Flyway migration task |
-| Spring Boot 4 with Gradle 9 compatibility | Already validated in ADR 0001 context |
-| H2 and Flyway version alignment | Pin versions explicitly in `libs.versions.toml`; verify during build setup |
-| `AvailableCapacity` stored in aggregate requires a DB column | Include in the Flyway migration from the start |
+### Problem
+`TourBooking.pullDomainEvents()` returns `List<TourBookingRequested>` (UC01-specific).
+`DomainEventPublisher.publish()` accepts only `TourBookingRequested`.
+
+With UC02, the aggregate must emit `TourBookingConfirmed` via the same mechanism.
+
+### Solution
+Introduce a `DomainEvent` marker interface in `core.domain.event`:
+
+```java
+package com.dominikgaller.alpinebooking.booking.core.domain.event;
+public interface DomainEvent {}
+```
+
+Both `TourBookingRequested` and `TourBookingConfirmed` implement `DomainEvent`.
+`TourBooking.domainEvents` becomes `List<DomainEvent>`.
+`DomainEventPublisher.publish()` becomes `void publish(DomainEvent event)`.
+
+### Files affected by this change
+- `core.domain.event.TourBookingRequested` — implements `DomainEvent`
+- `core.domain.TourBooking` — `domainEvents` list + `pullDomainEvents()` return type
+- `core.outport.DomainEventPublisher` — method signature
+- `outbound.integration.LoggingDomainEventPublisher` — implementation
+- `inbound.driver.RequestTourBookingDriver` — no functional change (still compiles)
+- `inbound.driver.RequestTourBookingDriverTest` — mock type update
+
+No ADR required: this is an internal port refinement, not an architectural decision. The event publication strategy (ADR-0002) is unchanged.
 
 ---
 
-## 4. Acceptance Criteria
+## 3. Aggregate Reconstitution
 
-### AC-01 – Happy Path
-**Given** valid input with available capacity
-**When** `POST /api/v1/bookings` is called
-**Then** a booking is stored in `REQUESTED` state, `bookingId` is returned in the response with HTTP 201, and `TourBookingRequested` is published after commit.
+### Problem
+`TourBooking` has a private constructor. The persistence adapter cannot reconstruct the aggregate from a DB record without a dedicated factory.
 
-### AC-02 – Capacity Exceeded
-**Given** the availability checker signals full capacity
-**When** `POST /api/v1/bookings` is called
-**Then** HTTP 409 is returned and no booking is persisted.
+### Solution
+Add a package-private static factory `TourBooking.reconstitute(...)` that accepts all fields (including `status`) without applying creation-time invariants (future date, capacity check). Reconstitution is loading an already-valid past fact, not creating a new booking.
 
-### AC-03 – Invalid Participant Count
-**Given** `participantCount < 1`
-**When** `POST /api/v1/bookings` is called
-**Then** HTTP 400 is returned and no booking is persisted.
+```java
+static TourBooking reconstitute(BookingId, TourId, TourDate, ParticipantCount,
+                                 AvailableCapacity, ParticipantContact, TourBookingStatus)
+```
 
-### AC-04 – Invalid Tour Date
-**Given** `tourDate` is in the past
-**When** `POST /api/v1/bookings` is called
-**Then** HTTP 400 is returned and no booking is persisted.
+`TourBookingMapper` (same package as the repository) calls this method.
 
-### AC-05 – Availability Check Failure
-**Given** the availability checker throws an infrastructure exception
-**When** `POST /api/v1/bookings` is called
-**Then** HTTP 502 is returned and no booking is persisted.
+---
+
+## 4. Required New Artifacts
+
+### Domain Layer (`core.domain`)
+| Artifact | Type | Description |
+|----------|------|-------------|
+| `event.DomainEvent` | Interface | Marker interface for all domain events |
+| `event.TourBookingConfirmed` | Record | Emitted after REQUESTED → CONFIRMED |
+| `TourBooking.confirm()` | Method | Transitions status to CONFIRMED, records `TourBookingConfirmed` |
+| `TourBooking.reconstitute()` | Static factory | Loads aggregate from persistence without re-validating creation rules |
+| `exception.InvalidBookingStateException` | Class | Thrown by `confirm()` if state ≠ REQUESTED; maps to HTTP 409 |
+| `exception.BookingNotFoundException` | Class | Thrown by driver when `findById` returns empty; maps to HTTP 404 |
+
+**`TourBookingConfirmed` record fields:**
+- `bookingId: BookingId`
+- `occurredAt: Instant`
+
+**`confirm()` invariant:** Throws `InvalidBookingStateException` if `this.status != REQUESTED`.
+
+### Port Layer
+| Artifact | Package | Description |
+|----------|---------|-------------|
+| `TourBookingRepository` extension | `core.outport` | Add `findById(BookingId): Optional<TourBooking>` + `update(TourBooking)` |
+| `DomainEventPublisher` change | `core.outport` | `publish(DomainEvent)` replaces `publish(TourBookingRequested)` |
+| `ConfirmTourBookingCommand` | `core.inport` | Record: `String bookingId` |
+| `ConfirmTourBookingResult` | `core.inport` | Record: `String status` |
+| `ConfirmTourBookingUseCase` | `core.inport` | Interface: `ConfirmTourBookingResult confirm(ConfirmTourBookingCommand)` |
+
+### Persistence Adapter (`outbound.persistence.write`)
+| Artifact | Description |
+|----------|-------------|
+| `TourBookingMapper.toDomain(TourBookingRecord)` | Reverse mapping using `TourBooking.reconstitute()` |
+| `TourBookingJooqRepository.findById(BookingId)` | SELECT by PK, map to domain |
+| `TourBookingJooqRepository.update(TourBooking)` | UPDATE `status` column by PK |
+
+The `update()` call issues `UPDATE tour_booking SET status = ? WHERE id = ?`. Only `status` is mutable.
+
+### Application Driver (`inbound.driver`)
+| Artifact | Description |
+|----------|-------------|
+| `ConfirmTourBookingDriver` | `@Service @Transactional` implementing `ConfirmTourBookingUseCase` |
+
+**Flow:**
+1. Parse `BookingId` from command
+2. `tourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
+3. `booking.confirm()` → throws `InvalidBookingStateException` if wrong state
+4. `tourBookingRepository.update(booking)`
+5. `booking.pullDomainEvents().forEach(domainEventPublisher::publish)`
+6. Return `ConfirmTourBookingResult(booking.status().name())`
+
+### REST Layer (`inbound.rest`)
+| Artifact | Description |
+|----------|-------------|
+| `ConfirmTourBookingResponse` | Record: `String status` |
+| `TourBookingController` | Add `POST /api/v1/bookings/{bookingId}/confirm` → 200 |
+| `BookingExceptionHandler` | Add handlers: `BookingNotFoundException` → 404, `InvalidBookingStateException` → 409 |
+| `rest/uc02-confirm-tour-booking.http` | Happy path, 404 case, 409 case |
 
 ---
 
 ## 5. Implementation Steps
 
-### Step 1 – Specification Work (Docs Only)
+### Step 1 – Update UC02 Spec
+- Enrich `documentation/use-cases/uc02-confirm-tour-booking.spec.md` with HTTP codes, endpoint, response format, exception names
 
-Create missing documentation. No Java code.
+### Step 2 – Domain Layer
+1. Create `core.domain.event.DomainEvent` marker interface
+2. Update `TourBookingRequested` to implement `DomainEvent`
+3. Create `core.domain.event.TourBookingConfirmed` (record)
+4. Create `core.domain.exception.InvalidBookingStateException`
+5. Create `core.domain.exception.BookingNotFoundException`
+6. Add `TourBooking.reconstitute()` static factory
+7. Add `TourBooking.confirm()` method
+8. Change `TourBooking.domainEvents` to `List<DomainEvent>` and update `pullDomainEvents()`
 
-Files to create:
-- `documentation/ports/request-tour-booking.inport.md`
-- `documentation/ports/tour-booking-repository.outport.md`
-- `documentation/ports/availability-checker.outport.md`
-- `documentation/ports/domain-event-publisher.outport.md`
-- `documentation/ports/clock.outport.md`
-- `documentation/adr/0002-domain-event-publication.adr.md`
+### Step 3 – Port Layer
+1. Update `DomainEventPublisher` to `publish(DomainEvent)`
+2. Add `findById` and `update` to `TourBookingRepository`
+3. Create `ConfirmTourBookingCommand`, `ConfirmTourBookingResult`, `ConfirmTourBookingUseCase`
 
-Files to update:
-- `documentation/domain/aggregate-tour-booking.spec.md` – add `ParticipantContact` fields and `AvailableCapacity` VO
-- `documentation/use-cases/uc01-request-tour-booking.spec.md` – add REST contract section
+### Step 4 – Adapter: fix compilation
+1. Update `LoggingDomainEventPublisher` to accept `DomainEvent`
+2. Update `TourBookingMapper.toRecord()` — no change needed
+3. Add `TourBookingMapper.toDomain(TourBookingRecord)`
+4. Add `TourBookingJooqRepository.findById()` and `update()`
 
----
+### Step 5 – Application Driver
+1. Create `ConfirmTourBookingDriver` with full UC02 flow
 
-### Step 2 – Build Setup
+### Step 6 – REST Layer
+1. Create `ConfirmTourBookingResponse`
+2. Add `POST /{bookingId}/confirm` endpoint to `TourBookingController`
+3. Add exception handlers in `BookingExceptionHandler`
+4. Create `rest/uc02-confirm-tour-booking.http`
 
-Replace the Gradle init skeleton with a full Spring Boot application build.
+### Step 7 – Tests
+1. `TourBookingTest`: `confirm()` happy path + invalid state guard
+2. `ConfirmTourBookingDriverTest`: happy path, not-found, invalid-state, event published, persistence called
+3. `TourBookingControllerTest`: 200 OK, 404, 409
+4. `TourBookingJooqRepositoryIT`: `findById` after `save`, `update` changes status
 
-Files to change:
-- `app/build.gradle.kts` – add Spring Boot plugin, Spring Boot Web/Test starters, jOOQ, Flyway, H2, AssertJ; configure jOOQ code gen from H2 after Flyway
-- `gradle/libs.versions.toml` – add versions for Spring Boot, jOOQ, Flyway, H2, AssertJ
-- `settings.gradle.kts` – verify project name
-- `app/src/main/resources/application.yml` – H2 datasource, Flyway, jOOQ config
-- `app/src/test/resources/application-test.yml` – in-memory H2 for tests
+### Step 8 – Bootstrap Wiring
+- `BookingConfig` — `ConfirmTourBookingDriver` is `@Service` and auto-detected; no explicit bean needed (same as `RequestTourBookingDriver`)
 
-Remove:
-- `app/src/main/java/org/example/App.java`
-- `app/src/test/java/org/example/AppTest.java`
-
----
-
-### Step 3 – Domain Layer
-
-Base package: `com.dominikgaller.alpinebooking.booking.core.domain`
-
-Files to create:
-- `BookingId.java` – record, wraps UUID, validates non-null
-- `TourId.java` – record, wraps String, validates non-blank
-- `TourDate.java` – record, wraps LocalDate, validates non-null; method `isInFuture(Instant now)`
-- `ParticipantCount.java` – record, wraps int, invariant: value >= 1
-- `AvailableCapacity.java` – record, wraps int, invariant: value >= 0
-- `ParticipantContact.java` – record, fields: `name` (non-blank), `email` (non-blank)
-- `TourBookingStatus.java` – enum: REQUESTED, CONFIRMED, CANCELLED, ACTIVE, COMPLETED
-- `event/TourBookingRequested.java` – record: bookingId, tourId, tourDate, participantCount, occurredAt
-- `TourBooking.java` – aggregate root with `request(...)` static factory; enforces all invariants; records domain events
-
-`TourBooking.request(...)` signature:
-```java
-public static TourBooking request(
-    BookingId bookingId,
-    TourId tourId,
-    TourDate tourDate,
-    ParticipantCount participantCount,
-    AvailableCapacity availableCapacity,
-    Instant now
-)
-```
-
-Enforces:
-1. `tourDate.isInFuture(now)` → else throws `InvalidBookingRequestException`
-2. `participantCount.value() <= availableCapacity.value()` → else throws `CapacityExceededException`
-3. Initializes status = `REQUESTED`
-4. Records `TourBookingRequested` domain event
-
-Domain exceptions to create (in `core.domain` or sub-package):
-- `CapacityExceededException` (domain exception, maps to HTTP 409)
-- `InvalidBookingRequestException` (domain exception, maps to HTTP 400)
+### Step 9 – Verify & Close
+1. `./gradlew clean test` — must pass
+2. `./gradlew build` — must pass
+3. Mark UC02 spec as `IMPLEMENTED`
 
 ---
 
-### Step 4 – Port Interfaces
+## 6. Affected Files (complete list)
 
-#### Inbound (`com.dominikgaller.alpinebooking.booking.core.inport`)
-Files to create:
-- `RequestTourBookingCommand.java` – record: tourId, tourDate, participantCount, contactName, contactEmail
-- `RequestTourBookingResult.java` – record: bookingId, status
-- `RequestTourBookingUseCase.java` – interface: `RequestTourBookingResult request(RequestTourBookingCommand command)`
+**Modified:**
+- `documentation/use-cases/uc02-confirm-tour-booking.spec.md`
+- `core.domain.event.TourBookingRequested` (implements DomainEvent)
+- `core.domain.TourBooking` (confirm, reconstitute, pullDomainEvents generalization)
+- `core.outport.TourBookingRepository` (findById, update)
+- `core.outport.DomainEventPublisher` (publish(DomainEvent))
+- `outbound.integration.LoggingDomainEventPublisher` (method signature)
+- `outbound.persistence.write.TourBookingMapper` (toDomain)
+- `outbound.persistence.write.TourBookingJooqRepository` (findById, update)
+- `inbound.rest.TourBookingController` (new endpoint)
+- `inbound.rest.BookingExceptionHandler` (new handlers)
+- `inbound.driver.RequestTourBookingDriverTest` (mock type update)
+- `outbound.persistence.write.TourBookingJooqRepositoryIT` (new test methods)
+- `inbound.rest.TourBookingControllerTest` (new test methods)
 
-#### Outbound (`com.dominikgaller.alpinebooking.booking.core.outport`)
-Files to create:
-- `TourBookingRepository.java` – interface: `void save(TourBooking booking)`
-- `AvailabilityChecker.java` – interface: `AvailableCapacity checkAvailability(TourId tourId, TourDate tourDate)`
-- `DomainEventPublisher.java` – interface: `void publish(TourBookingRequested event)`
-- `ClockPort.java` – interface: `Instant now()`
-
----
-
-### Step 5 – Application Service (Driver)
-
-Package: `com.dominikgaller.alpinebooking.booking.inbound.driver`
-
-File to create:
-- `RequestTourBookingDriver.java` – implements `RequestTourBookingUseCase`
-  - Annotated: `@Service`, `@Transactional`
-  - Constructor-injected: `TourBookingRepository`, `AvailabilityChecker`, `DomainEventPublisher`, `ClockPort`
-  - Orchestration:
-    1. Map `RequestTourBookingCommand` to domain types
-    2. Generate `BookingId` (UUID)
-    3. Call `clockPort.now()`
-    4. Call `availabilityChecker.checkAvailability(tourId, tourDate)`
-    5. Call `TourBooking.request(...)` factory
-    6. Call `tourBookingRepository.save(booking)`
-    7. Collect domain events from booking
-    8. Call `domainEventPublisher.publish(event)` for each event
-    9. Return `RequestTourBookingResult`
+**Created:**
+- `core.domain.event.DomainEvent`
+- `core.domain.event.TourBookingConfirmed`
+- `core.domain.exception.InvalidBookingStateException`
+- `core.domain.exception.BookingNotFoundException`
+- `core.inport.ConfirmTourBookingCommand`
+- `core.inport.ConfirmTourBookingResult`
+- `core.inport.ConfirmTourBookingUseCase`
+- `inbound.driver.ConfirmTourBookingDriver`
+- `inbound.rest.ConfirmTourBookingResponse`
+- `core.domain.TourBookingTest` additions (or extended)
+- `inbound.driver.ConfirmTourBookingDriverTest`
+- `rest/uc02-confirm-tour-booking.http`
 
 ---
 
-### Step 6 – Persistence Adapter
+## 7. Risks
 
-**6a – Flyway Migration**
-
-File to create:
-- `app/src/main/resources/db/migration/V1__DDL_create_tour_booking.sql`
-
-Schema:
-```sql
-CREATE TABLE tour_booking (
-    id               VARCHAR(36)  NOT NULL PRIMARY KEY,
-    tour_id          VARCHAR(255) NOT NULL,
-    tour_date        DATE         NOT NULL,
-    participant_count INT          NOT NULL,
-    available_capacity INT         NOT NULL,
-    contact_name     VARCHAR(255) NOT NULL,
-    contact_email    VARCHAR(255) NOT NULL,
-    status           VARCHAR(50)  NOT NULL
-);
-```
-
-**6b – jOOQ Code Generation**
-
-After migration is in place, trigger jOOQ generation. Output goes to `app/build/generated-src/jooq/`.
-
-**6c – Repository Adapter**
-
-Package: `com.dominikgaller.alpinebooking.booking.outbound.persistence.write`
-
-Files to create:
-- `TourBookingJooqRepository.java` – implements `TourBookingRepository`
-  - Uses generated jOOQ `TourBookingRecord`
-  - Maps domain `TourBooking` → jOOQ record → SQL INSERT
-- `TourBookingMapper.java` – pure mapping component (domain ↔ jOOQ record)
+| Risk | Mitigation |
+|------|------------|
+| `DomainEventPublisher` type change breaks `RequestTourBookingDriver` | Verify at compile time; change is backwards-compatible (covariant) |
+| `reconstitute()` bypasses invariants | Document explicitly; only called by mapper in `outbound.persistence.write` (same package = visibility control) |
+| Missing test coverage on `toDomain` roundtrip | IT test: `save` → `findById` → assert all fields equal |
+| `update()` issues partial UPDATE — wrong ID | Assert `execute()` returns 1, throw if not |
 
 ---
 
-### Step 7 – REST Adapter, Error Mapping & Bootstrap
+## 8. Acceptance Criteria
 
-**REST Adapter**
-
-Package: `com.dominikgaller.alpinebooking.booking.inbound.rest`
-
-Files to create:
-- `RequestTourBookingRequest.java` – record: tourId, tourDate, participantCount, contactName, contactEmail
-- `RequestTourBookingResponse.java` – record: bookingId, status
-- `TourBookingController.java` – `@RestController`; maps POST `/api/v1/bookings` → `RequestTourBookingUseCase`
-- `BookingExceptionHandler.java` – `@RestControllerAdvice`; maps domain exceptions to HTTP status codes
-
-**Stub Implementations (outbound/integration)**
-
-Package: `com.dominikgaller.alpinebooking.booking.outbound.integration`
-
-Files to create:
-- `StubAvailabilityChecker.java` – returns `AvailableCapacity(Integer.MAX_VALUE)`
-- `LoggingDomainEventPublisher.java` – logs event via SLF4J; uses Spring `ApplicationEventPublisher` (see ADR 0002)
-
-Package: `com.dominikgaller.alpinebooking.booking.outbound.integration.clock`
-
-Files to create:
-- `SystemClockPort.java` – returns `Instant.now()`
-
-**Event Listener** (ADR 0002 implementation)
-
-Package: `com.dominikgaller.alpinebooking.booking.listeners`
-
-Files to create:
-- `TourBookingEventListener.java` – `@TransactionalEventListener(phase = AFTER_COMMIT)` on `TourBookingRequested`; logs event
-
-**Bootstrap**
-
-Package: `com.dominikgaller.alpinebooking.booking.bootstrap`
-
-Files to create:
-- `AlpineBookingApplication.java` – `@SpringBootApplication`
-- `BookingConfig.java` – `@Configuration`; wires `StubAvailabilityChecker`, `LoggingDomainEventPublisher`, `SystemClockPort`
-
----
-
-### Step 8 – Tests
-
-#### Domain Tests
-Package: `com.dominikgaller.alpinebooking.booking.core.domain` (test scope)
-
-Files to create:
-- `TourBookingTest.java`
-  - Happy path: `request()` creates booking in REQUESTED state
-  - `request()` emits `TourBookingRequested`
-  - Rejects participantCount < 1
-  - Rejects participantCount > availableCapacity (CapacityExceeded)
-  - Rejects past tourDate
-- `TourDateTest.java` – valid/invalid construction
-- `ParticipantCountTest.java` – valid/invalid construction
-- `ParticipantContactTest.java` – valid/invalid construction
-- `BookingIdTest.java` – construction and equality
-
-#### Use Case Tests
-Package: `com.dominikgaller.alpinebooking.booking.inbound.driver` (test scope)
-
-Files to create:
-- `RequestTourBookingDriverTest.java` (Spring-free, stub-based)
-  - Happy path: booking saved, event published
-  - Capacity exceeded: exception propagated, save not called
-  - Availability failure: exception propagated, save not called
-
-#### Persistence Integration Tests
-Package: `com.dominikgaller.alpinebooking.booking.outbound.persistence.write` (test scope)
-
-Files to create:
-- `TourBookingJooqRepositoryIT.java` (`@SpringBootTest` or slice + H2 + Flyway)
-  - `save` persists all fields correctly
-  - Roundtrip: save → query → verify mapping
-
-#### Web Tests
-Package: `com.dominikgaller.alpinebooking.booking.inbound.rest` (test scope)
-
-Files to create:
-- `TourBookingControllerTest.java` (`@WebMvcTest`)
-  - POST with valid body → 201 with bookingId
-  - POST with missing fields → 400
-  - POST triggers CapacityExceededException → 409
-  - POST triggers AvailabilityUnavailableException → 502
-
----
-
-## 6. Affected Files Summary
-
-### New Documentation
-```
-documentation/ports/request-tour-booking.inport.md
-documentation/ports/tour-booking-repository.outport.md
-documentation/ports/availability-checker.outport.md
-documentation/ports/domain-event-publisher.outport.md
-documentation/ports/clock.outport.md
-documentation/adr/0002-domain-event-publication.adr.md
-```
-
-### Updated Documentation
-```
-documentation/domain/aggregate-tour-booking.spec.md
-documentation/use-cases/uc01-request-tour-booking.spec.md
-```
-
-### Build Files
-```
-app/build.gradle.kts
-gradle/libs.versions.toml
-settings.gradle.kts
-app/src/main/resources/application.yml
-app/src/test/resources/application-test.yml
-```
-
-### Migration
-```
-app/src/main/resources/db/migration/V1__DDL_create_tour_booking.sql
-```
-
-### Production Java
-```
-app/src/main/java/com/dominikgaller/alpinebooking/booking/bootstrap/AlpineBookingApplication.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/bootstrap/BookingConfig.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/BookingId.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/TourId.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/TourDate.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/ParticipantCount.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/AvailableCapacity.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/ParticipantContact.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/TourBookingStatus.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/TourBooking.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/event/TourBookingRequested.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/exception/CapacityExceededException.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/domain/exception/InvalidBookingRequestException.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/inport/RequestTourBookingCommand.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/inport/RequestTourBookingResult.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/inport/RequestTourBookingUseCase.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/outport/TourBookingRepository.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/outport/AvailabilityChecker.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/outport/DomainEventPublisher.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/core/outport/ClockPort.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/inbound/driver/RequestTourBookingDriver.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/inbound/rest/RequestTourBookingRequest.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/inbound/rest/RequestTourBookingResponse.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/inbound/rest/TourBookingController.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/inbound/rest/BookingExceptionHandler.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/outbound/persistence/write/TourBookingJooqRepository.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/outbound/persistence/write/TourBookingMapper.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/outbound/integration/StubAvailabilityChecker.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/outbound/integration/LoggingDomainEventPublisher.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/outbound/integration/clock/SystemClockPort.java
-app/src/main/java/com/dominikgaller/alpinebooking/booking/listeners/TourBookingEventListener.java
-```
-
-### Test Java
-```
-app/src/test/java/com/dominikgaller/alpinebooking/booking/core/domain/TourBookingTest.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/core/domain/TourDateTest.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/core/domain/ParticipantCountTest.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/core/domain/ParticipantContactTest.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/core/domain/BookingIdTest.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/inbound/driver/RequestTourBookingDriverTest.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/outbound/persistence/write/TourBookingJooqRepositoryIT.java
-app/src/test/java/com/dominikgaller/alpinebooking/booking/inbound/rest/TourBookingControllerTest.java
-```
-
----
-
-## 7. Quality Gate
-
-Must pass before task is complete:
-```shell
-./gradlew clean test
-./gradlew build
-```
-
-All tests must be green. No disabled or placeholder tests.
+- [ ] `POST /api/v1/bookings/{validId}/confirm` returns `200 OK` with `{ "status": "CONFIRMED" }`
+- [ ] Unknown bookingId returns `404 Not Found` with `{ "error": "..." }`
+- [ ] Booking in non-REQUESTED state returns `409 Conflict` with `{ "error": "..." }`
+- [ ] `TourBookingConfirmed` domain event is published (logged) after transaction commit
+- [ ] `./gradlew clean test` passes with zero failures
+- [ ] `./gradlew build` succeeds
+- [ ] `rest/uc02-confirm-tour-booking.http` covers all three cases
+- [ ] UC02 spec status updated to `IMPLEMENTED`
