@@ -2,6 +2,8 @@ package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
 import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.ChangeParticipantsCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.ChangeParticipantsUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
@@ -12,6 +14,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,7 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md},
  *          {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md},
- *          and {@code documentation/use-cases/uc03-cancle-tour-booking.spec.md}.
+ *          {@code documentation/use-cases/uc03-cancle-tour-booking.spec.md},
+ *          and {@code documentation/use-cases/uc04-change-participants.spec.md}.
  */
 @RestController
 @RequestMapping("/api/v1/bookings")
@@ -36,14 +40,17 @@ public class TourBookingController {
     private final RequestTourBookingUseCase requestTourBookingUseCase;
     private final ConfirmTourBookingUseCase confirmTourBookingUseCase;
     private final CancelTourBookingUseCase cancelTourBookingUseCase;
+    private final ChangeParticipantsUseCase changeParticipantsUseCase;
 
     public TourBookingController(
             final RequestTourBookingUseCase requestTourBookingUseCase,
             final ConfirmTourBookingUseCase confirmTourBookingUseCase,
-            final CancelTourBookingUseCase cancelTourBookingUseCase) {
+            final CancelTourBookingUseCase cancelTourBookingUseCase,
+            final ChangeParticipantsUseCase changeParticipantsUseCase) {
         this.requestTourBookingUseCase = requestTourBookingUseCase;
         this.confirmTourBookingUseCase = confirmTourBookingUseCase;
         this.cancelTourBookingUseCase = cancelTourBookingUseCase;
+        this.changeParticipantsUseCase = changeParticipantsUseCase;
     }
 
     /**
@@ -100,5 +107,23 @@ public class TourBookingController {
                 cancelTourBookingUseCase.cancel(new CancelTourBookingCommand(bookingId)).status());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * UC04 – Changes the participant count of an existing tour booking.
+     *
+     * @param bookingId the UUID of the booking to update
+     * @param request   validated request body containing the new participant count
+     * @return HTTP 200 with updated participant count
+     */
+    @PatchMapping("/{bookingId}/participants")
+    public ResponseEntity<ChangeParticipantsResponse> changeParticipants(
+            @PathVariable final String bookingId,
+            @Valid @RequestBody final ChangeParticipantsRequest request) {
+
+        final int updatedCount = changeParticipantsUseCase.change(
+                new ChangeParticipantsCommand(bookingId, request.newParticipantCount())).participantCount();
+
+        return ResponseEntity.ok(new ChangeParticipantsResponse(updatedCount));
     }
 }

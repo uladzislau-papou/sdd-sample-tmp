@@ -1,6 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.ParticipantsChanged;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
@@ -32,8 +33,8 @@ public class TourBooking {
     private final BookingId bookingId;
     private final TourId tourId;
     private final TourDate tourDate;
-    private final ParticipantCount participantCount;
-    private final AvailableCapacity availableCapacity;
+    private ParticipantCount participantCount;
+    private AvailableCapacity availableCapacity;
     private final ParticipantContact contact;
     private TourBookingStatus status;
 
@@ -144,6 +145,35 @@ public class TourBooking {
         }
         status = TourBookingStatus.CANCELLED;
         domainEvents.add(new TourBookingCancelled(bookingId, now));
+    }
+
+    /**
+     * Updates the participant count while respecting the current available capacity.
+     *
+     * <p>The caller must supply the freshly checked available capacity from the
+     * external availability system. The aggregate stores the updated capacity snapshot.
+     *
+     * @param newCount      the desired participant count; must be >= 1
+     * @param freshCapacity available capacity as of this request; must be >= {@code newCount}
+     * @param now           current time used to timestamp the domain event
+     * @throws InvalidBookingStateException if the current state is neither {@code REQUESTED}
+     *                                      nor {@code CONFIRMED}
+     * @throws CapacityExceededException    if {@code newCount} exceeds {@code freshCapacity}
+     */
+    public void changeParticipants(
+            final ParticipantCount newCount,
+            final AvailableCapacity freshCapacity,
+            final Instant now) {
+
+        if (status != TourBookingStatus.REQUESTED && status != TourBookingStatus.CONFIRMED) {
+            throw new InvalidBookingStateException(status);
+        }
+        if (newCount.value() > freshCapacity.value()) {
+            throw new CapacityExceededException(newCount.value(), freshCapacity.value());
+        }
+        this.participantCount = newCount;
+        this.availableCapacity = freshCapacity;
+        domainEvents.add(new ParticipantsChanged(bookingId, newCount, now));
     }
 
     /**

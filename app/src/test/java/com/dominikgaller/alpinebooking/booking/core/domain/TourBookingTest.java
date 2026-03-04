@@ -1,6 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.ParticipantsChanged;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
@@ -207,5 +208,59 @@ class TourBookingTest {
         final TourBookingCancelled event = (TourBookingCancelled) events.get(0);
         assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
         assertThat(event.occurredAt()).isEqualTo(NOW);
+    }
+
+    // ── UC04: changeParticipants ──────────────────────────────────────────────
+
+    @Test
+    void changeParticipants_increaseCount_updatesParticipantCountAndPublishesEvent() {
+        final TourBooking booking = validBooking();
+        booking.pullDomainEvents(); // drain TourBookingRequested
+        final ParticipantCount newCount = new ParticipantCount(5);
+
+        booking.changeParticipants(newCount, CAPACITY_10, NOW);
+
+        assertThat(booking.participantCount()).isEqualTo(newCount);
+        assertThat(booking.availableCapacity()).isEqualTo(CAPACITY_10);
+        final List<DomainEvent> events = booking.pullDomainEvents();
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOf(ParticipantsChanged.class);
+        final ParticipantsChanged event = (ParticipantsChanged) events.get(0);
+        assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(event.newParticipantCount()).isEqualTo(newCount);
+        assertThat(event.occurredAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void changeParticipants_decreaseCount_updatesParticipantCount() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, new ParticipantCount(8), CAPACITY_10, CONTACT,
+                TourBookingStatus.REQUESTED);
+        final ParticipantCount newCount = new ParticipantCount(3);
+
+        booking.changeParticipants(newCount, CAPACITY_10, NOW);
+
+        assertThat(booking.participantCount()).isEqualTo(newCount);
+    }
+
+    @Test
+    void changeParticipants_fromCancelled_throwsInvalidBookingStateException() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.CANCELLED);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.changeParticipants(
+                        new ParticipantCount(3), CAPACITY_10, NOW));
+    }
+
+    @Test
+    void changeParticipants_exceedingCapacity_throwsCapacityExceededException() {
+        final TourBooking booking = validBooking();
+        final AvailableCapacity tightCapacity = new AvailableCapacity(2);
+
+        assertThatExceptionOfType(CapacityExceededException.class)
+                .isThrownBy(() -> booking.changeParticipants(
+                        new ParticipantCount(5), tightCapacity, NOW));
     }
 }

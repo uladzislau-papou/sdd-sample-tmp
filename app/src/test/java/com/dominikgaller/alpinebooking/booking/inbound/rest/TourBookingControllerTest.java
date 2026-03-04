@@ -7,6 +7,8 @@ import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBook
 import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.ChangeParticipantsResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.ChangeParticipantsUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingResult;
@@ -26,6 +28,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -66,6 +69,9 @@ class TourBookingControllerTest {
 
     @MockitoBean
     private CancelTourBookingUseCase cancelUseCase;
+
+    @MockitoBean
+    private ChangeParticipantsUseCase changeParticipantsUseCase;
 
     // ── UC01: POST /api/v1/bookings ───────────────────────────────────────────
 
@@ -183,6 +189,56 @@ class TourBookingControllerTest {
                 .thenThrow(new InvalidBookingStateException(TourBookingStatus.ACTIVE));
 
         mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    // ── UC04: PATCH /api/v1/bookings/{bookingId}/participants ─────────────────
+
+    @Test
+    void changeParticipants_returns200_withUpdatedCount() throws Exception {
+        when(changeParticipantsUseCase.change(any()))
+                .thenReturn(new ChangeParticipantsResult(5));
+
+        mockMvc.perform(patch("/api/v1/bookings/{id}/participants", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newParticipantCount\": 5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.participantCount").value(5));
+    }
+
+    @Test
+    void changeParticipants_returns404_whenNotFound() throws Exception {
+        when(changeParticipantsUseCase.change(any()))
+                .thenThrow(new BookingNotFoundException(BOOKING_UUID));
+
+        mockMvc.perform(patch("/api/v1/bookings/{id}/participants", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newParticipantCount\": 5}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    @Test
+    void changeParticipants_returns409_whenInvalidState() throws Exception {
+        when(changeParticipantsUseCase.change(any()))
+                .thenThrow(new InvalidBookingStateException(TourBookingStatus.CANCELLED));
+
+        mockMvc.perform(patch("/api/v1/bookings/{id}/participants", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newParticipantCount\": 5}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    @Test
+    void changeParticipants_returns409_whenCapacityExceeded() throws Exception {
+        when(changeParticipantsUseCase.change(any()))
+                .thenThrow(new CapacityExceededException(10, 2));
+
+        mockMvc.perform(patch("/api/v1/bookings/{id}/participants", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newParticipantCount\": 10}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").isNotEmpty());
     }

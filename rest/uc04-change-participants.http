@@ -1,0 +1,37 @@
+### UC04 – Change Participants (happy path)
+# Prerequisite: first create a booking with UC01 and copy the returned bookingId below.
+PATCH http://localhost:8080/api/v1/bookings/{{bookingId}}/participants
+Content-Type: application/json
+
+{
+  "newParticipantCount": 5
+}
+
+### UC04 – Error: booking not found (404)
+# A random UUID that does not exist in the system.
+PATCH http://localhost:8080/api/v1/bookings/00000000-0000-0000-0000-000000000000/participants
+Content-Type: application/json
+
+{
+  "newParticipantCount": 5
+}
+
+### UC04 – Error: invalid state transition (409)
+# Prerequisite: cancel a booking first (UC03), then attempt to change participants.
+# Attempting to change participants on a CANCELLED (or ACTIVE/COMPLETED) booking triggers InvalidBookingStateException.
+PATCH http://localhost:8080/api/v1/bookings/{{bookingId}}/participants
+Content-Type: application/json
+
+{
+  "newParticipantCount": 5
+}
+
+### UC04 – Error: capacity exceeded (409)
+# Prerequisite: request a booking with a count near the limit, then attempt to exceed it.
+# The StubAvailabilityChecker always returns 50 in local dev, so set newParticipantCount > 50 to trigger this.
+PATCH http://localhost:8080/api/v1/bookings/{{bookingId}}/participants
+Content-Type: application/json
+
+{
+  "newParticipantCount": 999
+}
