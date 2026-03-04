@@ -1,6 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
@@ -140,5 +141,71 @@ class TourBookingTest {
         final List<DomainEvent> events = booking.pullDomainEvents();
         assertThat(events).hasSize(1);
         assertThat(events.get(0)).isInstanceOf(TourBookingConfirmed.class);
+    }
+
+    // ── UC03: cancel ─────────────────────────────────────────────────────────
+
+    @Test
+    void cancel_fromRequested_transitionsToCancelled() {
+        final TourBooking booking = validBooking();
+
+        booking.cancel(NOW);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_fromConfirmed_transitionsToCancelled() {
+        final TourBooking booking = validBooking();
+        booking.confirm(NOW);
+
+        booking.cancel(NOW);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_fromActive_throwsInvalidBookingStateException() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.ACTIVE);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.cancel(NOW));
+    }
+
+    @Test
+    void cancel_fromCompleted_throwsInvalidBookingStateException() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.COMPLETED);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.cancel(NOW));
+    }
+
+    @Test
+    void cancel_fromCancelled_throwsInvalidBookingStateException() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.CANCELLED);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.cancel(NOW));
+    }
+
+    @Test
+    void cancel_publishesTourBookingCancelledEvent() {
+        final TourBooking booking = validBooking();
+        booking.pullDomainEvents(); // drain TourBookingRequested
+
+        booking.cancel(NOW);
+
+        final List<DomainEvent> events = booking.pullDomainEvents();
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOf(TourBookingCancelled.class);
+        final TourBookingCancelled event = (TourBookingCancelled) events.get(0);
+        assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(event.occurredAt()).isEqualTo(NOW);
     }
 }

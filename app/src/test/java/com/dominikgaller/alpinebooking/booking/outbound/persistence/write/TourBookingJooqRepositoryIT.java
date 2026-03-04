@@ -119,6 +119,19 @@ class TourBookingJooqRepositoryIT {
         assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.CONFIRMED);
     }
 
+    @Test
+    void update_changesStatus_toCancelled_afterCancel() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.cancel(NOW);
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.CANCELLED);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private TourBooking sampleBooking() {

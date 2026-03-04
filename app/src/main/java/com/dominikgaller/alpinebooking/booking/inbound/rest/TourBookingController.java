@@ -1,5 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
+import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
@@ -9,6 +11,7 @@ import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingUse
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,8 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
  * only maps request DTOs to commands, invokes the use case, and maps results to
  * response DTOs.
  *
- * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md}
- *          and {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md}.
+ * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md},
+ *          {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md},
+ *          and {@code documentation/use-cases/uc03-cancle-tour-booking.spec.md}.
  */
 @RestController
 @RequestMapping("/api/v1/bookings")
@@ -31,12 +35,15 @@ public class TourBookingController {
 
     private final RequestTourBookingUseCase requestTourBookingUseCase;
     private final ConfirmTourBookingUseCase confirmTourBookingUseCase;
+    private final CancelTourBookingUseCase cancelTourBookingUseCase;
 
     public TourBookingController(
             final RequestTourBookingUseCase requestTourBookingUseCase,
-            final ConfirmTourBookingUseCase confirmTourBookingUseCase) {
+            final ConfirmTourBookingUseCase confirmTourBookingUseCase,
+            final CancelTourBookingUseCase cancelTourBookingUseCase) {
         this.requestTourBookingUseCase = requestTourBookingUseCase;
         this.confirmTourBookingUseCase = confirmTourBookingUseCase;
+        this.cancelTourBookingUseCase = cancelTourBookingUseCase;
     }
 
     /**
@@ -77,5 +84,21 @@ public class TourBookingController {
                 confirmTourBookingUseCase.confirm(new ConfirmTourBookingCommand(bookingId));
 
         return ResponseEntity.ok(new ConfirmTourBookingResponse(result.status()));
+    }
+
+    /**
+     * UC03 – Cancels an existing tour booking.
+     *
+     * @param bookingId the UUID of the booking to cancel
+     * @return HTTP 200 with updated status
+     */
+    @DeleteMapping("/{bookingId}")
+    public ResponseEntity<CancelTourBookingResponse> cancel(
+            @PathVariable final String bookingId) {
+
+        final CancelTourBookingResponse response = new CancelTourBookingResponse(
+                cancelTourBookingUseCase.cancel(new CancelTourBookingCommand(bookingId)).status());
+
+        return ResponseEntity.ok(response);
     }
 }

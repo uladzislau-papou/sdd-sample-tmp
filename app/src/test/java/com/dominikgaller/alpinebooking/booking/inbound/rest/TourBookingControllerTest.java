@@ -5,6 +5,8 @@ import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotF
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
+import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingResult;
@@ -23,6 +25,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -60,6 +63,9 @@ class TourBookingControllerTest {
 
     @MockitoBean
     private ConfirmTourBookingUseCase confirmUseCase;
+
+    @MockitoBean
+    private CancelTourBookingUseCase cancelUseCase;
 
     // ── UC01: POST /api/v1/bookings ───────────────────────────────────────────
 
@@ -145,6 +151,38 @@ class TourBookingControllerTest {
                 .thenThrow(new InvalidBookingStateException(TourBookingStatus.CONFIRMED));
 
         mockMvc.perform(post("/api/v1/bookings/{id}/confirm", BOOKING_UUID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    // ── UC03: DELETE /api/v1/bookings/{bookingId} ─────────────────────────────
+
+    @Test
+    void cancelBooking_returns200_withCancelledStatus() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenReturn(new CancelTourBookingResult("CANCELLED"));
+
+        mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void cancelBooking_returns404_whenNotFound() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenThrow(new BookingNotFoundException(BOOKING_UUID));
+
+        mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    @Test
+    void cancelBooking_returns409_whenInvalidState() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenThrow(new InvalidBookingStateException(TourBookingStatus.ACTIVE));
+
+        mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").isNotEmpty());
     }

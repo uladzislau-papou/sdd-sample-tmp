@@ -1,0 +1,12 @@
+### UC03 – Cancel Tour Booking (happy path)
+# Prerequisite: first create a booking with UC01 and copy the returned bookingId below.
+DELETE http://localhost:8080/api/v1/bookings/{{bookingId}}
+
+### UC03 – Error: booking not found (404)
+# A random UUID that does not exist in the system.
+DELETE http://localhost:8080/api/v1/bookings/00000000-0000-0000-0000-000000000000
+
+### UC03 – Error: invalid state transition (409)
+# Prerequisite: cancel a booking once (UC03 happy path above) and attempt to cancel it again.
+# Attempting to cancel an already-CANCELLED (or ACTIVE/COMPLETED) booking triggers InvalidBookingStateException.
+DELETE http://localhost:8080/api/v1/bookings/{{bookingId}}

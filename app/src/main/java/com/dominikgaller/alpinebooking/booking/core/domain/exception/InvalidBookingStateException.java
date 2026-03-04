@@ -13,6 +13,6 @@ import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
 public class InvalidBookingStateException extends RuntimeException {
 
     public InvalidBookingStateException(final TourBookingStatus currentStatus) {
-        super("Cannot confirm booking in state: " + currentStatus.name());
+        super("Invalid state transition from state: " + currentStatus.name());
     }
 }

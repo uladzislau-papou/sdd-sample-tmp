@@ -1,6 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
@@ -15,9 +16,9 @@ import java.util.List;
 /**
  * Aggregate root representing a reservation for a guided alpine tour.
  *
- * <p>State changes are performed via named methods ({@link #request}, {@link #confirm}).
- * Each method records the resulting domain event internally and exposes events via
- * {@link #pullDomainEvents()}.
+ * <p>State changes are performed via named methods ({@link #request}, {@link #confirm},
+ * {@link #cancel}). Each method records the resulting domain event internally and exposes
+ * events via {@link #pullDomainEvents()}.
  *
  * <p>Reconstitution from persistence uses {@link #reconstitute} — no invariants are
  * re-checked when loading an already-valid past fact.
@@ -129,6 +130,20 @@ public class TourBooking {
         }
         status = TourBookingStatus.CONFIRMED;
         domainEvents.add(new TourBookingConfirmed(bookingId, now));
+    }
+
+    /**
+     * Transitions the booking from {@code REQUESTED} or {@code CONFIRMED} to {@code CANCELLED}.
+     *
+     * @throws InvalidBookingStateException if the current state is neither {@code REQUESTED}
+     *                                      nor {@code CONFIRMED}
+     */
+    public void cancel(final Instant now) {
+        if (status != TourBookingStatus.REQUESTED && status != TourBookingStatus.CONFIRMED) {
+            throw new InvalidBookingStateException(status);
+        }
+        status = TourBookingStatus.CANCELLED;
+        domainEvents.add(new TourBookingCancelled(bookingId, now));
     }
 
     /**
