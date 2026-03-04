@@ -48,15 +48,15 @@ com.dominikgaller.alpinebooking              ← shared root
     │   └── outport
     ├── inbound
     │   ├── driver
+    │   ├── listener                         ← Spring @TransactionalEventListener / @EventListener hooks
     │   └── rest
     │       ├── request                      ← inbound HTTP body / parameter DTOs
     │       └── response                     ← outbound HTTP body DTOs
-    ├── outbound
-    │   ├── persistence
-    │   │   ├── write
-    │   │   └── read
-    │   └── integration
-    └── listeners
+    └── outbound
+        ├── persistence
+        │   ├── write
+        │   └── read
+        └── integration
 ```
 
 ## 4. Responsibilities by Package
@@ -231,15 +231,19 @@ Rules:
 - MAY depend on `core.domain` for domain types (careful: do not leak them over the wire).
 - Must keep protocol-specific details here (serialization, headers, retries, etc.).
 
-### 4.8 `listeners`
+### 4.8 `inbound.listener`
 
-Technical listeners/hooks that react to infrastructure events (framework-driven).
+Inbound adapters driven by Spring's internal event infrastructure (`@TransactionalEventListener`, `@EventListener`).
+These are inbound because they receive a trigger and drive the application — the trigger source happens to be
+the Spring `ApplicationEventPublisher` rather than an HTTP request or external message broker.
+
+For future external message consumers (Kafka, RabbitMQ), use `inbound.consumer` or `inbound.messaging`.
 
 Rules:
 
-- Must be treated as adapters.
 - Must not contain business logic; forward into inports or outports as appropriate.
 - If a listener triggers business behaviour, it should call an inport (not a concrete use case class).
+- Must not access `outbound.*` implementations directly.
 
 ### 4.9 `bootstrap`
 

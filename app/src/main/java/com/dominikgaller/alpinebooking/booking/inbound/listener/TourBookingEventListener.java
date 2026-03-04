@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.listeners;
+package com.dominikgaller.alpinebooking.booking.inbound.listener;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
 import org.slf4j.Logger;
