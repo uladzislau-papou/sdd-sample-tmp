@@ -13,16 +13,16 @@ Rules are defined in the following files, ordered by precedence (highest first):
 
 1. [`documentation/project.definition.md`](documentation/project.definition.md) – Vision, strategic intent, non-goals
 2. [`documentation/architecture.definition.md`](documentation/architecture.definition.md) – Layering, package ontology, Ports & Adapters rules
-3. [`documentation/modelling.definition.md`](documentation/modelling.definition.md) – DDD building blocks, Always-Valid doctrine
-4. [`documentation/technical.spec.md`](documentation/technical.spec.md) – Tech stack, tooling, persistence strategy
-5. [`documentation/test.definition.md`](documentation/test.definition.md) – Test taxonomy, assertion rules, quality gates
-6. [`documentation/sdd.playbook.md`](documentation/sdd.playbook.md) – SDD governance, ADR triggers, quality gate principles
-7. [`documentation/execution.playbook.md`](documentation/execution.playbook.md) – Step-by-step execution loop, output contract
-8. [`documentation/domain-vs-use-case.definition.md`](documentation/domain-vs-use-case.definition.md) – Responsibility boundary clarification
-9. [`documentation/adr/`](documentation/adr/) – Architectural Decision Records
-10. [`documentation/domain/`](documentation/domain/) – Concrete domain specs
-11. [`documentation/use-cases/`](documentation/use-cases/) – Concrete use case specs
-12. [`documentation/coding-style.definition.md`](documentation/coding-style.definition.md) – Java coding style
+3. [`documentation/coding-style.definition.md`](documentation/coding-style.definition.md) – Java coding style, naming conventions, class roles
+4. [`documentation/modelling.definition.md`](documentation/modelling.definition.md) – DDD building blocks, Always-Valid doctrine
+5. [`documentation/technical.spec.md`](documentation/technical.spec.md) – Tech stack, tooling, persistence strategy
+6. [`documentation/test.definition.md`](documentation/test.definition.md) – Test taxonomy, assertion rules, quality gates
+7. [`documentation/sdd.playbook.md`](documentation/sdd.playbook.md) – SDD governance, ADR triggers, quality gate principles
+8. [`documentation/execution.playbook.md`](documentation/execution.playbook.md) – Step-by-step execution loop, output contract
+9. [`documentation/domain-vs-use-case.definition.md`](documentation/domain-vs-use-case.definition.md) – Responsibility boundary clarification
+10. [`documentation/adr/`](documentation/adr/) – Architectural Decision Records
+11. [`documentation/domain/`](documentation/domain/) – Concrete domain specs
+12. [`documentation/use-cases/`](documentation/use-cases/) – Concrete use case specs
 13. [`documentation/notes.md`](documentation/notes.md) – Scratchpad (non-authoritative)
 
 Higher documents override lower ones.
@@ -42,6 +42,14 @@ Before any implementation, follow the execution loop defined in [`documentation/
 6. Closeout Phase – structured completion report
 
 **No implementation without a spec. No architectural change without an ADR.**
+
+### Always-Read Documents
+
+The following documents apply to **every** implementation task and MUST be read before writing any code, regardless of the task scope:
+
+- [`documentation/architecture.definition.md`](documentation/architecture.definition.md) – package structure, layering rules, dependency directions
+- [`documentation/coding-style.definition.md`](documentation/coding-style.definition.md) – naming conventions, class roles (`*RestAPI`, `*Controller`, `*Driver`, …), visibility rules
+- [`documentation/modelling.definition.md`](documentation/modelling.definition.md) – Always-Valid doctrine, DDD building blocks
 
 ---
 

@@ -1,6 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.ParticipantsChanged;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;

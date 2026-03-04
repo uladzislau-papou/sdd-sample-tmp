@@ -1,6 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.core.outport;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
 
 /**
  * Outbound port for handing off domain events after a use case transaction completes.

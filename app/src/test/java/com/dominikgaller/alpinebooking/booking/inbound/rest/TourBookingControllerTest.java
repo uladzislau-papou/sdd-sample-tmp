@@ -1,18 +1,18 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
-import com.dominikgaller.alpinebooking.booking.bootstrap.AlpineBookingApplication;
+import com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
-import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingResult;
-import com.dominikgaller.alpinebooking.booking.core.inport.CancelTourBookingUseCase;
-import com.dominikgaller.alpinebooking.booking.core.inport.ChangeParticipantsResult;
-import com.dominikgaller.alpinebooking.booking.core.inport.ChangeParticipantsUseCase;
-import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
-import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
-import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingResult;
-import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.usecase.CancelTourBookingUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.ChangeParticipantsResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.usecase.ChangeParticipantsUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.ConfirmTourBookingResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.usecase.ConfirmTourBookingUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.RequestTourBookingResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.usecase.RequestTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

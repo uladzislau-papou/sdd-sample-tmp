@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.bootstrap;
+package com.dominikgaller.alpinebooking.bootstrap;
 
 import com.dominikgaller.alpinebooking.booking.outbound.integration.LoggingDomainEventPublisher;
 import com.dominikgaller.alpinebooking.booking.outbound.integration.StubAvailabilityChecker;

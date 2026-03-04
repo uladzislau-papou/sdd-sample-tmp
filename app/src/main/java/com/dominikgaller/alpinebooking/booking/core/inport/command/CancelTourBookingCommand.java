@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.core.inport;
+package com.dominikgaller.alpinebooking.booking.core.inport.command;
 
 /**
  * Command carrying the input data for the CancelTourBooking use case.

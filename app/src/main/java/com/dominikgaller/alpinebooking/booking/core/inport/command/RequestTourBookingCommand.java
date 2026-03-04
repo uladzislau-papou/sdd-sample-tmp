@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.core.inport;
+package com.dominikgaller.alpinebooking.booking.core.inport.command;
 
 import java.time.LocalDate;
 

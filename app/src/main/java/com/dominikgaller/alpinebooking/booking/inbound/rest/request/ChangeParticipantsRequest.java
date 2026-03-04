@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.inbound.rest;
+package com.dominikgaller.alpinebooking.booking.inbound.rest.request;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;

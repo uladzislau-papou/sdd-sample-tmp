@@ -1,7 +1,9 @@
-package com.dominikgaller.alpinebooking.booking.core.inport;
+package com.dominikgaller.alpinebooking.booking.core.inport.usecase;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
+import com.dominikgaller.alpinebooking.booking.core.inport.command.CancelTourBookingCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
 
 /**
  * Inbound port for the UC03 – CancelTourBooking use case.

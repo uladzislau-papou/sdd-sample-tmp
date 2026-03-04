@@ -33,11 +33,21 @@ In case of ambiguity, the higher hierarchy takes precedence.
 
 ## 3.1 Read Phase
 
-3.1 Read Phase
-
 Goal: Understand domain impact before touching code.
 
-Agent MUST:
+### Always-Read Checklist (every task, no exceptions)
+
+Before anything else, read these three documents:
+
+- [ ] `documentation/architecture.definition.md` – package structure, layering rules, dependency directions
+- [ ] `documentation/coding-style.definition.md` – naming conventions, class roles (`*RestAPI`, `*Controller`, `*Driver`, …), visibility rules
+- [ ] `documentation/modelling.definition.md` – Always-Valid doctrine, DDD building blocks
+
+These define conventions that apply to every class written. Missing them causes implementation to violate established patterns.
+
+### Task-Specific Analysis
+
+Agent MUST then:
 - Identify impacted:
   - Bounded Context(s)
   - Aggregate(s)

@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.inbound.rest;
+package com.dominikgaller.alpinebooking.booking.inbound.rest.response;
 
 /**
  * REST response body for UC01 – RequestTourBooking.

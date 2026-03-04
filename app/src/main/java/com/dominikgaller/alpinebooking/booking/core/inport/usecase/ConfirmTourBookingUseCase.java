@@ -1,7 +1,9 @@
-package com.dominikgaller.alpinebooking.booking.core.inport;
+package com.dominikgaller.alpinebooking.booking.core.inport.usecase;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
+import com.dominikgaller.alpinebooking.booking.core.inport.command.ConfirmTourBookingCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.ConfirmTourBookingResult;
 
 /**
  * Inbound port for the UC02 – ConfirmTourBooking use case.

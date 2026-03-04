@@ -30,21 +30,33 @@ Pragmatic stance:
 ## 3. Package Structure
 
 ```
-root-package (e.g. com.alpine.booking.booking, where booking (the last one) represents a bounded context
-├── core
-│   ├── domain
-│   ├── inport
-│   └── outport
-├── inbound
-│   ├── driver
-│   └── rest
-├── outbound
-│   ├── persistence
-│   │   ├── write
-│   │   └── read
-│   └── integration
-├── listeners
-└── bootstrap
+com.dominikgaller.alpinebooking              ← shared root
+├── bootstrap                                ← composition root (cross-context)
+│   ├── AlpineBookingApplication
+│   └── <ContextName>Config
+├── shared                                   ← shared kernel (cross-context building blocks)
+│   └── domain
+│       └── event
+│           └── DomainEvent                  ← marker interface for all domain events
+└── <bounded-context>                        ← one sub-package per bounded context (e.g. booking)
+    ├── core
+    │   ├── domain
+    │   ├── inport
+    │   │   ├── command                      ← input data carriers (records)
+    │   │   ├── result                       ← output data carriers (records)
+    │   │   └── usecase                      ← use case interfaces (inbound ports)
+    │   └── outport
+    ├── inbound
+    │   ├── driver
+    │   └── rest
+    │       ├── request                      ← inbound HTTP body / parameter DTOs
+    │       └── response                     ← outbound HTTP body DTOs
+    ├── outbound
+    │   ├── persistence
+    │   │   ├── write
+    │   │   └── read
+    │   └── integration
+    └── listeners
 ```
 
 ## 4. Responsibilities by Package
@@ -66,15 +78,19 @@ Rules:
 
 ### 4.2 `core.inport`
 
-Defines the **application boundary** as interfaces:
+Defines the **application boundary** as interfaces and data carriers. Split into three sub-packages:
 
-- Use case interfaces (commands)
-- Query interfaces (read-only) – only if you want queries to be part of the core boundary
+| Sub-package | Contents | Naming convention |
+|-------------|----------|-------------------|
+| `inport.command` | Input data carriers (immutable records) | `*Command` |
+| `inport.result` | Output data carriers (immutable records) | `*Result` |
+| `inport.usecase` | Use case interfaces (inbound ports) | `*UseCase` |
 
 Rules:
 
 - Framework-free.
 - Must not reference adapters (no REST DTOs, no jOOQ records).
+- `usecase` interfaces may only reference types from `inport.command`, `inport.result`, and `core.domain.exception`.
 - Inport types are stable contracts: keep them small and intention-revealing.
 
 ### 4.3 `core.outport`
@@ -129,14 +145,20 @@ Dependency rules:
 
 ### 4.5 `inbound.rest`
 
-Contains delivery concerns only:
+Contains delivery concerns only. Every resource is represented by two types:
 
-- Controllers
-- REST request/response DTOs
-- Mapping between HTTP and inports
+| Type | Naming | Sub-package | Responsibility |
+|------|--------|-------------|----------------|
+| `*RestAPI` | interface | `rest` | HTTP contract: routes, methods, status codes, parameter bindings (`@RequestMapping`, `@PostMapping`, `@Valid`, `@ResponseStatus`, …) |
+| `*Controller` | class | `rest` | Web adapter: implements `*RestAPI`, maps DTOs to commands, delegates to inport. **No HTTP annotations.** |
+| `*Request` | record | `rest.request` | Inbound HTTP body / parameter DTOs |
+| `*Response` | record | `rest.response` | Outbound HTTP body DTOs |
+| `*ExceptionHandler` | class | `rest` | Maps domain exceptions to HTTP error responses |
 
 Rules:
 
+- All Spring MVC annotations (`@RequestMapping`, `@PostMapping`, `@DeleteMapping`, `@PatchMapping`, `@ResponseStatus`, `@RequestBody`, `@PathVariable`, `@Valid`) belong on the `*RestAPI` interface.
+- `*Controller` carries only `@RestController`, `implements *RestAPI`, and `@Override` methods.
 - Controllers MUST depend only on `core.inport` (interfaces), not on implementations.
 - MUST NOT access `core.domain` directly for API contracts (no domain objects in public DTOs).
 - MUST NOT access repositories or outbound implementations.
@@ -221,10 +243,13 @@ Rules:
 
 ### 4.9 `bootstrap`
 
-Composition root and wiring:
+Composition root and wiring. Lives at the **shared root level** (`com.dominikgaller.alpinebooking.bootstrap`),
+**outside any bounded-context package**. This reflects that bootstrap is not aligned to any single context —
+it wires the whole application.
 
-- Spring Boot main class
-- Configuration
+Contains:
+- Spring Boot main class (`AlpineBookingApplication`)
+- Per-context configuration classes (e.g. `BookingConfig`)
 - Bean wiring
 
 Rules:
@@ -233,6 +258,7 @@ Rules:
 - No business logic.
 - No domain logic.
 - Only wiring and configuration.
+- The main class scans `com.dominikgaller.alpinebooking` (the shared root) to discover all bounded contexts automatically.
 
 ## 5. Command vs. Query in SDD Terms
 
@@ -267,10 +293,12 @@ Guiding rule:
 ## 7. Practical “Where does this go?” Cheatsheet
 
 - New Aggregate / VO / Domain rule → `core.domain`
-- New Use Case interface → `core.inport`
+- New Use Case interface → `core.inport.usecase`
+- New Command / Result type → `core.inport.command` / `core.inport.result`
 - New Use Case implementation (orchestration) → `inbound.driver`
 - New Repository interface / external dependency abstraction → `core.outport`
-- New REST endpoint + DTOs → `inbound.rest`
+- New REST contract (routes, status codes) → `inbound.rest` `*RestAPI` interface
+- New REST implementation (delegation) → `inbound.rest` `*Controller` class
 - New DB mapping for aggregates (write) → `outbound.persistence.write`
 - New query/projection (read) → `outbound.persistence.read`
 - New external API client / publisher → `outbound.integration`
@@ -280,7 +308,21 @@ Guiding rule:
 - Never call Instant.now() in the domain.
 - Use an outbound port ClockPort or provide time from application service.
 
-## 9. Anti-patterns (explicitly forbidden)
+## 10. Shared Kernel (`shared`)
+
+Cross-cutting building blocks that are not owned by any single bounded context.
+
+### `shared.domain.event`
+
+- Contains `DomainEvent` — the marker interface all domain events implement.
+- Framework-free; no Spring, no IO.
+- Any bounded context may depend on `shared`; `shared` must not depend on any bounded context.
+
+Rules:
+- Keep `shared` minimal. Only add here what is genuinely cross-context.
+- Do not add context-specific types here (e.g., `TourBookingRequested` stays in `booking.core.domain.event`).
+
+## 11. Anti-patterns (explicitly forbidden)
 - JPA annotations in domain objects.
 - Calling repositories from aggregates/entities/value objects.
 - Using primitives for domain concepts when they carry meaning (money, ids, email, etc.).

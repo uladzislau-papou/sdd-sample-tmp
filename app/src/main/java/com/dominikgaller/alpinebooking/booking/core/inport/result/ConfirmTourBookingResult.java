@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.core.inport;
+package com.dominikgaller.alpinebooking.booking.core.inport.result;
 
 /**
  * Result returned by the ConfirmTourBooking use case.

@@ -1,14 +1,14 @@
-package com.dominikgaller.alpinebooking.booking.core.domain.event;
+package com.dominikgaller.alpinebooking.shared.domain.event;
 
 /**
- * Marker interface for all domain events in the booking context.
+ * Marker interface for all domain events across all bounded contexts.
  *
  * <p>Implementing types are immutable records that describe facts
  * which have occurred in the domain (named in past tense).
  *
  * <p>Framework-free: no Spring, no IO.
  *
- * <p>SDD: See {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md}.
+ * <p>SDD: See {@code documentation/architecture.definition.md}, section 10.
  */
 public interface DomainEvent {
 }

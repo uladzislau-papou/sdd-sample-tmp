@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.inbound.rest;
+package com.dominikgaller.alpinebooking.booking.inbound.rest.response;
 
 /**
  * Response DTO returned by the UC02 – ConfirmTourBooking endpoint.

@@ -16,7 +16,7 @@ plugins {
 }
 
 springBoot {
-    mainClass.set("com.dominikgaller.alpinebooking.booking.bootstrap.AlpineBookingApplication")
+    mainClass.set("com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication")
 }
 
 repositories {
@@ -98,6 +98,10 @@ tasks.named("jooqCodegen") {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    workingDir = rootProject.projectDir
 }
 
 // Spring Boot 4.0.1 BOM pins jOOQ to 3.19.x; force runtime to 3.20.x to match codegen.
