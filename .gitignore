@@ -132,3 +132,8 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+
+# Ignore DB lock
+/data/alpine-booking.lock.db
+# Ignore DB
+/data/alpine-booking.mv.db
