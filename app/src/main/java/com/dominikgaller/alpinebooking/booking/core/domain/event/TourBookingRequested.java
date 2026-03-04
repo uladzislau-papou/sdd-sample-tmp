@@ -20,4 +20,5 @@ public record TourBookingRequested(
         TourDate tourDate,
         ParticipantCount participantCount,
         Instant occurredAt
-) {}
+) implements DomainEvent {
+}

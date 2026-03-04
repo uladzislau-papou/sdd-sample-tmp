@@ -5,10 +5,10 @@ import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
 import com.dominikgaller.alpinebooking.booking.core.domain.ParticipantContact;
 import com.dominikgaller.alpinebooking.booking.core.domain.ParticipantCount;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourDate;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourId;
 import org.jooq.DSLContext;
-import org.jooq.exception.DataAccessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,7 +44,7 @@ class TourBookingJooqRepositoryIT {
     @Autowired
     private DSLContext dsl;
 
-    // ── Happy path ──────────────────────────────────────────────────────────
+    // ── save ─────────────────────────────────────────────────────────────────
 
     @Test
     void save_persistsAllFields() {
@@ -67,11 +67,8 @@ class TourBookingJooqRepositoryIT {
         assertThat(record.getStatus()).isEqualTo("REQUESTED");
     }
 
-    // ── Constraint enforcement ───────────────────────────────────────────────
-
     @Test
     void save_duplicateId_throwsDuplicateKeyException() {
-
         final TourBooking booking = sampleBooking();
 
         repository.save(booking);
@@ -80,8 +77,49 @@ class TourBookingJooqRepositoryIT {
                 .isThrownBy(() -> repository.save(booking));
     }
 
+    // ── findById ─────────────────────────────────────────────────────────────
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+    @Test
+    void findById_returnsEmpty_whenNotFound() {
+        final BookingId unknownId = BookingId.generate();
+
+        assertThat(repository.findById(unknownId)).isEmpty();
+    }
+
+    @Test
+    void findById_returnsAggregate_afterSave() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        final var found = repository.findById(booking.bookingId());
+
+        assertThat(found).isPresent();
+        final TourBooking loaded = found.get();
+        assertThat(loaded.bookingId()).isEqualTo(booking.bookingId());
+        assertThat(loaded.tourId()).isEqualTo(booking.tourId());
+        assertThat(loaded.tourDate()).isEqualTo(booking.tourDate());
+        assertThat(loaded.participantCount()).isEqualTo(booking.participantCount());
+        assertThat(loaded.availableCapacity()).isEqualTo(booking.availableCapacity());
+        assertThat(loaded.contact()).isEqualTo(booking.contact());
+        assertThat(loaded.status()).isEqualTo(TourBookingStatus.REQUESTED);
+    }
+
+    // ── update ───────────────────────────────────────────────────────────────
+
+    @Test
+    void update_changesStatus_inDatabase() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.confirm(NOW);
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.CONFIRMED);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private TourBooking sampleBooking() {
         return TourBooking.request(

@@ -1,7 +1,9 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,7 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * <p>Each handler returns {@code { "error": "<message>" }} with the appropriate HTTP status.
  *
- * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md}, section 3.
+ * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md}, section 3,
+ *          and {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md}, section 3.
  */
 @RestControllerAdvice
 public class BookingExceptionHandler {
@@ -33,6 +36,18 @@ public class BookingExceptionHandler {
     @ExceptionHandler(AvailabilityUnavailableException.class)
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
     public ErrorResponse handleAvailabilityUnavailable(final AvailabilityUnavailableException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(BookingNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleBookingNotFound(final BookingNotFoundException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidBookingStateException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleInvalidBookingState(final InvalidBookingStateException ex) {
         return new ErrorResponse(ex.getMessage());
     }
 

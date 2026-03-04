@@ -1,12 +1,15 @@
 package com.dominikgaller.alpinebooking.booking.core.outport;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
 
 /**
  * Outbound port for handing off domain events after a use case transaction completes.
  *
  * <p>Must be called within an active transaction. The implementation is responsible for
  * delivering the event after commit (see ADR 0002 for the post-commit strategy).
+ *
+ * <p>Accepts any {@link DomainEvent} — callers iterate {@code booking.pullDomainEvents()}
+ * and hand each event to this port. Concrete event handling is the adapter's concern.
  *
  * <p>The interface is framework-free. The Spring {@code ApplicationEventPublisher} integration
  * lives entirely in the adapter ({@code outbound.integration.LoggingDomainEventPublisher}).
@@ -21,5 +24,5 @@ public interface DomainEventPublisher {
      *
      * @param event the domain event to publish; must not be null
      */
-    void publish(TourBookingRequested event);
+    void publish(DomainEvent event);
 }

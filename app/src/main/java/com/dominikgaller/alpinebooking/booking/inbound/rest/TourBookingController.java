@@ -1,37 +1,46 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
+import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingUseCase;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST adapter for UC01 – RequestTourBooking.
+ * REST adapter for tour booking use cases.
  *
- * <p>Delegates entirely to {@link RequestTourBookingUseCase}. Contains no domain logic:
- * only maps the request DTO to a command, invokes the use case, and maps the result to
- * a response DTO.
+ * <p>Delegates entirely to the relevant use case port. Contains no domain logic:
+ * only maps request DTOs to commands, invokes the use case, and maps results to
+ * response DTOs.
  *
- * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md}, section 9.
+ * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md}
+ *          and {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md}.
  */
 @RestController
 @RequestMapping("/api/v1/bookings")
 public class TourBookingController {
 
-    private final RequestTourBookingUseCase useCase;
+    private final RequestTourBookingUseCase requestTourBookingUseCase;
+    private final ConfirmTourBookingUseCase confirmTourBookingUseCase;
 
-    public TourBookingController(final RequestTourBookingUseCase useCase) {
-        this.useCase = useCase;
+    public TourBookingController(
+            final RequestTourBookingUseCase requestTourBookingUseCase,
+            final ConfirmTourBookingUseCase confirmTourBookingUseCase) {
+        this.requestTourBookingUseCase = requestTourBookingUseCase;
+        this.confirmTourBookingUseCase = confirmTourBookingUseCase;
     }
 
     /**
-     * Creates a new tour booking request.
+     * UC01 – Creates a new tour booking request.
      *
      * @param request validated request body
      * @return HTTP 201 with booking id and status
@@ -47,10 +56,26 @@ public class TourBookingController {
                 request.contactName(),
                 request.contactEmail());
 
-        final RequestTourBookingResult result = useCase.request(command);
+        final RequestTourBookingResult result = requestTourBookingUseCase.request(command);
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(new RequestTourBookingResponse(result.bookingId(), result.status()));
+    }
+
+    /**
+     * UC02 – Confirms an existing tour booking.
+     *
+     * @param bookingId the UUID of the booking to confirm
+     * @return HTTP 200 with updated status
+     */
+    @PostMapping("/{bookingId}/confirm")
+    public ResponseEntity<ConfirmTourBookingResponse> confirm(
+            @PathVariable final String bookingId) {
+
+        final ConfirmTourBookingResult result =
+                confirmTourBookingUseCase.confirm(new ConfirmTourBookingCommand(bookingId));
+
+        return ResponseEntity.ok(new ConfirmTourBookingResponse(result.status()));
     }
 }

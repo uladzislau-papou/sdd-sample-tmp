@@ -1,8 +1,11 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
+import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -29,6 +32,8 @@ class TourBookingTest {
         return TourBooking.request(BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT, NOW);
     }
 
+    // ── UC01: request factory ────────────────────────────────────────────────
+
     @Test
     void requestSetsStatusToRequested() {
         assertThat(validBooking().status()).isEqualTo(TourBookingStatus.REQUESTED);
@@ -48,9 +53,10 @@ class TourBookingTest {
     @Test
     void pullDomainEventsReturnsExactlyOneTourBookingRequested() {
         final TourBooking booking = validBooking();
-        final List<TourBookingRequested> events = booking.pullDomainEvents();
+        final List<DomainEvent> events = booking.pullDomainEvents();
         assertThat(events).hasSize(1);
-        final TourBookingRequested event = events.get(0);
+        assertThat(events.get(0)).isInstanceOf(TourBookingRequested.class);
+        final TourBookingRequested event = (TourBookingRequested) events.get(0);
         assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
         assertThat(event.tourId()).isEqualTo(TOUR_ID);
         assertThat(event.tourDate()).isEqualTo(TOUR_DATE);
@@ -87,5 +93,52 @@ class TourBookingTest {
         final TourBooking booking = TourBooking.request(
                 BOOKING_ID, TOUR_ID, TOUR_DATE, exactCount, CAPACITY_10, CONTACT, NOW);
         assertThat(booking.status()).isEqualTo(TourBookingStatus.REQUESTED);
+    }
+
+    // ── UC02: confirm ────────────────────────────────────────────────────────
+
+    @Test
+    void confirm_transitionsStatusToConfirmed() {
+        final TourBooking booking = validBooking();
+
+        booking.confirm(NOW);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CONFIRMED);
+    }
+
+    @Test
+    void confirm_publishesTourBookingConfirmedEvent() {
+        final TourBooking booking = validBooking();
+        booking.pullDomainEvents(); // drain TourBookingRequested
+
+        booking.confirm(NOW);
+
+        final List<DomainEvent> events = booking.pullDomainEvents();
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOf(TourBookingConfirmed.class);
+        final TourBookingConfirmed event = (TourBookingConfirmed) events.get(0);
+        assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(event.occurredAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed() {
+        final TourBooking booking = validBooking();
+        booking.confirm(NOW);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.confirm(NOW));
+    }
+
+    @Test
+    void pullDomainEvents_returnsOnlyConfirmedEvent_afterPullingRequestedAndCallingConfirm() {
+        final TourBooking booking = validBooking();
+        booking.pullDomainEvents(); // drain the initial TourBookingRequested
+
+        booking.confirm(NOW);
+
+        final List<DomainEvent> events = booking.pullDomainEvents();
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOf(TourBookingConfirmed.class);
     }
 }

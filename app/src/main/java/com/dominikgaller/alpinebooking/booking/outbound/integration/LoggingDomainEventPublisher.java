@@ -1,6 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.outbound.integration;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
 import com.dominikgaller.alpinebooking.booking.core.outport.DomainEventPublisher;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -23,7 +23,7 @@ public class LoggingDomainEventPublisher implements DomainEventPublisher {
     }
 
     @Override
-    public void publish(final TourBookingRequested event) {
+    public void publish(final DomainEvent event) {
         applicationEventPublisher.publishEvent(event);
     }
 }

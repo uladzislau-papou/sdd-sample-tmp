@@ -1,0 +1,59 @@
+package com.dominikgaller.alpinebooking.booking.inbound.driver;
+
+import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
+import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.ConfirmTourBookingUseCase;
+import com.dominikgaller.alpinebooking.booking.core.outport.ClockPort;
+import com.dominikgaller.alpinebooking.booking.core.outport.DomainEventPublisher;
+import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * Application service (driver) implementing the UC02 – ConfirmTourBooking use case.
+ *
+ * <p>Owns the transaction boundary. Orchestrates aggregate loading, state transition,
+ * persistence, and post-commit event publication without containing any domain rules.
+ *
+ * <p>SDD: See {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md}.
+ */
+@Service
+@Transactional
+public class ConfirmTourBookingDriver implements ConfirmTourBookingUseCase {
+
+    private final TourBookingRepository tourBookingRepository;
+    private final DomainEventPublisher domainEventPublisher;
+    private final ClockPort clockPort;
+
+    public ConfirmTourBookingDriver(
+            final TourBookingRepository tourBookingRepository,
+            final DomainEventPublisher domainEventPublisher,
+            final ClockPort clockPort) {
+        this.tourBookingRepository = tourBookingRepository;
+        this.domainEventPublisher = domainEventPublisher;
+        this.clockPort = clockPort;
+    }
+
+    @Override
+    public ConfirmTourBookingResult confirm(final ConfirmTourBookingCommand command) {
+        final BookingId bookingId = new BookingId(UUID.fromString(command.bookingId()));
+        final Instant now = clockPort.now();
+
+        final TourBooking booking = tourBookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
+
+        booking.confirm(now);
+
+        tourBookingRepository.update(booking);
+
+        booking.pullDomainEvents().forEach(domainEventPublisher::publish);
+
+        return new ConfirmTourBookingResult(booking.status().name());
+    }
+}

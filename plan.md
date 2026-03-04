@@ -1,7 +1,7 @@
 # Plan: UC02 – Confirm Tour Booking
 
 ## Status
-PLANNED
+DONE
 
 ---
 

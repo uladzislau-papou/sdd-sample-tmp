@@ -1,8 +1,11 @@
 package com.dominikgaller.alpinebooking.booking.core.domain;
 
+import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,9 +15,12 @@ import java.util.List;
 /**
  * Aggregate root representing a reservation for a guided alpine tour.
  *
- * <p>All invariants are enforced at creation time via the {@link #request} factory.
- * The aggregate is the only entry point for state changes; it records domain events
- * internally and exposes them via {@link #pullDomainEvents()}.
+ * <p>State changes are performed via named methods ({@link #request}, {@link #confirm}).
+ * Each method records the resulting domain event internally and exposes events via
+ * {@link #pullDomainEvents()}.
+ *
+ * <p>Reconstitution from persistence uses {@link #reconstitute} — no invariants are
+ * re-checked when loading an already-valid past fact.
  *
  * <p>Framework-free: no Spring, no JPA, no IO.
  *
@@ -30,7 +36,7 @@ public class TourBooking {
     private final ParticipantContact contact;
     private TourBookingStatus status;
 
-    private final List<TourBookingRequested> domainEvents = new ArrayList<>();
+    private final List<DomainEvent> domainEvents = new ArrayList<>();
 
     private TourBooking(
             final BookingId bookingId,
@@ -92,14 +98,48 @@ public class TourBooking {
     }
 
     /**
+     * Reconstitutes a {@link TourBooking} from its persisted state.
+     *
+     * <p>No creation-time invariants are enforced — the data is assumed to have been
+     * valid when first written. Called exclusively by the persistence mapper.
+     *
+     * @return a {@link TourBooking} reflecting the stored state, with no pending events
+     */
+    public static TourBooking reconstitute(
+            final BookingId bookingId,
+            final TourId tourId,
+            final TourDate tourDate,
+            final ParticipantCount participantCount,
+            final AvailableCapacity availableCapacity,
+            final ParticipantContact contact,
+            final TourBookingStatus status) {
+        return new TourBooking(
+                bookingId, tourId, tourDate, participantCount,
+                availableCapacity, contact, status);
+    }
+
+    /**
+     * Transitions the booking from {@code REQUESTED} to {@code CONFIRMED}.
+     *
+     * @throws InvalidBookingStateException if the current state is not {@code REQUESTED}
+     */
+    public void confirm(final Instant now) {
+        if (status != TourBookingStatus.REQUESTED) {
+            throw new InvalidBookingStateException(status);
+        }
+        status = TourBookingStatus.CONFIRMED;
+        domainEvents.add(new TourBookingConfirmed(bookingId, now));
+    }
+
+    /**
      * Returns and clears all recorded domain events.
      *
      * <p>Calling this method twice returns an empty list on the second call.
      *
      * @return unmodifiable snapshot of pending events
      */
-    public List<TourBookingRequested> pullDomainEvents() {
-        final List<TourBookingRequested> snapshot = Collections.unmodifiableList(
+    public List<DomainEvent> pullDomainEvents() {
+        final List<DomainEvent> snapshot = Collections.unmodifiableList(
                 new ArrayList<>(domainEvents));
         domainEvents.clear();
         return snapshot;

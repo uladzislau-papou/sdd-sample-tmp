@@ -1,9 +1,11 @@
 package com.dominikgaller.alpinebooking.booking.inbound.driver;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.AvailableCapacity;
+import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourDate;
 import com.dominikgaller.alpinebooking.booking.core.domain.TourId;
+import com.dominikgaller.alpinebooking.booking.core.domain.event.DomainEvent;
 import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
 import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.inport.RequestTourBookingCommand;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -105,6 +108,16 @@ class RequestTourBookingDriverTest {
             saved.add(booking);
         }
 
+        @Override
+        public Optional<TourBooking> findById(final BookingId bookingId) {
+            throw new UnsupportedOperationException("not used in UC01 tests");
+        }
+
+        @Override
+        public void update(final TourBooking booking) {
+            throw new UnsupportedOperationException("not used in UC01 tests");
+        }
+
         List<TourBooking> savedBookings() {
             return Collections.unmodifiableList(saved);
         }
@@ -131,14 +144,14 @@ class RequestTourBookingDriverTest {
     }
 
     private static class PublishCapturingPublisher implements DomainEventPublisher {
-        private final List<TourBookingRequested> events = new ArrayList<>();
+        private final List<DomainEvent> events = new ArrayList<>();
 
         @Override
-        public void publish(final TourBookingRequested event) {
+        public void publish(final DomainEvent event) {
             events.add(event);
         }
 
-        List<TourBookingRequested> publishedEvents() {
+        List<DomainEvent> publishedEvents() {
             return Collections.unmodifiableList(events);
         }
     }
