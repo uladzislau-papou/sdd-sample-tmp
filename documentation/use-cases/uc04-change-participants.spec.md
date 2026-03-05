@@ -1,7 +1,7 @@
 # Use Case Specification – ChangeParticipants
 
 ## Status
-SPECIFIED
+IMPLEMENTED
 
 ## Purpose
 
