@@ -1,7 +1,7 @@
 # Use Case Specification – StartTour (GuideOperations)
 
 ## Status
-SPECIFIED
+IMPLEMENTED
 
 ## Purpose
 Start a scheduled guide tour execution.

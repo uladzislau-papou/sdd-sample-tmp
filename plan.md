@@ -1,184 +1,324 @@
-# Plan – UC04: ChangeParticipants
+# Plan – UC05: StartTour
 
 ## Status
-PLANNING
+PLANNED
 
 ## Reference
-- Spec: `documentation/use-cases/uc04-change-participants.spec.md`
+- Spec: `documentation/use-cases/uc05-start-tour.spec.md`
 - Architecture: `documentation/architecture.definition.md`
 - Domain: `documentation/modelling.definition.md`
 
 ---
 
-## 1. Clarifications & Gaps Resolved
+## 1. Clarifications & Spec Gaps Resolved
 
-### 1.1 HTTP method and path (not defined in spec)
-Decision: `PATCH /api/v1/bookings/{bookingId}/participants`
-- PATCH signals a partial update of the booking resource
-- `/participants` sub-resource makes the intent explicit and avoids clashing with future PATCH /bookings/{id}
+### 1.1 GuideTour is a New Aggregate
+The spec references a `GuideTour` aggregate that does not yet exist. `TourBooking` represents the
+customer-side booking. `GuideTour` is the guide-side tour execution record — a separate aggregate
+with its own identity, state machine, and lifecycle.
 
-### 1.2 Availability delta logic (spec says "Check availability delta")
-The `AvailabilityChecker` port returns total available capacity for a tour+date from the external system.
-The driver re-checks availability and passes the fresh capacity to `TourBooking.changeParticipants()`.
-The domain enforces: `newParticipantCount <= freshAvailableCapacity`.
-The updated `availableCapacity` (fresh snapshot) is stored on the aggregate (consistent with UC01 pattern).
+**Decision**: Introduce `GuideTour` as a new aggregate root within the existing `booking` bounded
+context. No new bounded context is introduced at this stage.
 
-If `newParticipantCount <= currentParticipantCount` (decrease), availability is still re-checked and stored
-(simple, consistent, avoids special-casing in the driver).
+### 1.2 State Naming
+Spec says "READY (or SCHEDULED)" and "RUNNING (or ACTIVE)".
 
-### 1.3 Domain model mutation – participantCount and availableCapacity
-Both fields are currently `private final`. The `changeParticipants()` method mutates these.
-The existing `status` field already uses `private` (non-final) mutation; applying the same pattern.
-Change: remove `final` from `participantCount` and `availableCapacity`; introduce setters only within the aggregate (private field re-assignment in `changeParticipants`).
+**Decision**:
+- Pre-start state: `SCHEDULED`
+- Post-start state: `RUNNING` — avoids confusion with `TourBookingStatus.ACTIVE` (booking side)
+- Full enum: `SCHEDULED → RUNNING → FINISHED | CANCELLED`
 
-### 1.4 Response body
-Spec says "Return type: updated participantCount". Response: `{ "participantCount": <int> }`.
+### 1.3 TooEarly Rule
+Spec says "Current date/time >= tourStartTime (or within allowed start window)" but gives no
+tolerance window.
 
-### 1.5 HTTP status on success
-200 OK – consistent with UC02 and UC03 (state transitions return 200).
+**Decision**: `GuideTour` stores a `scheduledStart` (Instant). Start is only allowed when
+`startedAt >= scheduledStart`. Any earlier attempt throws `TourStartTooEarlyException`. No
+tolerance window — exact or late starts only.
 
-### 1.6 Error mapping (already handled by BookingExceptionHandler)
-- `BookingNotFoundException` → 404 (already mapped)
-- `InvalidBookingStateException` → 409 (already mapped)
-- `CapacityExceededException` → 409 (already mapped)
-- `AvailabilityUnavailableException` → 502 (already mapped)
+### 1.4 Optional startedAt
+Spec says "startedAt (optional; default = now)".
 
-No changes to `BookingExceptionHandler` needed.
+**Decision**:
+- REST: optional JSON body with nullable `startedAt` (ISO-8601 Instant string).
+- Inport command: `StartTourCommand(String guideTourId, Optional<Instant> startedAt)`.
+- Driver resolves: `startedAt.orElseGet(clockPort::now)` before calling the aggregate.
 
-### 1.7 ADR needed?
-No. UC04 introduces no new package structure, no new external dependency, no async processing,
-no new transaction boundary, no new persistence technology. Follows the established pattern exactly.
+### 1.5 InvalidState Errors
+Any state other than `SCHEDULED` is invalid. Throws `InvalidGuideTourStateException` → HTTP 409.
+
+### 1.6 Actor Authorization
+Spec says "Optional – Actor is authorized guide". **Out of scope** — no auth layer exists.
+
+### 1.7 REST Resource Design
+New `GuideTourRestAPI` interface + `GuideTourController` (not added to `TourBookingRestAPI`).
+`GuideTour` is a distinct resource from `TourBooking`.
+
+Route: `POST /api/v1/guide-tours/{guideTourId}/start`
+HTTP 200 on success (state transition, not creation).
+
+### 1.8 GuideTour Data Model
+Fields: `GuideTourId id`, `TourId tourId`, `Instant scheduledStart`, `GuideTourStatus status`,
+`Instant startedAt` (null until started — stored as nullable column).
+
+### 1.9 ADR needed?
+No ADR required. The new aggregate follows the established Hexagonal + DDD pattern exactly.
+The decision to stay in the `booking` bounded context is a pragmatic scope decision, not an
+architectural deviation.
 
 ---
 
 ## 2. Acceptance Criteria
 
-- [ ] `PATCH /api/v1/bookings/{id}/participants` with valid body returns 200 and updated participantCount
-- [ ] Attempt on CANCELLED / ACTIVE / COMPLETED booking returns 409
-- [ ] Attempt exceeding available capacity returns 409
-- [ ] Attempt on non-existent bookingId returns 404
-- [ ] `ParticipantsChanged` domain event is published after commit
-- [ ] Aggregate is persisted with updated participantCount and availableCapacity
+- [ ] `POST /api/v1/guide-tours/{id}/start` on a SCHEDULED tour returns 200 with status `RUNNING`
+- [ ] `TourStarted` domain event is published after commit
+- [ ] GuideTour is persisted with updated status and startedAt
+- [ ] Start before scheduledStart returns 409
+- [ ] Start on a non-SCHEDULED tour (RUNNING / FINISHED / CANCELLED) returns 409
+- [ ] Start on non-existent guideTourId returns 404
+- [ ] If startedAt omitted, ClockPort.now() is used
 - [ ] `./gradlew clean test` and `./gradlew build` pass
 
 ---
 
-## 3. Affected Files
+## 3. New Components Overview
 
-### New files
-| File | Purpose |
-|------|---------|
-| `core/domain/event/ParticipantsChanged.java` | Domain event (record) |
-| `core/inport/ChangeParticipantsCommand.java` | Input record: bookingId, newParticipantCount |
-| `core/inport/ChangeParticipantsResult.java` | Output record: participantCount |
-| `core/inport/ChangeParticipantsUseCase.java` | Inport interface |
-| `inbound/driver/ChangeParticipantsDriver.java` | Application service (@Service @Transactional) |
-| `inbound/rest/ChangeParticipantsRequest.java` | REST request DTO |
-| `inbound/rest/ChangeParticipantsResponse.java` | REST response DTO |
-| `rest/uc04-change-participants.http` | HTTP client file (happy path + 3 error cases) |
-| `inbound/driver/ChangeParticipantsDriverTest.java` | Use case test (Spring-free) |
+### Domain (`booking.core.domain`)
+| Component | Type | Notes |
+|---|---|---|
+| `GuideTourId` | record (VO) | wraps UUID; `generate()` factory |
+| `GuideTourStatus` | enum | `SCHEDULED, RUNNING, FINISHED, CANCELLED` |
+| `GuideTour` | class (aggregate) | `schedule()` + `reconstitute()` + `start(Instant)` |
+| `TourStarted` | record (domain event) | `GuideTourId, TourId, Instant startedAt`; implements `DomainEvent` |
+| `GuideTourNotFoundException` | exception | → HTTP 404 |
+| `InvalidGuideTourStateException` | exception | → HTTP 409 |
+| `TourStartTooEarlyException` | exception | → HTTP 409 |
 
-### Modified files
-| File | Change |
-|------|--------|
-| `core/domain/TourBooking.java` | Remove `final` from `participantCount`/`availableCapacity`; add `changeParticipants(ParticipantCount, AvailableCapacity, Instant)` |
-| `inbound/rest/TourBookingController.java` | Add `PATCH /{bookingId}/participants` endpoint |
-| `core/domain/TourBookingTest.java` | Add tests for `changeParticipants()` (happy path, invalid state, capacity exceeded) |
-| `inbound/rest/TourBookingControllerTest.java` | Add test cases for new endpoint |
+### Inport (`booking.core.inport`)
+| Component | Type | Notes |
+|---|---|---|
+| `StartTourCommand` | record | `String guideTourId, Optional<Instant> startedAt` |
+| `StartTourResult` | record | `String status` |
+| `StartTourUseCase` | interface | `start(StartTourCommand) → StartTourResult` |
+
+### Outport (`booking.core.outport`)
+| Component | Type | Notes |
+|---|---|---|
+| `GuideTourRepository` | interface | `save`, `findById(GuideTourId) → Optional<GuideTour>`, `update` |
+
+### DB
+| File | Notes |
+|---|---|
+| `V2__DDL_create_guide_tour.sql` | New `guide_tour` table |
+
+```sql
+CREATE TABLE guide_tour (
+    id               VARCHAR(36)  NOT NULL,
+    tour_id          VARCHAR(255) NOT NULL,
+    scheduled_start  TIMESTAMP    NOT NULL,
+    status           VARCHAR(50)  NOT NULL,
+    started_at       TIMESTAMP    NULL,
+    CONSTRAINT pk_guide_tour PRIMARY KEY (id)
+);
+```
+
+### Persistence (`booking.outbound.persistence.write`)
+| Component | Type | Notes |
+|---|---|---|
+| `GuideTourMapper` | class (package-private) | `GuideTourRecord` ↔ `GuideTour` |
+| `GuideTourJooqRepository` | @Repository | implements `GuideTourRepository` |
+
+### Driver (`booking.inbound.driver`)
+| Component | Type | Notes |
+|---|---|---|
+| `StartTourDriver` | @Service @Transactional | implements `StartTourUseCase` |
+
+### REST (`booking.inbound.rest`)
+| Component | Type | Notes |
+|---|---|---|
+| `StartTourRequest` | record | nullable `Instant startedAt` |
+| `StartTourResponse` | record | `String status` |
+| `GuideTourRestAPI` | interface | HTTP contract |
+| `GuideTourController` | @RestController | implements `GuideTourRestAPI` |
 
 ---
 
 ## 4. Implementation Steps
 
-### Step 1 – Domain event
-Create `core/domain/event/ParticipantsChanged.java`:
+### Step 1 – Domain: `GuideTourId`
+Create `booking.core.domain.GuideTourId`:
+- `record GuideTourId(UUID value)`
+- `static GuideTourId generate()`
+- Validate non-null in canonical constructor
+
+### Step 2 – Domain: `GuideTourStatus`
+Create `booking.core.domain.GuideTourStatus`:
+- `SCHEDULED, RUNNING, FINISHED, CANCELLED`
+
+### Step 3 – Domain: Exceptions
+Create in `booking.core.domain.exception`:
+- `GuideTourNotFoundException(String guideTourId)`
+- `InvalidGuideTourStateException(GuideTourStatus status)`
+- `TourStartTooEarlyException(Instant scheduledStart, Instant attemptedAt)`
+
+### Step 4 – Domain: `TourStarted` event
+Create `booking.core.domain.event.TourStarted`:
+- `record TourStarted(GuideTourId guideTourId, TourId tourId, Instant startedAt) implements DomainEvent`
+
+### Step 5 – Domain: `GuideTour` aggregate
+Create `booking.core.domain.GuideTour`:
+- Private constructor
+- `static GuideTour schedule(GuideTourId, TourId, Instant scheduledStart)` — creates in SCHEDULED state
+- `static GuideTour reconstitute(GuideTourId, TourId, Instant scheduledStart, GuideTourStatus, Instant startedAt)`
+- `void start(Instant startedAt)`:
+  1. if `status != SCHEDULED` → throw `InvalidGuideTourStateException`
+  2. if `startedAt.isBefore(scheduledStart)` → throw `TourStartTooEarlyException`
+  3. `this.status = RUNNING; this.startedAt = startedAt`
+  4. record `new TourStarted(id, tourId, startedAt)`
+- `pullDomainEvents()` — same pattern as `TourBooking`
+- Accessors for all fields
+
+### Step 6 – Domain Test: `GuideTourTest`
+Create `GuideTourTest` (no Spring):
+- `start_transitionsToRunning_andEmitsTourStarted` — scheduledStart in past
+- `start_throwsTourStartTooEarlyException_whenBeforeScheduledStart`
+- `start_throwsInvalidGuideTourStateException_whenAlreadyRunning`
+- `start_throwsInvalidGuideTourStateException_whenCancelled`
+
+### Step 7 – Inport: Command / Result / UseCase
+Create in `booking.core.inport`:
+- `command/StartTourCommand.java` — `record StartTourCommand(String guideTourId, Optional<Instant> startedAt)`
+- `result/StartTourResult.java` — `record StartTourResult(String status)`
+- `usecase/StartTourUseCase.java` — `StartTourResult start(StartTourCommand command)`
+
+### Step 8 – Outport: `GuideTourRepository`
+Create `booking.core.outport.GuideTourRepository`:
 ```java
-record ParticipantsChanged(BookingId bookingId, ParticipantCount newParticipantCount, Instant occurredAt)
-    implements DomainEvent {}
+void save(GuideTour guideTour);
+Optional<GuideTour> findById(GuideTourId guideTourId);
+void update(GuideTour guideTour);
 ```
 
-### Step 2 – Domain method: TourBooking.changeParticipants()
-Modify `TourBooking.java`:
-- Remove `final` from `participantCount` and `availableCapacity`
-- Add method:
-  ```java
-  public void changeParticipants(ParticipantCount newCount, AvailableCapacity freshCapacity, Instant now) {
-      if (status != REQUESTED && status != CONFIRMED) throw new InvalidBookingStateException(status);
-      if (newCount.value() > freshCapacity.value()) throw new CapacityExceededException(...);
-      this.participantCount = newCount;
-      this.availableCapacity = freshCapacity;
-      domainEvents.add(new ParticipantsChanged(bookingId, newCount, now));
-  }
-  ```
+### Step 9 – DB Migration
+Create `app/src/main/resources/db/migration/V2__DDL_create_guide_tour.sql` with the `guide_tour`
+table schema above.
 
-### Step 3 – Domain tests
-Add to `TourBookingTest.java`:
-- changeParticipants happy path (increase and decrease)
-- changeParticipants with invalid state (CANCELLED → 409)
-- changeParticipants exceeding capacity → CapacityExceededException
+After creating the file, run: `./gradlew flywayMigrate jooqCodegen`
+Verify `GuideTourRecord` is generated at
+`build/generated-src/jooq/main/.../jooq/tables/records/GuideTourRecord.java` before proceeding.
 
-### Step 4 – Inport types
-Create `ChangeParticipantsCommand`, `ChangeParticipantsResult`, `ChangeParticipantsUseCase` in `core/inport/`.
+### Step 10 – Persistence: `GuideTourMapper` + `GuideTourJooqRepository`
+Create `booking.outbound.persistence.write.GuideTourMapper` (package-private):
+- `GuideTourRecord toRecord(GuideTour)`
+- `GuideTour toDomain(GuideTourRecord)` — uses `reconstitute()`, maps nullable `started_at` via
+  `Optional.ofNullable(record.getStartedAt()).map(ts -> ts.toInstant(ZoneOffset.UTC))`
 
-### Step 5 – Application service (driver)
-Create `ChangeParticipantsDriver`:
+Create `booking.outbound.persistence.write.GuideTourJooqRepository` (@Repository):
+- `save`: `dsl.insertInto(GUIDE_TOUR).set(mapper.toRecord(g)).execute()`
+- `findById`: select + map via `mapper.toDomain()`
+- `update`: `dsl.update(GUIDE_TOUR).set(...).where(GUIDE_TOUR.ID.eq(...)).execute()`
+
+### Step 11 – Persistence IT: `GuideTourJooqRepositoryIT`
+Create in `booking.outbound.persistence.write`:
+- `save_persistsAllFields` — verify all columns written correctly
+- `findById_returnsEmpty_whenNotFound`
+- `findById_returnsAggregate_afterSave`
+- `update_changesStatus_andStartedAt_afterStart`
+
+Uses `PersistenceTestApplication` + `@ActiveProfiles("test")` + `@Transactional`.
+
+### Step 12 – Driver: `StartTourDriver`
+Create `booking.inbound.driver.StartTourDriver` (@Service @Transactional):
 ```
-1. Parse bookingId (UUID)
-2. Load booking → 404 if absent
-3. Get now from ClockPort
-4. Call AvailabilityChecker.checkAvailability(tourId, tourDate)
-5. Call booking.changeParticipants(newCount, freshCapacity, now)
-6. Call repository.update(booking)
-7. Publish events via pullDomainEvents()
-8. Return ChangeParticipantsResult(booking.participantCount().value())
+1. effectiveStart = command.startedAt().orElseGet(clockPort::now)
+2. guideTourId = new GuideTourId(UUID.fromString(command.guideTourId()))
+3. guideTour = guideTourRepository.findById(guideTourId) → throw GuideTourNotFoundException if absent
+4. guideTour.start(effectiveStart)  ← domain enforces rules
+5. guideTourRepository.update(guideTour)
+6. guideTour.pullDomainEvents().forEach(domainEventPublisher::publish)
+7. return new StartTourResult(guideTour.status().name())
 ```
+Injects: `GuideTourRepository`, `DomainEventPublisher`, `ClockPort`.
 
-### Step 6 – Driver test
-Create `ChangeParticipantsDriverTest.java` (no Spring, stubs/mocks):
-- Happy path
-- Booking not found → BookingNotFoundException
-- Invalid state → InvalidBookingStateException
-- Capacity exceeded → CapacityExceededException
-- Availability unavailable → AvailabilityUnavailableException
+### Step 13 – Driver Test: `StartTourDriverTest`
+Create `StartTourDriverTest` (no Spring, inline stubs):
+- `start_returnsRunningStatus_onScheduledTour`
+- `start_callsUpdateOnRepository`
+- `start_publishesTourStartedEvent`
+- `start_usesClockNow_whenStartedAtAbsent`
+- `start_throwsGuideTourNotFoundException_whenNotFound`
+- `start_throwsInvalidGuideTourStateException_whenAlreadyRunning`
+- `start_throwsTourStartTooEarlyException_whenBeforeScheduledStart`
 
-### Step 7 – REST layer
-Create `ChangeParticipantsRequest` (with `@NotNull @Min(1) int newParticipantCount`) and
-`ChangeParticipantsResponse` (with `int participantCount`).
+Stubs needed: `GuideTourStubRepository`, `PublishCapturingPublisher` (reuse pattern from
+`ChangeParticipantsDriverTest`), `FixedClockPort`.
 
-Add to `TourBookingController`:
+### Step 14 – REST: DTOs
+Create in `booking.inbound.rest`:
+- `request/StartTourRequest.java` — `record StartTourRequest(Instant startedAt)` (nullable, no
+  `@NotNull` — absence means use clock)
+- `response/StartTourResponse.java` — `record StartTourResponse(String status)`
+
+### Step 15 – REST: `GuideTourRestAPI` interface
+Create `booking.inbound.rest.GuideTourRestAPI`:
 ```java
-@PatchMapping("/{bookingId}/participants")
-public ResponseEntity<ChangeParticipantsResponse> changeParticipants(
-        @PathVariable String bookingId,
-        @Valid @RequestBody ChangeParticipantsRequest request) {
-    // delegate to ChangeParticipantsUseCase
-    // return 200
+@RequestMapping("/api/v1/guide-tours")
+public interface GuideTourRestAPI {
+    @PostMapping("/{guideTourId}/start")
+    StartTourResponse start(
+        @PathVariable String guideTourId,
+        @RequestBody(required = false) StartTourRequest request);
 }
 ```
+No `@Valid` needed (no bean validation on nullable body).
 
-### Step 8 – Controller test
-Add test cases to `TourBookingControllerTest.java`:
-- 200 happy path
-- 404 booking not found
-- 409 invalid state
-- 409 capacity exceeded
+### Step 16 – REST: `GuideTourController`
+Create `booking.inbound.rest.GuideTourController` (@RestController implements GuideTourRestAPI):
+- Map `StartTourRequest` (nullable) → `StartTourCommand`
+- `Optional<Instant> startedAt = request != null ? Optional.ofNullable(request.startedAt()) : Optional.empty()`
+- Delegate to `StartTourUseCase.start(command)`
+- Map result → `StartTourResponse`
 
-### Step 9 – HTTP client file
-Create `rest/uc04-change-participants.http`:
-- Happy path request
-- 404 error case
-- 409 invalid state case
-- 409 capacity exceeded case
+### Step 17 – Exception Handler: update `BookingExceptionHandler`
+Add three handlers:
+- `GuideTourNotFoundException` → `@ResponseStatus(HttpStatus.NOT_FOUND)`
+- `InvalidGuideTourStateException` → `@ResponseStatus(HttpStatus.CONFLICT)`
+- `TourStartTooEarlyException` → `@ResponseStatus(HttpStatus.CONFLICT)`
 
-### Step 10 – Verify
-Run `./gradlew clean test` and `./gradlew build`.
+### Step 18 – Controller Test: `GuideTourControllerTest`
+Create `GuideTourControllerTest` (@SpringBootTest + @AutoConfigureMockMvc):
+- `start_returns200_withRunningStatus` (happy path with no body → uses clock)
+- `start_returns200_withRunningStatus_whenStartedAtProvided`
+- `start_returns404_whenNotFound`
+- `start_returns409_whenInvalidState`
+- `start_returns409_whenTooEarly`
+
+Uses `@MockitoBean StartTourUseCase`.
+
+### Step 19 – HTTP File
+Create `rest/uc05-start-tour.http`:
+- Happy path (no body)
+- Happy path with explicit startedAt
+- 404: unknown guideTourId
+- 409: invalid state
+- 409: too early
+
+### Step 20 – Verify
+```
+./gradlew clean test
+./gradlew build
+```
+
+### Step 21 – Update Spec Status
+Update `documentation/use-cases/uc05-start-tour.spec.md`: `Status: IMPLEMENTED`
 
 ---
 
 ## 5. Risks
 
 | Risk | Mitigation |
-|------|-----------|
-| `TourBooking` field mutation (remove `final`) changes reconstitution contract | `reconstitute()` is a static factory that still sets all fields; no risk |
-| `AvailabilityChecker` stub always returns 50 — test must confirm behaviour | ChangeParticipantsDriverTest uses a mock/stub, not the real adapter |
-| Controller test wiring (Spring Boot 4.x `@MockitoBean`) | Follow UC02/03 controller test pattern exactly |
+|---|---|
+| `TIMESTAMP` storage for `Instant` in H2 | Map with `LocalDateTime.ofInstant(instant, UTC)` on write; `record.getStartedAt().toInstant(UTC)` on read |
+| jOOQ codegen fails if migration doesn't apply cleanly | Run `./gradlew flywayMigrate jooqCodegen` after Step 9 and confirm `GuideTourRecord` exists before writing persistence code |
+| `BookingExceptionHandler` catches all — adding GuideTour exceptions mixes concerns | Acceptable now; can be split into a dedicated `GuideTourExceptionHandler` if handler grows |
+| `@RequestBody(required = false)` behaviour in Spring Boot 4.x | Verify no body = `null` request object is correctly handled in controller; add controller test for both cases |
