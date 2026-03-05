@@ -1,70 +1,58 @@
-# Use Case Specification – StartTour
+# Use Case Specification – StartTour (GuideOperations)
 
 ## Status
 SPECIFIED
 
 ## Purpose
-
-Mark tour as started.
-
+Start a scheduled guide tour execution.
 
 ## 1. Intent
-
-Transition CONFIRMED booking to ACTIVE.
-
+Transition a scheduled GuideTour (or TourExecution) into RUNNING/ACTIVE on the tour day.
 
 ## 2. Input Contract
-
 Fields:
-- bookingId
-
+- guideTourId
+- startedAt (optional; default = now)
 
 ## 3. Output Contract
-
 Return type:
 - status
 
 Error type(s):
 - InvalidState
-
+- TooEarly
+- NotFound
 
 ## 4. Preconditions
-
-- Booking exists
-- State = CONFIRMED
-- Current date >= tourDate
-
+- GuideTour exists
+- GuideTour state = READY (or SCHEDULED)
+- Current date/time >= tourStartTime (or within allowed start window)
+- (Optional) Actor is authorized guide for guideId on the GuideTour
 
 ## 5. Flow
-
-1. Load aggregate
-2. Call startTour(now)
-3. Persist
-4. Publish TourStarted
-
+1. Load GuideTour aggregate (guideTourId)
+2. Call start(startedAt)
+3. Persist GuideTour
+4. Publish TourStarted (GuideOperations domain event)
 
 ## 6. Side Effects
-
 - Persistence
 - Event publication
 
-
 ## 7. Acceptance Criteria
-
-Given confirmed booking on tour date
-When startTour executed
-Then state becomes ACTIVE
-
+Given a READY GuideTour on the tour day
+When StartTour is executed
+Then state becomes RUNNING (or ACTIVE)
+And TourStarted is published
 
 ## 8. Failure Scenarios
-
-- Invalid state
-- Too early
-
+- Invalid state (e.g. already RUNNING/FINISHED/CANCELLED)
+- Too early (before start window)
+- GuideTour not found
 
 ## 9. Test Requirements
-
 Must include:
 - Happy path
 - Invalid state
 - Early start test
+- Not found test
