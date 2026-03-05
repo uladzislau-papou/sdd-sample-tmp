@@ -3,6 +3,11 @@
 ## Status
 SPECIFIED
 
+## Bounded Context
+Owner: `booking` — holds and transitions the `TourBooking` aggregate.
+Caller: `guide` — invokes `booking` synchronously when a guide cancels a tour.
+Integration pattern: synchronous outport call; `guide` defines a `BookingCancellationPort` outport, `booking` provides the implementation.
+
 ## Purpose
 Cancel a booking due to a guide-initiated tour cancellation.
 

@@ -8,7 +8,7 @@ executed if missing.
 
 --- 
 
-# Use Case Specification – StartTour (GuideOperations)
+# Use Case Specification – StartTour (Guide)
 
 ## Status
 SPECIFIED
@@ -37,7 +37,7 @@ Fields:
 
 ---
 
-# Use Case Specification – CompleteTour (GuideOperations)
+# Use Case Specification – CompleteTour (Guide)
 
 ## Status
 SPECIFIED
@@ -62,7 +62,7 @@ Fields:
 
 --- 
 
-# Use Case Specification – CancelTourByGuide (GuideOperations)
+# Use Case Specification – CancelTourByGuide (Guide)
 
 ## Status
 SPECIFIED

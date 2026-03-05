@@ -1,7 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.outbound.integration;
 
 import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
-import com.dominikgaller.alpinebooking.booking.core.outport.DomainEventPublisher;
+import com.dominikgaller.alpinebooking.shared.outport.DomainEventPublisher;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**

@@ -1,7 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.core.inport.usecase;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
 import com.dominikgaller.alpinebooking.booking.core.inport.command.RequestTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.RequestTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;

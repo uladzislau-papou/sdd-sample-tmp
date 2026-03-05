@@ -1,7 +1,10 @@
-# Use Case Specification – StartTour (GuideOperations)
+# Use Case Specification – StartTour (Guide)
 
 ## Status
 IMPLEMENTED
+
+## Bounded Context
+`guide` — triggered via REST by the guide. Publishes `TourStarted` to `shared.domain.event` as a cross-context integration event consumed by `booking`.
 
 ## Purpose
 Start a scheduled guide tour execution.
@@ -33,7 +36,7 @@ Error type(s):
 1. Load GuideTour aggregate (guideTourId)
 2. Call start(startedAt)
 3. Persist GuideTour
-4. Publish TourStarted (GuideOperations domain event)
+4. Publish TourStarted (Guide domain event)
 
 ## 6. Side Effects
 - Persistence

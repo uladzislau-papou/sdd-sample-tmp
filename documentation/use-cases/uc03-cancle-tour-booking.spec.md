@@ -3,6 +3,8 @@
 ## Status
 IMPLEMENTED
 
+## Bounded Context
+`booking` — triggered via REST by an external client.
 
 ## Purpose
 

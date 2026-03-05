@@ -1,12 +1,9 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.GuideTourNotFoundException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingRequestException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidGuideTourStateException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.TourStartTooEarlyException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.BookingNotFoundException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -51,24 +48,6 @@ public class BookingExceptionHandler {
     @ExceptionHandler(InvalidBookingStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleInvalidBookingState(final InvalidBookingStateException ex) {
-        return new ErrorResponse(ex.getMessage());
-    }
-
-    @ExceptionHandler(GuideTourNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ErrorResponse handleGuideTourNotFound(final GuideTourNotFoundException ex) {
-        return new ErrorResponse(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidGuideTourStateException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleInvalidGuideTourState(final InvalidGuideTourStateException ex) {
-        return new ErrorResponse(ex.getMessage());
-    }
-
-    @ExceptionHandler(TourStartTooEarlyException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleTourStartTooEarly(final TourStartTooEarlyException ex) {
         return new ErrorResponse(ex.getMessage());
     }
 

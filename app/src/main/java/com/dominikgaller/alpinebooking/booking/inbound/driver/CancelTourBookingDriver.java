@@ -1,13 +1,13 @@
 package com.dominikgaller.alpinebooking.booking.inbound.driver;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.inport.command.CancelTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.usecase.CancelTourBookingUseCase;
-import com.dominikgaller.alpinebooking.booking.core.outport.ClockPort;
-import com.dominikgaller.alpinebooking.booking.core.outport.DomainEventPublisher;
+import com.dominikgaller.alpinebooking.shared.outport.ClockPort;
+import com.dominikgaller.alpinebooking.shared.outport.DomainEventPublisher;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -3,6 +3,10 @@
 ## Status
 SPECIFIED | IMPLEMENTED
 
+## Bounded Context
+`<context>` — triggered via <REST by external client | event-driven | synchronous outport call>.
+(For cross-context: Owner: `<context>`. Trigger/Caller: `<context>`. Integration pattern: <event-driven | synchronous outport call>.)
+
 ## Purpose
 Describe orchestration logic.
 

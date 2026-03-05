@@ -1,10 +1,10 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
 import com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.CapacityExceededException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.BookingNotFoundException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.usecase.CancelTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.ChangeParticipantsResult;
@@ -242,4 +242,5 @@ class TourBookingControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").isNotEmpty());
     }
+
 }

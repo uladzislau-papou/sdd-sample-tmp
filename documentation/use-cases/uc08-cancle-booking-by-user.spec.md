@@ -3,6 +3,9 @@
 ## Status
 SPECIFIED
 
+## Bounded Context
+`booking` — triggered via REST by the user (the participant).
+
 ## Purpose
 Cancel a booking initiated by the user.
 

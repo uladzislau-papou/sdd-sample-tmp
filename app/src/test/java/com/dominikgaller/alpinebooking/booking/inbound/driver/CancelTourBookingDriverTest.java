@@ -1,21 +1,21 @@
 package com.dominikgaller.alpinebooking.booking.inbound.driver;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.AvailableCapacity;
-import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
-import com.dominikgaller.alpinebooking.booking.core.domain.ParticipantContact;
-import com.dominikgaller.alpinebooking.booking.core.domain.ParticipantCount;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourBookingStatus;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourDate;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.AvailableCapacity;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.ParticipantContact;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.ParticipantCount;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourDate;
+import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
-import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingCancelled;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.BookingNotFoundException;
-import com.dominikgaller.alpinebooking.booking.core.domain.exception.InvalidBookingStateException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingCancelled;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.BookingNotFoundException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.inport.command.CancelTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
-import com.dominikgaller.alpinebooking.booking.core.outport.ClockPort;
-import com.dominikgaller.alpinebooking.booking.core.outport.DomainEventPublisher;
+import com.dominikgaller.alpinebooking.shared.outport.ClockPort;
+import com.dominikgaller.alpinebooking.shared.outport.DomainEventPublisher;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
 import org.junit.jupiter.api.Test;
 
@@ -199,6 +199,11 @@ class CancelTourBookingDriverTest {
         @Override
         public void update(final TourBooking booking) {
             updated.add(booking);
+        }
+
+        @Override
+        public java.util.List<TourBooking> findByTourId(final com.dominikgaller.alpinebooking.shared.domain.TourId tourId) {
+            throw new UnsupportedOperationException("not used in UC03 tests");
         }
 
         List<TourBooking> updatedBookings() {

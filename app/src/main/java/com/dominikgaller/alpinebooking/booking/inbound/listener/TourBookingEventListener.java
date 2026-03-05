@@ -1,6 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.inbound.listener;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.event.TourBookingRequested;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingRequested;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

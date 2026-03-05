@@ -3,6 +3,11 @@
 ## Status
 SPECIFIED
 
+## Bounded Context
+Owner: `booking` — holds and transitions the `TourBooking` aggregate.
+Trigger: `guide` — publishes `TourCompleted` (in `shared.domain.event`) after a guide completes a tour.
+Integration pattern: event-driven; `booking` listens via a `TourCompletedListener` (`@TransactionalEventListener`).
+
 ## Purpose
 Update booking status to COMPLETED when the guide completes the tour execution.
 

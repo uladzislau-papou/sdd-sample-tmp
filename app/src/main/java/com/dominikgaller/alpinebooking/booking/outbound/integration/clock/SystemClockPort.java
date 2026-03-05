@@ -1,6 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.outbound.integration.clock;
 
-import com.dominikgaller.alpinebooking.booking.core.outport.ClockPort;
+import com.dominikgaller.alpinebooking.shared.outport.ClockPort;
 
 import java.time.Instant;
 

@@ -1,8 +1,10 @@
 package com.dominikgaller.alpinebooking.booking.core.outport;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
+import com.dominikgaller.alpinebooking.shared.domain.TourId;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -37,4 +39,15 @@ public interface TourBookingRepository {
      * @param booking the aggregate whose current state should be written; must not be null
      */
     void update(TourBooking booking);
+
+    /**
+     * Loads all {@link TourBooking} aggregates associated with a given tour.
+     *
+     * <p>Used by the {@code TourStartedListener} to find bookings that must be
+     * transitioned to ACTIVE when a guide starts a tour.
+     *
+     * @param tourId the tour reference; must not be null
+     * @return all bookings for the given tour, or an empty list if none exist
+     */
+    List<TourBooking> findByTourId(TourId tourId);
 }

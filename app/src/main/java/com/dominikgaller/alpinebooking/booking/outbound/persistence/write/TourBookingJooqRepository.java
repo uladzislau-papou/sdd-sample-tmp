@@ -1,12 +1,14 @@
 package com.dominikgaller.alpinebooking.booking.outbound.persistence.write;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.BookingId;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
 import com.dominikgaller.alpinebooking.jooq.tables.records.TourBookingRecord;
+import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import org.jooq.DSLContext;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import static com.dominikgaller.alpinebooking.jooq.Tables.TOUR_BOOKING;
@@ -42,6 +44,15 @@ public class TourBookingJooqRepository implements TourBookingRepository {
                 .where(TOUR_BOOKING.ID.eq(bookingId.value().toString()))
                 .fetchOne();
         return Optional.ofNullable(record).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<TourBooking> findByTourId(final TourId tourId) {
+        return dsl
+                .selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.TOUR_ID.eq(tourId.value()))
+                .fetch()
+                .map(mapper::toDomain);
     }
 
     @Override

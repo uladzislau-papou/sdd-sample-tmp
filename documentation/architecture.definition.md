@@ -41,6 +41,9 @@ com.dominikgaller.alpinebooking              ← shared root
 └── <bounded-context>                        ← one sub-package per bounded context (e.g. booking)
     ├── core
     │   ├── domain
+    │   │   └── <aggregate>                  ← one sub-package per aggregate root (e.g. tourbooking)
+    │   │       ├── event                    ← domain events for this aggregate
+    │   │       └── exception                ← domain exceptions for this aggregate
     │   ├── inport
     │   │   ├── command                      ← input data carriers (records)
     │   │   ├── result                       ← output data carriers (records)
@@ -90,7 +93,7 @@ Rules:
 
 - Framework-free.
 - Must not reference adapters (no REST DTOs, no jOOQ records).
-- `usecase` interfaces may only reference types from `inport.command`, `inport.result`, and `core.domain.exception`.
+- `usecase` interfaces may only reference types from `inport.command`, `inport.result`, and `core.domain.<aggregate>.exception`.
 - Inport types are stable contracts: keep them small and intention-revealing.
 
 ### 4.3 `core.outport`
@@ -324,7 +327,7 @@ Cross-cutting building blocks that are not owned by any single bounded context.
 
 Rules:
 - Keep `shared` minimal. Only add here what is genuinely cross-context.
-- Do not add context-specific types here (e.g., `TourBookingRequested` stays in `booking.core.domain.event`).
+- Do not add context-specific types here (e.g., `TourBookingRequested` stays in `booking.core.domain.tourbooking.event`).
 
 ## 11. Anti-patterns (explicitly forbidden)
 - JPA annotations in domain objects.

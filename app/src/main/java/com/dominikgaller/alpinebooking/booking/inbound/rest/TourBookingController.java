@@ -74,4 +74,5 @@ public class TourBookingController implements TourBookingRestAPI {
                 new ChangeParticipantsCommand(bookingId, request.newParticipantCount()));
         return new ChangeParticipantsResponse(result.participantCount());
     }
+
 }

@@ -1,8 +1,8 @@
 package com.dominikgaller.alpinebooking.booking.core.outport;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.AvailableCapacity;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourDate;
-import com.dominikgaller.alpinebooking.booking.core.domain.TourId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.AvailableCapacity;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourDate;
+import com.dominikgaller.alpinebooking.shared.domain.TourId;
 
 /**
  * Outbound port for querying available capacity for a given tour and date.
