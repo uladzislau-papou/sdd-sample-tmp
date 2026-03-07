@@ -15,6 +15,8 @@ plugins {
     alias(libs.plugins.jooq.codegen.gradle)
 }
 
+val javaVersion = JavaLanguageVersion.of(libs.versions.java.get().toInt())
+
 springBoot {
     mainClass.set("com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication")
 }
@@ -44,7 +46,7 @@ dependencies {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion.set(javaVersion)
     }
 }
 
