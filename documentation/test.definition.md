@@ -197,11 +197,20 @@ not self-explanatory. It is not required, and none of the current tests use it.
 ## 5.2 Package Placement
 Tests SHOULD mirror production packages to support navigation and traceability.
 
-Examples:
-- `...domain...` tests mirror domain packages
-- `...application...` tests mirror use case packages
-- `...adapters.persistence...` tests mirror persistence adapter packages
-- `...adapters.inbound.rest...` tests mirror REST adapter packages
+Examples, in the actual ontology (`architecture.definition.md` § 3):
+- `booking.core.domain.tourbooking` → `TourBookingTest`, `ParticipantCountTest`
+- `booking.inbound.driver` → `ConfirmTourBookingDriverTest`
+- `booking.inbound.listener` → `TourStartedListenerTest`
+- `booking.inbound.rest` → `TourBookingControllerTest`
+- `booking.outbound.persistence.write` → `TourBookingJooqRepositoryIT`
+- `com.dominikgaller.alpinebooking.architecture` → the ArchUnit suite (ADR 0007), which
+  mirrors no production package because it is about the tree as a whole
+
+> This section previously illustrated mirroring with `...application...`,
+> `...adapters.persistence...` and `...adapters.inbound.rest...` — packages that do not
+> exist and never have. It was the same dead vocabulary removed from
+> `coding-style.definition.md` § 3.2, and `tasks.md` task 1.4.2 claimed to have purged it
+> while missing this occurrence. Found by `ddd-hex-reviewer`.
 
 
 # 6. Coverage Expectations (Qualitative)

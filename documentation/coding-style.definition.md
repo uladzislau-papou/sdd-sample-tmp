@@ -122,7 +122,19 @@ the HTTP contract sits in one place. See `architecture.definition.md` § 4.5.
 ### 4.2 Methods
 
 -   Commands MUST be verbs
--   Queries MUST start with get*, find*, load\*
+-   **Lookup** queries on a repository or port MUST start with `find*`, `get*` or `load*`
+    — e.g. `findById`, `findConfirmedByTourId`
+-   **Accessors** are exempt and use the component-reader style: `status()`,
+    `bookingId()`, `value()`, `now()`
+
+The exemption is structural, not stylistic: records generate component accessors without a
+prefix, and § 2.1 mandates records for data carriers. A `get*` prefix on a record is not
+available, so a rule requiring it would forbid the construct the same document requires.
+
+> Previously an unqualified "Queries MUST start with get*, find*, load*", which roughly
+> forty domain accessors violated. Found by `ddd-hex-reviewer`, which flagged its own
+> uncertainty about whether the rule was ever meant to cover value accessors — it reads as
+> though it does, which is the problem.
 
 ### 4.3 Variables
 
@@ -136,7 +148,25 @@ the HTTP contract sits in one place. See `architecture.definition.md` § 4.5.
 ### 5.1 Visibility
 
 -   Default to most restrictive visibility
--   Fields MUST be private final
+-   Fields MUST be `private`
+-   Fields MUST additionally be `final` **except** aggregate and entity state that a
+    state-transition method mutates
+
+The exception is not a concession, it is the point: an aggregate with a lifecycle cannot
+have an all-`final` state. `TourBooking.status`, `.participantCount`, `.availableCapacity`
+and `GuideTour.status`, `.startedAt` are mutated by `confirm`, `cancel`, `markActive`,
+`changeParticipants` and `start`. What the rule protects is preserved by other means:
+mutation happens only inside the aggregate, only through named transition methods that
+enforce the invariants, and there are no setters (`modelling.definition.md`,
+`sdd.playbook.md` § 8) — a rule ArchUnit enforces.
+
+Everything else stays `final`: value objects, records, DTOs, collaborator references in
+drivers, adapters and configs.
+
+> Previously an unqualified "Fields MUST be private final", which every aggregate in the
+> project violated. Same defect class as § 3.2's dead layering and `test.definition.md`
+> § 5.1's unused naming style: a rule written as aspiration and never true.
+> Found by `ddd-hex-reviewer`.
 
 ### 5.2 final usage
 
@@ -166,6 +196,32 @@ the HTTP contract sits in one place. See `architecture.definition.md` § 4.5.
 -   ConflictException -\> HTTP 409
 
 Do NOT use IllegalArgumentException for business semantics.
+
+**The test is reachability from a client, not the construct doing the throwing.**
+
+- Invalid input that **can reach** the constructor from a request is business semantics →
+  throw a domain exception, which the `*ExceptionHandler` maps to a status.
+- Input that **cannot** reach it — because Bean Validation rejects it at the HTTP boundary,
+  or because the value comes from an internal source — means a programmer error, and
+  `IllegalArgumentException` is acceptable.
+- `Objects.requireNonNull` for null guards is out of scope; nulls are always programmer
+  errors.
+
+Applied to the current value objects:
+
+| Type | Throws | Correct? |
+|------|--------|----------|
+| `ParticipantCount` | `InvalidBookingRequestException` | Yes — "at least one participant" is a business rule, and it maps to 400 |
+| `AvailableCapacity` | `IllegalArgumentException` | Yes — the value comes from `AvailabilityChecker`, never from a client |
+| `ParticipantContact` | `IllegalArgumentException` | Yes — `@NotBlank` rejects blanks at the boundary |
+| `TourId` | `IllegalArgumentException` | **No** — blank is business semantics and `TourId` is constructed from client input in `RequestTourBookingDriver` |
+
+`TourId` is therefore the outlier, not `ParticipantCount`. `ddd-hex-reviewer` flagged the
+inconsistency and named `ParticipantCount` as the odd one out; on inspection the reverse is
+true — `ParticipantCount` is the only one of the four that gets it right.
+
+Fixing `TourId` changes an exception type, so it is behaviour change requiring its own RED
+and its own increment. Recorded here rather than done silently.
 
 ------------------------------------------------------------------------
 

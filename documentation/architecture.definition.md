@@ -293,7 +293,12 @@ Guiding rule:
 
 1. `core.domain` depends on nothing else.
 2. `core.inport` and `core.outport` are framework-free.
-3. `inbound.rest` depends only on `core.inport` (and its own DTOs).
+3. `inbound.rest` depends only on `core.inport`, its own DTOs, and
+   `core.domain.<aggregate>.exception` — the last solely so `*ExceptionHandler` can map
+   domain exceptions to HTTP statuses, which § 4.5 assigns it as its job. It must not
+   depend on `core.outport`, on `inbound.driver`, or on any `outbound.*` implementation.
+   The § 4.5 prohibition on `core.domain` is about **API contracts**: no domain object in
+   a public DTO.
 4. `inbound.driver` depends on `core.domain`, `core.inport`, `core.outport` only.
 5. `outbound.*` packages implement `core.outport` and must not be referenced as concrete types from drivers/controllers.
 6. Persistence types must not cross boundaries into the core (no jOOQ/JPA types in ports).
