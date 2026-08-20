@@ -13,6 +13,7 @@ plugins {
     alias(libs.plugins.spring.dependency.management.plugin)
     alias(libs.plugins.flyway.plugin)
     alias(libs.plugins.jooq.codegen.gradle)
+    alias(libs.plugins.spotless)
 }
 
 val javaVersion = JavaLanguageVersion.of(libs.versions.java.get().toInt())
@@ -121,4 +122,22 @@ configurations.all {
             useVersion(jooqVersion)
         }
     }
+}
+// Formatting gate (technical.spec.md, Build & Quality Gates).
+// Deliberately hygiene-only: no formatter is applied, because restyling 90 hand-written
+// files would bury every future diff and this project's coding style is documented prose
+// rather than a formatter config (coding-style.definition.md). These rules catch the
+// mechanical defects a reviewer should never have to mention.
+spotless {
+    java {
+        target("src/**/*.java")
+        targetExclude("**/build/generated-src/**")
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+tasks.named("check") {
+    dependsOn(tasks.named("spotlessCheck"))
 }

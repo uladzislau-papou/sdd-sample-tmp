@@ -208,6 +208,22 @@ Examples:
 
 This project targets **meaningful coverage**, not numeric vanity.
 
+**No coverage tool is configured, and that is a decision rather than an omission.**
+There is no jacoco, no threshold, no report. A percentage would measure lines executed,
+which is not what this document asks for — the mandatory themes below are about *which
+behaviours* are covered, and a line-coverage gate can be satisfied without asserting
+anything (§ 8 forbids exactly that). The enforcement mechanism here is instead:
+
+- every DoD item names the test that satisfies it (§ 9), so coverage is traceable
+  per criterion rather than aggregate;
+- `ddd-hex-reviewer` reports production branches the diff adds without a test;
+- where a batch of tests passes on first run, mutation testing proves they are not
+  vacuous (`tdd.definition.md` § 2.2).
+
+Revisit if the project grows past the point where a human can hold the coverage map —
+but add it as a *report*, not a gate, unless there is a specific behaviour a threshold
+would have caught.
+
 Mandatory coverage themes:
 - Every Aggregate invariant has at least one test.
 - Every Use Case has:
@@ -228,13 +244,19 @@ A change MUST NOT be considered complete unless:
 
 1. `./gradlew clean test` succeeds
 2. `./gradlew build` succeeds
-3. All new/changed behavior is test-covered according to this definition
-4. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2)
-5. No ignored/disabled tests are introduced
-6. No flaky tests are introduced
-7. No test was weakened, loosened, or deleted to reach green
-8. `ddd-hex-reviewer` returns `PASS`
-9. Specs, port specs and `rest/*.http` reflect the code as built
+3. `./gradlew spotlessCheck` succeeds (wired into `check`, so `build` covers it)
+4. The ArchUnit suite in `app/src/test/.../architecture/` passes (ADR 0007)
+5. All new/changed behavior is test-covered according to this definition
+6. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2),
+   or is a behaviour-preserving change meeting § 2.1's evidence requirement
+7. No ignored/disabled tests are introduced
+8. No flaky tests are introduced
+9. No test was weakened, loosened, or deleted to reach green
+10. No architecture rule was weakened to reach green. Rules are enforcement; the
+    definition they cite is authoritative, so a failing rule means the code is wrong
+    unless the *definition* changed first (`file-usage.definition.md` § 5.1)
+11. `ddd-hex-reviewer` returns `PASS`
+12. Specs, port specs and `rest/*.http` reflect the code as built
 
 Gates are merge blockers, not advisories — see `sdd.playbook.md` § 5 for the
 principle. There is no partial credit.

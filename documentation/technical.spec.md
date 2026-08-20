@@ -41,6 +41,17 @@ The stack is intentionally opinionated to support:
 ### Testing
 - JUnit 5 (via Spring Boot test support)
 - AssertJ as the assertion library (mandatory for assertions)
+- ArchUnit for architecture enforcement (ADR 0007)
+
+**ArchUnit MUST be 1.4.1 or newer.** Versions 1.3.0 and 1.4.0 cannot read Java 25 class
+files (major version 69) and import **zero** classes — silently, with no error or warning.
+Every architecture rule then checks nothing. ArchUnit's own "failed to check any classes"
+guard is what makes this visible, and `ContextRegistryTest.importer_findsProductionClasses`
+asserts the import size directly rather than relying on it.
+
+This is a constraint the Java 25 baseline (ADR 0006) imposes on tooling. Any future
+toolchain bump must re-verify that ArchUnit still reads the new bytecode — a green
+architecture suite is not evidence that it does.
 
 
 ## Baseline Constraints

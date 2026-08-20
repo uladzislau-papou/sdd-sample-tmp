@@ -1,0 +1,74 @@
+name: build
+
+# Runs the canonical quality gates from documentation/test.definition.md section 7.
+# ADR 0007 exists because these rules were previously enforced only when a human or an
+# agent remembered to check them.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned explicitly rather than inheriting the runner default. ADR 0006 requires
+      # this: the toolchain and the environment diverging is exactly the drift that ADR
+      # fixed, and a runner default is an environment we do not control.
+      # Temurin, because java.net builds do not maintain LTS patch releases.
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Covers spotlessCheck (wired into `check`) and the ArchUnit suite.
+      - name: Quality gates
+        run: ./gradlew clean test build
+
+      # test.definition.md section 1.3: no test may create a file-based database.
+      # A test that boots the app without the "test" profile writes app/data/ and leaks
+      # state between runs, which `./gradlew clean` does not remove.
+      - name: Assert no file-based test database was created
+        run: |
+          if [ -d app/data ]; then
+            echo "::error::app/data/ exists after the test run. A test booted the"
+            echo "::error::application without @ActiveProfiles(\"test\"), so it ran against"
+            echo "::error::the production datasource. See test.definition.md section 1.3."
+            ls -la app/data
+            exit 1
+          fi
+          echo "app/data/ absent, as required."
+
+      # A green architecture suite is not evidence that ArchUnit read anything:
+      # versions before 1.4.1 import zero classes from Java 25 bytecode, silently.
+      # ContextRegistryTest asserts the import size; this makes its absence visible in CI.
+      - name: Assert the architecture suite actually ran
+        run: |
+          if ! grep -rq 'ContextRegistryTest' app/build/test-results/test/; then
+            echo "::error::No ContextRegistryTest results found. The architecture suite"
+            echo "::error::did not run. See technical.spec.md, Testing."
+            exit 1
+          fi
+          echo "Architecture suite ran."
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+          retention-days: 7
