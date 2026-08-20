@@ -44,20 +44,29 @@ class DependencyRulesTest {
                 .resideInAnyPackage(
                         "..core.inport..",
                         "..core.outport..",
+                        "..shared.outport..",
+                        "..shared.outbound..",
                         "..inbound..",
                         "..outbound..",
-                        "..bootstrap..",
-                        "..shared.outbound..")
+                        "..bootstrap..")
                 .because("architecture.definition.md 4.1: core.domain MUST NOT depend on any "
-                        + "other project package. Only shared.domain is permitted (9).")
+                        + "other project package. Only shared.domain is permitted (9). "
+                        + "shared.outport is included deliberately: a domain class injecting "
+                        + "ClockPort would satisfy 8 in letter while evading it in substance, "
+                        + "and domain_neverCallsNowDirectly cannot catch clockPort.now().")
                 .check(production);
     }
 
     @Test
-    @DisplayName("Rule 2: core.inport and core.outport are framework-free")
-    void rule2_inportAndOutportAreFrameworkFree() {
+    @DisplayName("Rule 2: core and the shared kernel's contracts are framework-free")
+    void rule2_contractsAreFrameworkFree() {
         noClasses()
-                .that().resideInAnyPackage("..core.inport..", "..core.outport..")
+                .that().resideInAnyPackage(
+                        "..core.inport..",
+                        "..core.outport..",
+                        "..core.domain..",
+                        "..shared.domain..",
+                        "..shared.outport..")
                 .should().dependOnClassesThat()
                 .resideInAnyPackage(
                         "org.springframework..",
@@ -65,54 +74,54 @@ class DependencyRulesTest {
                         "com.fasterxml..",
                         "org.jooq..",
                         "io.swagger..")
-                .because("architecture.definition.md 4.2 and 4.3: inport and outport are "
-                        + "framework-free contracts.")
+                .because("architecture.definition.md 4.2, 4.3 and 9: the framework-free "
+                        + "constraint applies to shared.domain and shared.outport exactly as "
+                        + "it applies to a context's core. Only shared.outbound may use a "
+                        + "framework.")
                 .check(production);
     }
 
     @Test
-    @DisplayName("Rule 3: inbound.rest depends only on core.inport, not on core.outport")
-    void rule3_inboundRestDoesNotDependOnOutport() {
+    @DisplayName("Rule 3: inbound.rest depends on core.inport, its DTOs and domain exceptions only")
+    void rule3_inboundRestDependsOnlyOnInportAndDomainExceptions() {
         noClasses()
                 .that().resideInAPackage("..inbound.rest..")
-                .should().dependOnClassesThat().resideInAPackage("..core.outport..")
-                .because("architecture.definition.md 6 rule 3 and 4.5: controllers MUST "
-                        + "depend only on core.inport interfaces.")
+                .should().dependOnClassesThat()
+                .resideInAnyPackage("..core.outport..", "..inbound.driver..", "..outbound..")
+                .because("architecture.definition.md 6 rule 3 and 4.5: controllers depend on "
+                        + "core.inport interfaces - never on a driver, never on core.outport, "
+                        + "never on an outbound implementation. Injecting a *Driver instead of "
+                        + "its *UseCase is the canonical form of this violation. Domain "
+                        + "exceptions are permitted, solely so *ExceptionHandler can map them.")
                 .check(production);
     }
 
     @Test
-    @DisplayName("Rule 3b: inbound.rest does not reach persistence or integration adapters")
-    void rule3b_inboundRestDoesNotDependOnOutboundAdapters() {
-        noClasses()
-                .that().resideInAPackage("..inbound.rest..")
-                .should().dependOnClassesThat().resideInAPackage("..outbound..")
-                .because("architecture.definition.md 4.5: controllers MUST NOT access "
-                        + "repositories or outbound implementations.")
-                .check(production);
-    }
-
-    @Test
-    @DisplayName("Rule 4: inbound.driver never names a concrete outbound adapter")
-    void rule4_driversDoNotDependOnOutboundImplementations() {
+    @DisplayName("Rule 4: inbound.driver depends only on the core")
+    void rule4_driversDependOnlyOnTheCore() {
         noClasses()
                 .that().resideInAPackage("..inbound.driver..")
-                .should().dependOnClassesThat().resideInAPackage("..outbound..")
-                .because("architecture.definition.md 4.4: drivers depend on core.domain, "
-                        + "core.inport and core.outport only - never on a concrete adapter.")
+                .should().dependOnClassesThat()
+                .resideInAnyPackage("..inbound.rest..", "..inbound.listener..", "..outbound..")
+                .because("architecture.definition.md 4.4: a driver MAY depend on core.domain, "
+                        + "core.inport and core.outport, and MUST NOT depend on inbound.rest, "
+                        + "outbound implementations or other adapters. A driver importing a "
+                        + "REST DTO previously passed every rule in this suite.")
                 .check(production);
     }
 
     @Test
-    @DisplayName("Rule 5: only bootstrap references concrete outbound adapters")
+    @DisplayName("Rule 5: only bootstrap references any concrete outbound adapter")
     void rule5_onlyBootstrapWiresAdapters() {
         classes()
-                .that().resideInAPackage("..outbound.integration..")
-                .and().haveSimpleNameNotEndingWith("Mapper")
+                .that().resideInAPackage("..outbound..")
                 .should().onlyHaveDependentClassesThat()
                 .resideInAnyPackage("..outbound..", "..bootstrap..")
-                .because("architecture.definition.md 6 rule 5: outbound implementations must "
-                        + "not be referenced as concrete types outside bootstrap.")
+                .because("architecture.definition.md 6 rule 5: outbound.* implementations must "
+                        + "not be referenced as concrete types outside bootstrap. Previously "
+                        + "this checked outbound.integration only, leaving the jOOQ "
+                        + "repositories and mappers unguarded, and carried a *Mapper "
+                        + "exemption no document grants.")
                 .check(production);
     }
 
