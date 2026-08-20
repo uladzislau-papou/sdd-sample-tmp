@@ -37,7 +37,11 @@ Violations MUST result in exception.
 
 ### TourId
 - Wraps `String`.
-- Invariant: non-blank.
+- Invariant: non-null and non-blank.
+- **Lives in `shared.domain`, not in this context.** It identifies an entry in an external
+  tour catalogue that no context in this system owns, so it is a shared-kernel value object
+  — ADR 0005 category 3, `architecture.definition.md` § 9. It is the only member of that
+  category.
 
 ### TourDate
 - Wraps `LocalDate`.
@@ -87,18 +91,27 @@ Illegal transitions:
 
 ## 4. Behavior
 
+> **This section was stale and has been rewritten against the code.** It previously
+> documented `startTour(now)` and `completeTour()`, neither of which exists on this
+> aggregate — tour execution belongs to `GuideTour` in the `guide` context, and the
+> booking side reacts via `markActive` (UC06). It also omitted `markActive`,
+> `reconstitute` and `pullDomainEvents`, and understated three signatures. Found by
+> `spec-documenter`.
+
 Public methods:
 
-- request()
-- confirm()
-- cancel(now)
-- changeParticipants(newCount)
-- startTour(now)
-- completeTour()
+- `request(...)` — static factory
+- `reconstitute(...)` — static factory, persistence only
+- `confirm(Instant now)`
+- `cancel(Instant now)`
+- `markActive(Instant startedAt, String guideTourId)`
+- `changeParticipants(ParticipantCount, AvailableCapacity, Instant now)`
+- `pullDomainEvents()`
 
-Each method MUST describe:
+Plus read-only accessors: `bookingId()`, `tourId()`, `tourDate()`, `participantCount()`,
+`availableCapacity()`, `contact()`, `status()`. There are no setters.
 
-### request(BookingId, TourId, TourDate, ParticipantCount, AvailableCapacity, Instant now)
+### request(BookingId, TourId, TourDate, ParticipantCount, AvailableCapacity, ParticipantContact, Instant now)
 Static factory method. Creates a new booking in REQUESTED state.
 
 Preconditions:
@@ -115,101 +128,157 @@ Emitted events:
 - TourBookingRequested (bookingId, tourId, tourDate, participantCount, occurredAt)
 
 
-### confirm()
+### reconstitute(BookingId, TourId, TourDate, ParticipantCount, AvailableCapacity, ParticipantContact, TourBookingStatus)
+Static factory. Rebuilds a persisted booking.
+
+Preconditions: none by design — the data was valid when written
+(`modelling.definition.md` § Rehydration Rule).
+
+Postconditions:
+- The aggregate reflects stored state exactly, in any status
+- No pending domain events
+
+Emitted events: none. **Persistence mapper only** — `TourBookingMapper` is its sole
+intended caller. It is `public`, so nothing structurally prevents misuse.
+
+### confirm(Instant now)
 Preconditions:
-- Current state = REQUESTED
+- State = REQUESTED → else `InvalidBookingStateException`
 
 Postconditions:
 - Status = CONFIRMED
 
 Emitted events:
-- TourBookingConfirmed
+- `TourBookingConfirmed(bookingId, occurredAt)`
 
-
-### cancel(now)
+### cancel(Instant now)
 Preconditions:
-- State = REQUESTED or CONFIRMED
+- State = REQUESTED or CONFIRMED → else `InvalidBookingStateException`
+- ACTIVE, COMPLETED and already-CANCELLED are all rejected
 
 Postconditions:
 - Status = CANCELLED
 
 Emitted events:
-- TourBookingCancelled
+- `TourBookingCancelled(bookingId, occurredAt)`
 
+### markActive(Instant startedAt, String guideTourId)
+Transitions CONFIRMED → ACTIVE when the guide starts the tour (UC06). Triggered by the
+`TourStarted` integration event, never by REST.
 
-### changeParticipants(newCount)
 Preconditions:
-- State = REQUESTED or CONFIRMED
-- newCount >= 1
-
-Postconditions:
-- Participant count updated
-
-Emitted events:
-- ParticipantsChanged
-
-
-### startTour(now)
-Preconditions:
-- State = CONFIRMED
-- now >= TourDate
+- Already ACTIVE → **idempotent no-op**: returns early, no event, no state change
+- Otherwise state must be CONFIRMED → else `InvalidBookingStateException`
 
 Postconditions:
 - Status = ACTIVE
 
 Emitted events:
-- TourStarted
+- `BookingActivated(bookingId, activatedAt, guideTourId)`
 
+Notes:
+- `guideTourId` is a plain `String`: the identity is owned by the `guide` context and is
+  opaque here (ADR 0005 category 2). It is **not stored** on the aggregate — it exists
+  only as event payload, which is why `tour_booking` has no such column.
+- `startedAt` is likewise not stored.
 
-### completeTour()
+### changeParticipants(ParticipantCount newCount, AvailableCapacity freshCapacity, Instant now)
 Preconditions:
-- State = ACTIVE
+- State = REQUESTED or CONFIRMED → else `InvalidBookingStateException`
+- `newCount.value() <= freshCapacity.value()` → else `CapacityExceededException`
+- `newCount >= 1` is guaranteed by the `ParticipantCount` value object
 
 Postconditions:
-- Status = COMPLETED
+- `participantCount` updated
+- **`availableCapacity` refreshed** to the supplied snapshot
 
 Emitted events:
-- TourCompleted
+- `ParticipantsChanged(bookingId, newParticipantCount, occurredAt)`
+
+> Both mutated fields must be persisted. `TourBookingJooqRepository.update` once wrote
+> only `status`, so this method's entire effect was silently discarded — see
+> `ports/tour-booking-repository.outport.spec.md` § 2.3.
+
+### pullDomainEvents()
+Returns an unmodifiable snapshot of recorded events and clears the internal list. A
+second call returns empty. This is the drain every driver uses:
+`booking.pullDomainEvents().forEach(domainEventPublisher::publish)`.
 
 
 ## 5. Domain Events
 
-List of events emitted:
+All five live in `booking.core.domain.tourbooking.event` and implement
+`shared.domain.event.DomainEvent`. All are immutable records. Published post-commit via
+`DomainEventPublisher` (ADR 0002).
 
-- TourBookingRequested
-- TourBookingConfirmed
-- TourBookingCancelled
-- ParticipantsChanged
-- TourStarted
-- TourCompleted
+| Event | Trigger | Payload |
+|-------|---------|---------|
+| `TourBookingRequested` | `request(...)` | `bookingId`, `tourId`, `tourDate`, `participantCount`, `occurredAt` |
+| `TourBookingConfirmed` | `confirm(...)` | `bookingId`, `occurredAt` |
+| `TourBookingCancelled` | `cancel(...)` | `bookingId`, `occurredAt` |
+| `ParticipantsChanged` | `changeParticipants(...)` | `bookingId`, `newParticipantCount`, `occurredAt` |
+| `BookingActivated` | `markActive(...)` | `bookingId`, `activatedAt`, `guideTourId` (plain `String`) |
 
-Describe:
+Payloads differ by event and are **not** uniform — an earlier revision of this section
+claimed every event carries `bookingId`, `tourId`, `tourDate`, `participantCount` and a
+timestamp. Only `TourBookingRequested` carries all of those.
 
-Each event includes:
-- bookingId
-- tourId
-- tourDate
-- participantCount
-- timestamp
+`TourStarted` and `TourCompleted` are **not** emitted by this aggregate. They are
+guide-side events in `shared.domain.event`; `TourStarted` is what *triggers* `markActive`
+(UC06), and `TourCompleted` does not exist yet (UC11).
+
+A `BookingCompleted` event is specified by UC07 and not implemented.
 
 
 ## 6. Failure Scenarios
 
-Describe expected failures:
+| Scenario | Exception | Thrown by |
+|----------|-----------|-----------|
+| Tour date not in the future at creation | `InvalidBookingRequestException` | `request` |
+| Participant count exceeds capacity at creation | `CapacityExceededException` | `request` |
+| New count exceeds refreshed capacity | `CapacityExceededException` | `changeParticipants` |
+| Confirm when not REQUESTED | `InvalidBookingStateException` | `confirm` |
+| Cancel when ACTIVE, COMPLETED or CANCELLED | `InvalidBookingStateException` | `cancel` |
+| Activate when not CONFIRMED (and not already ACTIVE) | `InvalidBookingStateException` | `markActive` |
+| Change participants when CANCELLED | `InvalidBookingStateException` | `changeParticipants` |
+| Booking not found | `BookingNotFoundException` | the driver, not the aggregate |
+| Availability source unreachable | `AvailabilityUnavailableException` | the adapter; propagates through the driver |
 
-- Invalid state transition
-- Invariant violation
-- Participant count invalid
-- Operation on cancelled booking
-- Operation on completed booking
+Value-object construction rejects its own invalid input: blank/null contact fields,
+`ParticipantCount < 1`, null `BookingId`, null/blank `TourId`, null `TourDate`.
 
 
 ## 7. Test Requirements
 
-Must include:
+Expressed as checkable items naming the test that satisfies each.
 
-- Invariant tests
-- Transition tests
-- Failure tests
-- Event emission tests
-- State immutability verification
+### Covered
+- [x] Creation invariants — `TourBookingTest.requestSetsStatusToRequested`,
+      `.requestStoresAllFieldsCorrectly`, `.pastTourDateThrowsInvalidBookingRequestException`,
+      `.participantCountExceedingCapacityThrowsCapacityExceededException`,
+      `.participantCountEqualToCapacityIsValid`
+- [x] Value object invariants — `BookingIdTest`, `ParticipantContactTest`,
+      `ParticipantCountTest`, `TourDateTest`
+- [x] CONFIRMED transition and guard — `TourBookingTest.confirm_*` (3 tests)
+- [x] CANCELLED transition from both legal states, rejected from all three illegal ones —
+      `TourBookingTest.cancel_*` (6 tests)
+- [x] ACTIVE transition, idempotency, and both illegal states —
+      `TourBookingTest.markActive_*` (6 tests)
+- [x] Participant change up, down, capacity guard, state guard —
+      `TourBookingTest.changeParticipants_*` (4 tests)
+- [x] Event emission and drain semantics —
+      `TourBookingTest.pullDomainEventsReturnsExactlyOneTourBookingRequested`,
+      `.pullDomainEventsCalledTwiceReturnsEmptyListOnSecondCall`,
+      `.pullDomainEvents_returnsOnlyConfirmedEvent_afterPullingRequestedAndCallingConfirm`
+- [x] Persistence round-trip of every mutable field — `TourBookingJooqRepositoryIT`
+      (9 tests, incl. `update_changesParticipantCount_inDatabase` and
+      `.update_changesAvailableCapacity_inDatabase`)
+- [x] No setters, no framework import, no `Instant.now()` in the domain — enforced
+      mechanically by `DependencyRulesTest` and `ClassRoleRulesTest` (ADR 0007)
+
+### Open
+- [ ] `reconstitute` is `public` and skips invariant checks by design, so application code
+      could bypass `request`'s guards. No test or structural rule prevents it. Same shape
+      as `aggregate-guide-tour.spec.md` G-03
+- [ ] COMPLETED is declared in `TourBookingStatus` and reachable from no method —
+      UC07 (`markCompleted`) is specified and unimplemented

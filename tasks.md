@@ -50,22 +50,22 @@ No code. Each block is a decision that is the user's to make; several later bloc
 are blocked on them. Recommendations are in `plan.md` Phase 0.
 
 ### 0.1 - U1 - Where `shared.outport` adapters live
-- [ ] **Task 0.1**: Obtain the ruling. Recommendation: `shared.outbound.*`, wired by a new `bootstrap/SharedConfig`. **Blocks 1.5 and 2.4.**
+- [x] **Task 0.1**: Obtain the ruling. Recommendation: `shared.outbound.*`, wired by a new `bootstrap/SharedConfig`. **Blocks 1.5 and 2.4.**
 
 ### 0.2 - U2 - One-aggregate-per-transaction
-- [ ] **Task 0.2**: Obtain the ruling. Recommendation: document as a guideline, not a rule; leave `TourStartedListener`'s fan-out as-is. **Blocks 1.5 and 2.3.**
+- [x] **Task 0.2**: Obtain the ruling. Recommendation: document as a guideline, not a rule; leave `TourStartedListener`'s fan-out as-is. **Blocks 1.5 and 2.3.**
 
 ### 0.3 - U3 - Auditable ordering for doctrine changes
-- [ ] **Task 0.3**: Obtain the ruling. Recommendation: a `*.definition.md` / `*.playbook.md` change lands in its own commit, before any code relying on it. **Blocks 1.5.** Adopt before Phase 2, which changes rules and code together.
+- [x] **Task 0.3**: Obtain the ruling. Recommendation: a `*.definition.md` / `*.playbook.md` change lands in its own commit, before any code relying on it. **Blocks 1.5.** Adopt before Phase 2, which changes rules and code together.
 
 ### 0.4 - U4 - RED rule for behaviour-preserving refactors
-- [ ] **Task 0.4**: Obtain the ruling. `tdd.definition.md` § 2 gates all production code on a quoted RED failure, but a pure relocation or rename cannot produce one — there is no new behaviour to fail on. Blocks 2.1, 2.2, 2.4 and all of Phase 4 are exactly this shape. Recommendation: add a clause — for a change with no behavioural delta, the evidence is the *unchanged* suite (identical test method count, all green before and after), stated explicitly in the report. **Blocks 1.5, 2.1, 2.4, Phase 4.**
+- [x] **Task 0.4**: Obtain the ruling. `tdd.definition.md` § 2 gates all production code on a quoted RED failure, but a pure relocation or rename cannot produce one — there is no new behaviour to fail on. Blocks 2.1, 2.2, 2.4 and all of Phase 4 are exactly this shape. Recommendation: add a clause — for a change with no behavioural delta, the evidence is the *unchanged* suite (identical test method count, all green before and after), stated explicitly in the report. **Blocks 1.5, 2.1, 2.4, Phase 4.**
 
 ### 0.5 - E1 - `coding-style.definition.md` § 3.2
-- [ ] **Task 0.5**: Obtain the ruling on the dead layering section (`domain / application / in / out / adapter.*`, which no code follows). Recommendation: delete it, replace with a pointer to `architecture.definition.md` § 3. **Blocks 1.4.**
+- [x] **Task 0.5**: Obtain the ruling on the dead layering section (`domain / application / in / out / adapter.*`, which no code follows). Recommendation: delete it, replace with a pointer to `architecture.definition.md` § 3. **Blocks 1.4.**
 
 ### 0.6 - E4/B1/B2 - ADR-0003 naming divergence
-- [ ] **Task 0.6**: Choose one — (a) rename `GuideOperationsConfig`/`GuideOperationsExceptionHandler` to match ADR-0003 and `architecture.definition.md` § 3 (recommended), (b) write a superseding ADR blessing the current names, (c) record as accepted historical drift. **Gates all of Phase 4.**
+- [x] **Task 0.6**: Choose one — (a) rename `GuideOperationsConfig`/`GuideOperationsExceptionHandler` to match ADR-0003 and `architecture.definition.md` § 3 (recommended), (b) write a superseding ADR blessing the current names, (c) record as accepted historical drift. **Gates all of Phase 4.**
 
 ### 0.7 - G1 - Java baseline
 - [x] **Task 0.7**: **Done.** Java 25 LTS, Temurin pinned, `adr/0006-java-25-baseline.adr.md`.
@@ -97,17 +97,17 @@ No production code. 1.1–1.3 have no dependency on Phase 0 and can start immedi
 - [x] **Task 1.3.3**: Run `./gradlew clean test` and `./gradlew build`.
 
 ### 1.4 - Retire the dead layering section (E1) — blocked on 0.5
-- [ ] **Task 1.4.1**: Apply the 0.5 ruling to `coding-style.definition.md` § 3.2.
-- [ ] **Task 1.4.2**: Grep for other references to the `domain / application / in / out / adapter` vocabulary and remove or redirect them.
-- [ ] **Task 1.4.3**: Dispatch `ddd-hex-reviewer`; confirm its `Undocumented` list no longer names § 3.2.
+- [x] **Task 1.4.1**: Apply the 0.5 ruling to `coding-style.definition.md` § 3.2.
+- [x] **Task 1.4.2**: Grep for other references to the `domain / application / in / out / adapter` vocabulary and remove or redirect them.
+- [x] **Task 1.4.3**: Dispatch `ddd-hex-reviewer`; confirm its `Undocumented` list no longer names § 3.2.
 
 ### 1.5 - Write the rulings down (U1–U4) — blocked on 0.1–0.4
-- [ ] **Task 1.5.1**: U1 → `architecture.definition.md` § 9: where adapters for `shared.outport` live, and how they are wired.
-- [ ] **Task 1.5.2**: U2 → `architecture.definition.md` § 10 or § 4.8: the one-aggregate-per-transaction position, as guideline or rule per the ruling.
-- [ ] **Task 1.5.3**: U3 → `sdd.playbook.md` § 5 Change Protocol: doctrine changes land in their own commit before dependent code.
-- [ ] **Task 1.5.4**: U4 → `tdd.definition.md` § 2: the behaviour-preserving-refactor clause and its evidence requirement.
-- [ ] **Task 1.5.5**: Update `.claude/agents/ddd-hex-reviewer.md` so its checklist enforces the four new rules and its `Undocumented` section stops reporting them.
-- [ ] **Task 1.5.6**: Commit this block **on its own**, before Phase 2 — the first application of the U3 rule.
+- [x] **Task 1.5.1**: U1 → `architecture.definition.md` § 9: where adapters for `shared.outport` live, and how they are wired.
+- [x] **Task 1.5.2**: U2 → `architecture.definition.md` § 10 or § 4.8: the one-aggregate-per-transaction position, as guideline or rule per the ruling.
+- [x] **Task 1.5.3**: U3 → `sdd.playbook.md` § 5 Change Protocol: doctrine changes land in their own commit before dependent code.
+- [x] **Task 1.5.4**: U4 → `tdd.definition.md` § 2: the behaviour-preserving-refactor clause and its evidence requirement.
+- [x] **Task 1.5.5**: Update `.claude/agents/ddd-hex-reviewer.md` so its checklist enforces the four new rules and its `Undocumented` section stops reporting them.
+- [x] **Task 1.5.6**: Commit this block **on its own**, before Phase 2 — the first application of the U3 rule.
 
 ### 1.6 - Prune stale documentation (E2, E5)
 - [x] **Task 1.6.1**: `notes.md` — remove the guide-domain-spec gap (closed by 1.1) and the DomainEvent-list musing if 0.x settled it; keep the read-model note.
@@ -127,39 +127,39 @@ Order matters: 2.1 before 2.2. Blocks 2.1, 2.2 and 2.4 are behaviour-preserving 
 follow the U4 ruling from 0.4 for what stands in for RED.
 
 ### 2.1 - Move `AvailabilityUnavailableException` to the inport surface (A2) — blocked on 0.4
-- [ ] **Task 2.1.1**: Baseline evidence — run `./gradlew clean test`, record the test count (currently 124) and that it is green. Per U4 this is the RED substitute; there is no behavioural delta.
-- [ ] **Task 2.1.2**: Move `AvailabilityUnavailableException` from `booking.core.outport` to `booking.core.domain.tourbooking.exception`, the home `architecture.definition.md` § 4.2 permits a usecase interface to reference.
-- [ ] **Task 2.1.3**: Update imports in `RequestTourBookingUseCase`, `ChangeParticipantsUseCase`, the drivers, `BookingExceptionHandler`, `StubAvailabilityChecker`, `AvailabilityChecker` and the affected tests.
-- [ ] **Task 2.1.4**: REFACTOR — check whether `AvailabilityChecker`'s contract should declare it, and whether the exception belongs to the aggregate or to a shared `booking` exception package.
-- [ ] **Task 2.1.5**: Confirm the suite is unchanged — same test count, all green, no test modified beyond imports.
-- [ ] **Task 2.1.6**: Update `ports/availability-checker.outport.spec.md` § 5 and UC01/UC04 § 3 exception tables.
-- [ ] **Task 2.1.7**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
-- [ ] **Task 2.1.8**: Run `./gradlew clean test` and `./gradlew build`.
+- [x] **Task 2.1.1**: Baseline evidence — run `./gradlew clean test`, record the test count (currently 124) and that it is green. Per U4 this is the RED substitute; there is no behavioural delta.
+- [x] **Task 2.1.2**: Move `AvailabilityUnavailableException` from `booking.core.outport` to `booking.core.domain.tourbooking.exception`, the home `architecture.definition.md` § 4.2 permits a usecase interface to reference.
+- [x] **Task 2.1.3**: Update imports in `RequestTourBookingUseCase`, `ChangeParticipantsUseCase`, the drivers, `BookingExceptionHandler`, `StubAvailabilityChecker`, `AvailabilityChecker` and the affected tests.
+- [x] **Task 2.1.4**: REFACTOR — check whether `AvailabilityChecker`'s contract should declare it, and whether the exception belongs to the aggregate or to a shared `booking` exception package.
+- [x] **Task 2.1.5**: Confirm the suite is unchanged — same test count, all green, no test modified beyond imports.
+- [x] **Task 2.1.6**: Update `ports/availability-checker.outport.spec.md` § 5 and UC01/UC04 § 3 exception tables.
+- [x] **Task 2.1.7**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
+- [x] **Task 2.1.8**: Run `./gradlew clean test` and `./gradlew build`.
 
 ### 2.2 - Confirm A1 dissolved
-- [ ] **Task 2.2.1**: Verify `BookingExceptionHandler` now imports only `core.inport` types and domain exceptions — the § 6.3 / § 4.5 violation was a symptom of 2.1.
-- [ ] **Task 2.2.2**: Verify `GuideOperationsExceptionHandler` has no equivalent violation.
-- [ ] **Task 2.2.3**: Dispatch `ddd-hex-reviewer`; expect both A1 and A2 gone from `Pre-existing`.
+- [x] **Task 2.2.1**: Verify `BookingExceptionHandler` now imports only `core.inport` types and domain exceptions — the § 6.3 / § 4.5 violation was a symptom of 2.1.
+- [x] **Task 2.2.2**: Verify `GuideOperationsExceptionHandler` has no equivalent violation.
+- [x] **Task 2.2.3**: Dispatch `ddd-hex-reviewer`; expect both A1 and A2 gone from `Pre-existing`.
 
 ### 2.3 - Test then relocate the CONFIRMED decision (C2 + A3) — blocked on 0.2
-- [ ] **Task 2.3.1**: RED — add `TourStartedListenerTest` pinning current behaviour: a `TourStarted` event activates every CONFIRMED booking for the tour and skips others. Run it, quote the failure.
-- [ ] **Task 2.3.2**: GREEN — minimal wiring so the test passes against today's implementation. This block starts by *covering* untested code, so the first cycle may go green immediately; state that plainly if so.
-- [ ] **Task 2.3.3**: RED — add a test asserting the listener no longer pre-filters on status: a CANCELLED booking must be attempted and no-op'd by the aggregate, not filtered out by the adapter.
-- [ ] **Task 2.3.4**: GREEN — remove the `status() == CONFIRMED` filter at `TourStartedListener:43`; rely on `markActive`'s own guard (`TourBooking:164-169`). Note `markActive` currently *throws* for CANCELLED, so decide with 0.2's ruling whether the aggregate should no-op or the listener should catch.
-- [ ] **Task 2.3.5**: REFACTOR — the listener should forward and let the domain decide; verify it holds no business logic per § 4.8.
-- [ ] **Task 2.3.6**: Update `uc06-mark-booking-active.spec.md` § 5 flow and § 8 failure scenarios; tick the listener DoD box.
-- [ ] **Task 2.3.7**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
-- [ ] **Task 2.3.8**: Run `./gradlew clean test` and `./gradlew build`.
+- [x] **Task 2.3.1**: RED — add `TourStartedListenerTest` pinning current behaviour: a `TourStarted` event activates every CONFIRMED booking for the tour and skips others. Run it, quote the failure.
+- [x] **Task 2.3.2**: GREEN — minimal wiring so the test passes against today's implementation. This block starts by *covering* untested code, so the first cycle may go green immediately; state that plainly if so.
+- [x] **Task 2.3.3**: RED — add a test asserting the listener no longer pre-filters on status: a CANCELLED booking must be attempted and no-op'd by the aggregate, not filtered out by the adapter.
+- [x] **Task 2.3.4**: GREEN — remove the `status() == CONFIRMED` filter at `TourStartedListener:43`; rely on `markActive`'s own guard (`TourBooking:164-169`). Note `markActive` currently *throws* for CANCELLED, so decide with 0.2's ruling whether the aggregate should no-op or the listener should catch.
+- [x] **Task 2.3.5**: REFACTOR — the listener should forward and let the domain decide; verify it holds no business logic per § 4.8.
+- [x] **Task 2.3.6**: Update `uc06-mark-booking-active.spec.md` § 5 flow and § 8 failure scenarios; tick the listener DoD box.
+- [x] **Task 2.3.7**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
+- [x] **Task 2.3.8**: Run `./gradlew clean test` and `./gradlew build`.
 
 ### 2.4 - Relocate the `shared.outport` adapters (A4) — blocked on 0.1, 0.4, 1.5.1
-- [ ] **Task 2.4.1**: Baseline evidence per U4 — suite green, test count recorded.
-- [ ] **Task 2.4.2**: Move `LoggingDomainEventPublisher` and `SystemClockPort` out of `booking.outbound.integration` to wherever 0.1 ruled.
-- [ ] **Task 2.4.3**: Add `bootstrap/SharedConfig` (or per the ruling) and remove the `ClockPort`/`DomainEventPublisher` beans from `BookingConfig`.
-- [ ] **Task 2.4.4**: Verify `guide` no longer depends on `BookingConfig` for a clock, and that `GuideOperationsConfig` declares what it needs.
-- [ ] **Task 2.4.5**: Update `ports/clock.outport.spec.md` § 4 and `ports/domain-event-publisher.outport.spec.md` § 4 reference-implementation sections.
-- [ ] **Task 2.4.6**: Confirm the suite is unchanged — same count, all green.
-- [ ] **Task 2.4.7**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
-- [ ] **Task 2.4.8**: Run `./gradlew clean test` and `./gradlew build`.
+- [x] **Task 2.4.1**: Baseline evidence per U4 — suite green, test count recorded.
+- [x] **Task 2.4.2**: Move `LoggingDomainEventPublisher` and `SystemClockPort` out of `booking.outbound.integration` to wherever 0.1 ruled.
+- [x] **Task 2.4.3**: Add `bootstrap/SharedConfig` (or per the ruling) and remove the `ClockPort`/`DomainEventPublisher` beans from `BookingConfig`.
+- [x] **Task 2.4.4**: Verify `guide` no longer depends on `BookingConfig` for a clock, and that `GuideOperationsConfig` declares what it needs.
+- [x] **Task 2.4.5**: Update `ports/clock.outport.spec.md` § 4 and `ports/domain-event-publisher.outport.spec.md` § 4 reference-implementation sections.
+- [x] **Task 2.4.6**: Confirm the suite is unchanged — same count, all green.
+- [x] **Task 2.4.7**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
+- [x] **Task 2.4.8**: Run `./gradlew clean test` and `./gradlew build`.
 
 ---
 
@@ -214,16 +214,16 @@ Pure test additions. Each closes a named UC DoD box. No dependency on Phase 0.
 — follow the U4 ruling.
 
 ### 4.1 - `GuideOperationsConfig` → `GuideConfig` (B1)
-- [ ] **Task 4.1.1**: Baseline evidence per U4 — suite green, count recorded.
-- [ ] **Task 4.1.2**: Rename the class and file.
-- [ ] **Task 4.1.3**: Update every `SDD:` Javadoc citation and any `@Import`/reference.
-- [ ] **Task 4.1.4**: Confirm the suite is unchanged; dispatch both agents; run the gates.
+- [x] **Task 4.1.1**: Baseline evidence per U4 — suite green, count recorded.
+- [x] **Task 4.1.2**: Rename the class and file.
+- [x] **Task 4.1.3**: Update every `SDD:` Javadoc citation and any `@Import`/reference.
+- [x] **Task 4.1.4**: Confirm the suite is unchanged; dispatch both agents; run the gates.
 
 ### 4.2 - `GuideOperationsExceptionHandler` → `GuideExceptionHandler` (B2)
-- [ ] **Task 4.2.1**: Baseline evidence per U4.
-- [ ] **Task 4.2.2**: Rename the class and file.
-- [ ] **Task 4.2.3**: Update `GuideTourControllerTest`'s Javadoc reference and any others.
-- [ ] **Task 4.2.4**: Confirm the suite is unchanged; dispatch both agents; run the gates.
+- [x] **Task 4.2.1**: Baseline evidence per U4.
+- [x] **Task 4.2.2**: Rename the class and file.
+- [x] **Task 4.2.3**: Update `GuideTourControllerTest`'s Javadoc reference and any others.
+- [x] **Task 4.2.4**: Confirm the suite is unchanged; dispatch both agents; run the gates.
 
 ---
 
@@ -232,41 +232,41 @@ Pure test additions. Each closes a named UC DoD box. No dependency on Phase 0.
 Must come after Phases 2–4 or ArchUnit lands red. The highest-value phase in this plan.
 
 ### 5.1 - ADR for ArchUnit
-- [ ] **Task 5.1.1**: A new test dependency is ADR trigger 2 (`sdd.playbook.md` § 6). Write `adr/0007-archunit-boundary-enforcement.adr.md` — why mechanical enforcement in addition to `ddd-hex-reviewer`, what it covers, what it deliberately cannot (anemic-model detection stays a judgement call).
-- [ ] **Task 5.1.2**: Wait for confirmation before implementing (`execution.playbook.md` § 3.2.4).
+- [x] **Task 5.1.1**: A new test dependency is ADR trigger 2 (`sdd.playbook.md` § 6). Write `adr/0007-archunit-boundary-enforcement.adr.md` — why mechanical enforcement in addition to `ddd-hex-reviewer`, what it covers, what it deliberately cannot (anemic-model detection stays a judgement call).
+- [x] **Task 5.1.2**: Wait for confirmation before implementing (`execution.playbook.md` § 3.2.4).
 
 ### 5.2 - ArchUnit: dependency rules (§ 6)
-- [ ] **Task 5.2.1**: Add the ArchUnit dependency to `libs.versions.toml` and `app/build.gradle.kts` (test scope).
-- [ ] **Task 5.2.2**: RED — one test per § 6 rule, seven in all, in `app/src/test/.../architecture/DependencyRulesTest.java`. Run them, quote failures.
-- [ ] **Task 5.2.3**: GREEN — all seven pass. Any that cannot is a real violation Phase 2 missed; fix the code, not the rule.
-- [ ] **Task 5.2.4**: Dispatch `ddd-hex-reviewer` and `spec-documenter`; run the gates.
+- [x] **Task 5.2.1**: Add the ArchUnit dependency to `libs.versions.toml` and `app/build.gradle.kts` (test scope).
+- [x] **Task 5.2.2**: RED — one test per § 6 rule, seven in all, in `app/src/test/.../architecture/DependencyRulesTest.java`. Run them, quote failures.
+- [x] **Task 5.2.3**: GREEN — all seven pass. Any that cannot is a real violation Phase 2 missed; fix the code, not the rule.
+- [x] **Task 5.2.4**: Dispatch `ddd-hex-reviewer` and `spec-documenter`; run the gates.
 
 ### 5.3 - ArchUnit: context registry (§ 11)
-- [ ] **Task 5.3.1**: RED — assert top-level packages are exactly `booking`, `bootstrap`, `guide`, `shared`, so a new one fails the build rather than waiting for review.
-- [ ] **Task 5.3.2**: RED — no `booking` → `guide` and no `guide` → `booking` import; `shared` imports no context. Promotes `tasks.md` Task 10.3's old throwaway grep into a permanent gate.
-- [ ] **Task 5.3.3**: GREEN; dispatch both agents; run the gates.
+- [x] **Task 5.3.1**: RED — assert top-level packages are exactly `booking`, `bootstrap`, `guide`, `shared`, so a new one fails the build rather than waiting for review.
+- [x] **Task 5.3.2**: RED — no `booking` → `guide` and no `guide` → `booking` import; `shared` imports no context. Promotes `tasks.md` Task 10.3's old throwaway grep into a permanent gate.
+- [x] **Task 5.3.3**: GREEN; dispatch both agents; run the gates.
 
 ### 5.4 - ArchUnit: class roles and domain purity
-- [ ] **Task 5.4.1**: RED — HTTP annotations only on `*RestAPI`, never on `*Controller` (§ 4.5). This is the violation the planted-drift test proved is silently breaking.
-- [ ] **Task 5.4.2**: RED — no Spring/Jakarta/Jackson/jOOQ import in any `core` or `shared` package; no `Instant.now()`/`LocalDate.now()`/`new Date()` in the domain (§ 8).
-- [ ] **Task 5.4.3**: RED — naming conventions: `*Command`, `*Result`, `*UseCase`, `*Driver`, `*Request`, `*Response`, `*RestAPI`, `*Controller`.
-- [ ] **Task 5.4.4**: RED — identity rule per ADR 0005: no context imports another context's identity type.
-- [ ] **Task 5.4.5**: GREEN; dispatch both agents; run the gates.
+- [x] **Task 5.4.1**: RED — HTTP annotations only on `*RestAPI`, never on `*Controller` (§ 4.5). This is the violation the planted-drift test proved is silently breaking.
+- [x] **Task 5.4.2**: RED — no Spring/Jakarta/Jackson/jOOQ import in any `core` or `shared` package; no `Instant.now()`/`LocalDate.now()`/`new Date()` in the domain (§ 8).
+- [x] **Task 5.4.3**: RED — naming conventions: `*Command`, `*Result`, `*UseCase`, `*Driver`, `*Request`, `*Response`, `*RestAPI`, `*Controller`.
+- [x] **Task 5.4.4**: RED — identity rule per ADR 0005: no context imports another context's identity type.
+- [x] **Task 5.4.5**: GREEN; dispatch both agents; run the gates.
 
 ### 5.5 - Spotless (G3)
-- [ ] **Task 5.5.1**: Apply `alias(libs.plugins.spotless)` — already in the version catalog, never applied — and configure it to match the existing style rather than reformatting the tree.
-- [ ] **Task 5.5.2**: Run `spotlessCheck`; if it wants a large diff, tune the config instead of accepting churn in the same block.
-- [ ] **Task 5.5.3**: Add `spotlessCheck` to `test.definition.md` § 7's canonical gate list.
-- [ ] **Task 5.5.4**: Run `./gradlew clean test` and `./gradlew build`.
+- [x] **Task 5.5.1**: Apply `alias(libs.plugins.spotless)` — already in the version catalog, never applied — and configure it to match the existing style rather than reformatting the tree.
+- [x] **Task 5.5.2**: Run `spotlessCheck`; if it wants a large diff, tune the config instead of accepting churn in the same block.
+- [x] **Task 5.5.3**: Add `spotlessCheck` to `test.definition.md` § 7's canonical gate list.
+- [x] **Task 5.5.4**: Run `./gradlew clean test` and `./gradlew build`.
 
 ### 5.6 - CI (G4)
-- [ ] **Task 5.6.1**: Add `.github/workflows/build.yml` running `./gradlew clean test build` plus `spotlessCheck` on push and PR.
-- [ ] **Task 5.6.2**: **Pin the JDK explicitly** (Temurin 25) rather than inheriting a runner default — ADR 0006's Future Considerations calls this out, and it is the same divergence class the vendor pin just fixed.
-- [ ] **Task 5.6.3**: Assert `app/data/` does not exist after the test run, per `test.definition.md` § 1.3.
-- [ ] **Task 5.6.4**: Confirm the workflow is green before merging.
+- [x] **Task 5.6.1**: Add `.github/workflows/build.yml` running `./gradlew clean test build` plus `spotlessCheck` on push and PR.
+- [x] **Task 5.6.2**: **Pin the JDK explicitly** (Temurin 25) rather than inheriting a runner default — ADR 0006's Future Considerations calls this out, and it is the same divergence class the vendor pin just fixed.
+- [x] **Task 5.6.3**: Assert `app/data/` does not exist after the test run, per `test.definition.md` § 1.3.
+- [x] **Task 5.6.4**: Confirm the workflow is green before merging.
 
 ### 5.7 - Record the jacoco decision (G5)
-- [ ] **Task 5.7.1**: Confirm with the user that coverage stays qualitative, then say so explicitly in `test.definition.md` § 6 so the absence reads as a decision, not an omission.
+- [x] **Task 5.7.1**: Confirm with the user that coverage stays qualitative, then say so explicitly in `test.definition.md` § 6 so the absence reads as a decision, not an omission.
 
 ### 5.8 - Full-tree clean bill
 - [ ] **Task 5.8.1**: Dispatch `ddd-hex-reviewer` over the whole tree. Target: `PASS` with an empty `Pre-existing` list.

@@ -11,7 +11,9 @@ import java.time.Instant;
  *
  * <p>Used by both the {@code booking} and {@code guide} bounded contexts.
  *
- * <p>Framework-free: implementations live in {@code outbound.integration.clock}.
+ * <p>Framework-free: implementations live in {@code shared.outbound.clock}, wired by
+ * {@code bootstrap.SharedConfig}. An adapter for a shared port belongs to no bounded
+ * context (see {@code documentation/architecture.definition.md} section 9).
  *
  * <p>SDD: See {@code documentation/ports/clock.outport.spec.md},
  *          {@code documentation/architecture.definition.md} section 8,

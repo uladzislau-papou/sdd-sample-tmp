@@ -11,7 +11,7 @@ SDD: See `documentation/use-cases/uc01-request-tour-booking.spec.md`
 ## 1. Interface
 
 ```
-core.inport.RequestTourBookingUseCase
+core.inport.usecase.RequestTourBookingUseCase
 ```
 
 ## 2. Method Contract
