@@ -180,5 +180,5 @@ endpoint, therefore no `rest/uc06-*.http` file is required.
 
 ### Governance
 - [x] Spec sections § 1–9 reconciled against the code on disk
-- [ ] `ddd-hex-reviewer` returns `PASS` (not yet run against this use case)
-- [ ] Quality gates green (`test.definition.md` § 7)
+- [x] `ddd-hex-reviewer` returns `PASS` — full-tree clean bill, `Undocumented: none`
+- [x] Quality gates green (`test.definition.md` § 7) — 187 tests, 0 failures, ArchUnit and spotlessCheck included

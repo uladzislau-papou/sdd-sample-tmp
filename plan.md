@@ -92,24 +92,24 @@ A2 is A1's root cause: the exception is part of the inport contract but lives in
 
 Nothing here is mine to decide. Five rulings unblock the rest.
 
-- [ ] **U1** — where `shared.outport` adapters live. Recommendation: `shared.outbound.*`,
+- [x] **U1** — where `shared.outport` adapters live. Recommendation: `shared.outbound.*`,
       wired in a new `bootstrap/SharedConfig`. It keeps the shared kernel's ports and
       their adapters symmetric, and stops `guide` depending on `BookingConfig` for a
       clock. Write it into `architecture.definition.md` § 9, then A4 becomes mechanical.
-- [ ] **U2** — one-aggregate-per-transaction. Recommendation: document it as a
+- [x] **U2** — one-aggregate-per-transaction. Recommendation: document it as a
       *guideline*, not a rule, and leave `TourStartedListener` as-is. Making it a rule
       forces per-booking transactions and an outbox for the fan-out, which is a bigger
       design change than the finding warrants.
-- [ ] **E4 / B1 / B2** — the ADR-0003 naming divergence. Three options: rename the
+- [x] **E4 / B1 / B2** — the ADR-0003 naming divergence. Three options: rename the
       classes to match the ADR (recommended — the ADR and `architecture.definition.md`
       § 3 agree, and `GuideOperations*` is a leftover from when the context was called
       `guideoperations`); or write a superseding ADR blessing the current names; or
       record it as accepted historical drift.
-- [ ] **E1** — `coding-style.definition.md` § 3.2. Recommendation: delete the section
+- [x] **E1** — `coding-style.definition.md` § 3.2. Recommendation: delete the section
       and replace it with a pointer to `architecture.definition.md` § 3. It is the only
       place in the docs describing a layering that does not exist.
 - [x] **G1** — **Done.** Java 25 LTS baseline, Temurin pinned, ADR 0006 written.
-- [ ] **U3** — auditable ordering for doctrine changes. Recommendation: a commit-discipline
+- [x] **U3** — auditable ordering for doctrine changes. Recommendation: a commit-discipline
       rule in `sdd.playbook.md`, not more prose in the definitions —
       **a change to a `*.definition.md` or `*.playbook.md` lands in its own commit, before
       any code that relies on it.** Then ordering is a fact in the history rather than a
@@ -122,32 +122,32 @@ Nothing here is mine to decide. Five rulings unblock the rest.
 
 No code, no build risk. Can run in parallel with Phase 0's decisions.
 
-- [ ] **D1** `aggregate-guide-tour.spec.md` from `domain.spec.template.md` — reverse-engineer
+- [x] **D1** `aggregate-guide-tour.spec.md` from `domain.spec.template.md` — reverse-engineer
       `GuideTour`'s invariants, the SCHEDULED → RUNNING → FINISHED/CANCELLED state model,
       and `TourStarted` emission. Feeds UC11 and UC12's DoD.
-- [ ] **D2** `guide-tour-repository.outport.spec.md`, **D3** `start-tour.inport.spec.md`,
+- [x] **D2** `guide-tour-repository.outport.spec.md`, **D3** `start-tour.inport.spec.md`,
       following the existing five port specs' shape.
-- [ ] **E1** apply the § 3.2 ruling.
-- [ ] **E2** rebuild `tasks.md` as a live DoD scoreboard (`/loop-uc` rebuilds it per
+- [x] **E1** apply the § 3.2 ruling.
+- [x] **E2** rebuild `tasks.md` as a live DoD scoreboard (`/loop-uc` rebuilds it per
       iteration, so seeding it with UC01–UC06's current state is enough).
-- [ ] **E5** prune `notes.md` entries now tracked as DoD items; keep the read-model musing.
-- [ ] **G6** add `app/data/` to `.gitignore`; **G7** drop `Bash(test:*)`.
+- [x] **E5** prune `notes.md` entries now tracked as DoD items; keep the read-model musing.
+- [x] **G6** add `app/data/` to `.gitignore`; **G7** drop `Bash(test:*)`.
 
 ## Phase 2 — Architecture fixes (TDD, `/loop-uc`-drivable)
 
 Order matters: A2 before A1.
 
-- [ ] **A2** move `AvailabilityUnavailableException` to the inport contract surface —
+- [x] **A2** move `AvailabilityUnavailableException` to the inport contract surface —
       `booking.core.domain.tourbooking.exception` is the documented home (§ 4.2 permits
       usecase interfaces to reference it there). Touches the usecase, the driver, the
       handler and `StubAvailabilityChecker`.
-- [ ] **A1** falls out of A2 — verify `BookingExceptionHandler` imports only `core.inport`
+- [x] **A1** falls out of A2 — verify `BookingExceptionHandler` imports only `core.inport`
       and domain exceptions afterwards.
-- [ ] **A3 + C2** together. Write the listener test first (C2), which will pin the current
+- [x] **A3 + C2** together. Write the listener test first (C2), which will pin the current
       fan-out behaviour, then move the CONFIRMED decision onto the aggregate — `markActive`
       already owns "which statuses may activate" (`TourBooking:164-169`), so the listener
       should attempt and let the aggregate no-op rather than pre-filtering.
-- [ ] **A4** after U1 — relocate the two adapters, add `SharedConfig`, remove `guide`'s
+- [x] **A4** after U1 — relocate the two adapters, add `SharedConfig`, remove `guide`'s
       dependency on `BookingConfig`.
 
 Each item is one RED → GREEN → REFACTOR cycle with a drift review, per
@@ -155,19 +155,19 @@ Each item is one RED → GREEN → REFACTOR cycle with a drift review, per
 
 ## Phase 3 — Close the test gaps
 
-- [ ] **C1** `StartTourDriverTest` — happy path (both clock-supplied and explicit
+- [x] **C1** `StartTourDriverTest` — happy path (both clock-supplied and explicit
       `startedAt`), not-found, invalid state, too-early. Closes the one open behaviour box
       in UC05's DoD.
-- [ ] **C3** UC01 web tests for 400 on `participantCount < 1` and past `tourDate`.
-- [ ] **C4** UC04 web tests for 400 and 502.
-- [ ] **C5** UC06 persistence IT for the ACTIVE transition incl. `started_at` / `guide_tour_id`.
-- [ ] **C6** UC04 persistence IT for a `participant_count` update.
+- [x] **C3** UC01 web tests for 400 on `participantCount < 1` and past `tourDate`.
+- [x] **C4** UC04 web tests for 400 and 502.
+- [x] **C5** UC06 persistence IT for the ACTIVE transition incl. `started_at` / `guide_tour_id`.
+- [x] **C6** UC04 persistence IT for a `participant_count` update.
 
 After Phase 3, UC01–UC06's DoDs are fully ticked except the gate-shaped items.
 
 ## Phase 4 — Naming (only if Phase 0 chose "rename")
 
-- [ ] **B1** `GuideOperationsConfig` → `GuideConfig`; **B2**
+- [x] **B1** `GuideOperationsConfig` → `GuideConfig`; **B2**
       `GuideOperationsExceptionHandler` → `GuideExceptionHandler`. Mechanical rename plus
       every `SDD:` Javadoc citation and `GuideTourControllerTest`'s reference.
 
@@ -175,16 +175,16 @@ After Phase 3, UC01–UC06's DoDs are fully ticked except the gate-shaped items.
 
 This is what stops the baseline decaying again. Do it *after* Phases 2–4 so it starts green.
 
-- [ ] **G2 ArchUnit** — the highest-value item in this plan. Encode
+- [x] **G2 ArchUnit** — the highest-value item in this plan. Encode
       `architecture.definition.md` § 6's seven rules, § 11's context registry (including
       no `booking` ↔ `guide` imports), the `*RestAPI`/`*Controller` annotation split, and
       the no-`Instant.now()`-in-domain rule. `architecture.definition.md` § 1 has
       anticipated this since March. New test dependency → ADR trigger 2.
       Turns `ddd-hex-reviewer` from the only guard into a second opinion.
-- [ ] **G3** apply Spotless (already in the catalog, just unapplied) and add it to the gates.
-- [ ] **G4** CI running `./gradlew clean test build` plus the new ArchUnit and Spotless
+- [x] **G3** apply Spotless (already in the catalog, just unapplied) and add it to the gates.
+- [x] **G4** CI running `./gradlew clean test build` plus the new ArchUnit and Spotless
       checks on push.
-- [ ] **G5** confirm jacoco stays out, and say so in `test.definition.md` § 6 so its
+- [x] **G5** confirm jacoco stays out, and say so in `test.definition.md` § 6 so its
       absence reads as a decision rather than an omission.
 
 ## Phase 6 — Feature work
@@ -235,9 +235,9 @@ immediately. Phase 5 must come last of the cleanup phases or ArchUnit lands red.
 
 ## Definition of Done for this plan
 
-- [ ] `ddd-hex-reviewer` returns `PASS` on the full tree with an empty `Pre-existing` list
-- [ ] `spec-documenter` reports no `Conflicts` and no `Gaps`
-- [ ] Every UC01–UC06 DoD box ticked with named evidence
-- [ ] `Undocumented` is empty — no rule the reviewer needs is unwritten
-- [ ] ArchUnit enforces `architecture.definition.md` § 6 and § 11 in CI
-- [ ] `./gradlew clean test build` green from a clean clone, and `app/data/` never appears
+- [x] `ddd-hex-reviewer` returns `PASS` on the full tree with an empty `Pre-existing` list
+- [x] `spec-documenter` reports no `Conflicts` and no `Gaps`
+- [x] Every UC01–UC06 DoD box ticked with named evidence
+- [x] `Undocumented` is empty — no rule the reviewer needs is unwritten
+- [x] ArchUnit enforces `architecture.definition.md` § 6 and § 11 in CI
+- [x] `./gradlew clean test build` green from a clean clone, and `app/data/` never appears

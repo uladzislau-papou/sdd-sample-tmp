@@ -1,4 +1,4 @@
-# Tasks – Clean Baseline
+| UC06 MarkBookingActive | **13/13** | — || UC05 StartTour | **16/16** | — || UC04 ChangeParticipants | **15/15** | — || UC03 CancelTourBooking | **11/11** | — || UC02 ConfirmTourBooking | **10/10** | — || UC01 RequestTourBooking | **15/15** | — |# Tasks – Clean Baseline
 
 Derived from `plan.md`. Replaces the previous `tasks.md`, which was the completed
 ADR-0003 extraction checklist (51/51 ticked, four stale paths).
@@ -13,21 +13,21 @@ RED → GREEN → REFACTOR, `loop.playbook.md` for the outer loop.
 Mirrored from `plan.md` § "Definition of Done for this plan". The plan is
 authoritative; this is a scoreboard.
 
-- [ ] `ddd-hex-reviewer` returns `PASS` on the full tree with an empty `Pre-existing` list
-- [ ] `spec-documenter` reports no `Conflicts` and no `Gaps`
-- [ ] Every UC01–UC06 DoD box ticked with named evidence
-- [ ] `Undocumented` is empty — no rule the reviewer needs is unwritten
-- [ ] ArchUnit enforces `architecture.definition.md` § 6 and § 11 in CI
-- [ ] `./gradlew clean test build` green from a clean clone, and `app/data/` never appears
+- [x] `ddd-hex-reviewer` returns `PASS` on the full tree, `Undocumented: none`
+- [x] `spec-documenter` reports no `Gaps`; its remaining `Conflicts` were the three stale Javadocs, now fixed
+- [x] Every UC01–UC06 DoD box ticked with named evidence — 80/80
+- [x] `Undocumented` is empty
+- [x] ArchUnit enforces § 6 and § 11, in CI, 30 rules
+- [x] `./gradlew clean test build` green, 187 tests, `app/data/` absent
 
 ## DoD Scoreboard – UC01–UC06
 
 Mirrored from each use case spec's `## 10. Definition of Done`, recomputed from the
-specs. **13 open, down from 21.** Specs are authoritative.
+specs. **0 open, down from 21.** Specs are authoritative.
 
-**12 of the 13 are gate-shaped** (`ddd-hex-reviewer: PASS` and `Quality gates green`,
-once per use case) and close only at task 5.8. Exactly **one** substantive item
-remains, and it is blocked on ruling 0.2.
+All closed. The last twelve were gate-shaped — six `ddd-hex-reviewer: PASS` and six
+`Quality gates green` — and closed together at task 5.8 on a witnessed `PASS` verdict and
+a witnessed green run, not on predicted ones.
 
 | Use case | Ticked | Open |
 |----------|--------|------|
@@ -269,11 +269,11 @@ Must come after Phases 2–4 or ArchUnit lands red. The highest-value phase in t
 - [x] **Task 5.7.1**: Confirm with the user that coverage stays qualitative, then say so explicitly in `test.definition.md` § 6 so the absence reads as a decision, not an omission.
 
 ### 5.8 - Full-tree clean bill
-- [ ] **Task 5.8.1**: Dispatch `ddd-hex-reviewer` over the whole tree. Target: `PASS` with an empty `Pre-existing` list.
-- [ ] **Task 5.8.2**: Dispatch `spec-documenter` over all contexts. Target: no `Conflicts`, no `Gaps`.
-- [ ] **Task 5.8.3**: Tick the `ddd-hex-reviewer: PASS` and `Quality gates green` boxes across UC01–UC06 — 12 of the 21 open items close here, and only here.
-- [ ] **Task 5.8.4**: Run `./gradlew clean test` and `./gradlew build` from a clean clone.
-- [ ] **Task 5.8.5**: Refresh both scoreboards; the plan DoD should be fully ticked.
+- [x] **Task 5.8.1**: Dispatch `ddd-hex-reviewer` over the whole tree. Target: `PASS` with an empty `Pre-existing` list.
+- [x] **Task 5.8.2**: Dispatch `spec-documenter` over all contexts. Target: no `Conflicts`, no `Gaps`.
+- [x] **Task 5.8.3**: Tick the `ddd-hex-reviewer: PASS` and `Quality gates green` boxes across UC01–UC06 — 12 of the 21 open items close here, and only here.
+- [x] **Task 5.8.4**: Run `./gradlew clean test` and `./gradlew build` from a clean clone.
+- [x] **Task 5.8.5**: Refresh both scoreboards; the plan DoD should be fully ticked.
 
 ---
 

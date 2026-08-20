@@ -214,10 +214,20 @@ Applied to the current value objects:
 
 | Type | Constructed from | Throws | Correct? |
 |------|------------------|--------|----------|
-| `ParticipantCount` | command (`RequestTourBooking`, `ChangeParticipants`) | `InvalidBookingRequestException` | **Yes** |
-| `TourId` | command (`RequestTourBookingDriver`) | `IllegalArgumentException` | **No** — needs a domain exception |
-| `ParticipantContact` | command (`RequestTourBookingDriver`) | `IllegalArgumentException` | **No** — needs a domain exception |
-| `AvailableCapacity` | `AvailabilityChecker` outport | `IllegalArgumentException` | **Yes** |
+| `ParticipantCount` | `RequestTourBookingCommand`, `ChangeParticipantsCommand`; also `TourBookingMapper` | `InvalidBookingRequestException` | **Yes** |
+| `TourId` | `RequestTourBookingCommand`; also `TourBookingMapper`, `GuideTourMapper` | `IllegalArgumentException` | **No** — needs a domain exception |
+| `ParticipantContact` | `RequestTourBookingCommand`; also `TourBookingMapper` | `IllegalArgumentException` | **No** — needs a domain exception |
+| `AvailableCapacity` | `AvailabilityChecker` outport, `TourBookingMapper` — never a command | `IllegalArgumentException` | **Yes** |
+
+Clause A triggers on **any** command construction site, so a type with mixed sites falls
+under A. `TourDate`, `BookingId` and `GuideTourId` are out of scope: they carry null guards
+only.
+
+Note for the follow-up increment: the mappers are also construction sites, so giving
+`TourId` and `ParticipantContact` domain exceptions changes what reconstitution from a
+corrupt database row throws. That is arguably an improvement — a corrupt row is not a
+programmer error — but it is a second behaviour change in the same edit and needs its own
+assertion.
 
 > **This rule was wrong on its first attempt, twice over.** `ddd-hex-reviewer` first named
 > `ParticipantCount` as the outlier; I replaced that with a "reachability from a client"
