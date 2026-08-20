@@ -15,7 +15,10 @@ The stack is intentionally opinionated to support:
 ## Tech Stack
 
 ### Language & Runtime
-- Java 21 (project baseline)
+- Java 25 (project baseline, LTS) — see `adr/0006-java-25-baseline.adr.md`.
+  The Gradle toolchain in `gradle/libs.versions.toml` is the single authoritative
+  declaration; `.sdkmanrc` and IDE settings are derived from it.
+  The baseline tracks LTS releases only; moving it is an ADR trigger.
 
 ### Framework
 - Spring Boot 4.x
@@ -33,7 +36,7 @@ The stack is intentionally opinionated to support:
 
 ### SQL Access
 - jOOQ (type-safe SQL)
-- Java 21 supported (including OSS edition)  ￼
+- Java 25 supported (including OSS edition)
 
 ### Testing
 - JUnit 5 (via Spring Boot test support)
@@ -79,7 +82,7 @@ SQL Access (jOOQ)
 - jOOQ code generation:
   - MUST be configured in Gradle
   - MUST run against the same schema that Flyway migrates
-- jOOQ version selection MUST be compatible with Java 21.  ￼
+- jOOQ version selection MUST be compatible with Java 25.
 
 
 ### Flyway Migration Classification
@@ -126,39 +129,31 @@ Rules:
 
 ## Testing Strategy
 
-Principles
-- Tests are part of the spec enforcement.
-- Tests must express domain intent clearly.
+This document specifies only the **tooling** side of testing (see `### Testing`
+above: JUnit 5, AssertJ, H2, Flyway, jOOQ).
 
-Mandatory Rules
-- AssertJ MUST be used for assertions.
-- Tests must cover:
-  - Domain invariants (Always-Valid)
-  - Use case behavior (happy path + failure scenarios)
-  - Persistence adapter behavior (integration tests)
+- Test taxonomy, assertion rules and coverage expectations →
+  `test.definition.md`
+- When in the cycle a test is written (RED-first) → `tdd.definition.md`
 
-Test Types 
-1. Domain Tests (fast, no Spring)
-   - Pure Java tests
-   - Verify invariants and state transitions 
-2. Use Case Tests (lightweight Spring if needed)
-   - Validate orchestration and port interaction 
-3. Adapter Integration Tests
-   - Run with H2
-   - Flyway migrations applied
-   - Validate jOOQ queries + mapping
+The taxonomy previously duplicated here has been removed under
+`file-usage.definition.md` § 4.
 
 
 ## Build & Quality Gates
 
-Mandatory Commands
-- ./gradlew clean test
-- ./gradlew build
+**Canonical list: `test.definition.md` § 7.**
 
-Must Hold
-- All tests pass
-- No task completes without passing test and build
-- No “ignored” or placeholder tests
+This document owns only the *commands* those gates invoke, because the commands
+are a property of the build tool:
+
+```shell
+./gradlew clean test
+./gradlew build
+```
+
+Both are allowlisted in `.claude/settings.json` so agents can run them without
+prompting.
 
 
 ## Local Development Defaults

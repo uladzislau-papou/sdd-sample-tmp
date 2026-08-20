@@ -1,87 +1,41 @@
-# NOT SURE IF NECESSARY!
----
-
-Not sure whether the following use case specifications are still necessary 
-after implementing uc05 to uc09. Nevertheless, for purposes of completeness
-they are prepared here so that they are not forgotten and can be easily 
-executed if missing.
-
---- 
-
-# Use Case Specification – StartTour (Guide)
+# Use Case Specification – Guide Actions (superseded)
 
 ## Status
-SPECIFIED
+SUPERSEDED
+
+## Bounded Context
+`guide` — see the successor specs.
 
 ## Purpose
-Start a scheduled guide tour execution.
 
-## Input Contract
-Fields:
-- guideTourId
-- startedAt (optional; default = now)
+This file originally stacked three guide-side use case sketches under the heading
+`NOT SURE IF NECESSARY!`, written before UC05–UC09 existed. It has been split so
+that each use case lives in its own file, as required by
+`file-naming.definition.md` and the one-use-case-per-spec rule in
+`use-case.spec.template.md`.
 
-## Preconditions
-- GuideTour exists
-- GuideTour status = READY (or SCHEDULED)
+Kept for provenance only. **Not a `/loop-uc` target** — the loop refuses
+`SUPERSEDED` specs.
 
-## Flow
-1. Load GuideTour (guideTourId)
-2. guideTour.start(startedAt)
-3. Persist GuideTour
-4. Publish TourStarted
+## Successors
 
-## Side Effects
-- Persistence
-- Event publication (TourStarted)
+| Original block | Successor | Status |
+|----------------|-----------|--------|
+| StartTour (Guide) | [`uc05-start-tour.spec.md`](uc05-start-tour.spec.md) | IMPLEMENTED |
+| CompleteTour (Guide) | [`uc11-complete-tour.spec.md`](uc11-complete-tour.spec.md) | SPECIFIED |
+| CancelTourByGuide (Guide) | [`uc12-cancel-tour-by-guide.spec.md`](uc12-cancel-tour-by-guide.spec.md) | SPECIFIED |
 
----
+The original note asked whether these were "still necessary after implementing
+uc05 to uc09". The answer, recorded here so it is not lost again:
 
-# Use Case Specification – CompleteTour (Guide)
+- **StartTour was necessary** and became UC05.
+- **CompleteTour and CancelTourByGuide are still necessary**, and were not covered
+  by UC07/UC09. Those two are the *booking-side* reactions
+  (`MarkBookingCompleted`, `MarkBookingCancelledByGuide`); UC11 and UC12 are the
+  *guide-side* actions that trigger them. Without UC11 there is no publisher for
+  `TourCompleted`, so UC07 has no trigger at all — `GuideTour` currently exposes
+  only `start(...)`.
 
-## Status
-SPECIFIED
+## 1.–10.
 
-## Purpose
-Complete a running guide tour execution.
-
-## Input Contract
-Fields:
-- guideTourId
-- completedAt (optional; default = now)
-
-## Preconditions
-- GuideTour exists
-- GuideTour status = RUNNING
-
-## Flow
-1. Load GuideTour
-2. guideTour.complete(completedAt)
-3. Persist GuideTour
-4. Publish TourCompleted
-
---- 
-
-# Use Case Specification – CancelTourByGuide (Guide)
-
-## Status
-SPECIFIED
-
-## Purpose
-Cancel a scheduled or running guide tour execution by the guide.
-
-## Input Contract
-Fields:
-- guideTourId
-- cancelledAt (optional; default = now)
-- reason (optional)
-
-## Preconditions
-- GuideTour exists
-- GuideTour status in {READY, RUNNING}
-
-## Flow
-1. Load GuideTour
-2. guideTour.cancel(cancelledAt, reason)
-3. Persist GuideTour
-4. Publish TourCancelledByGuide
+Not applicable — content moved to the successor specs above.

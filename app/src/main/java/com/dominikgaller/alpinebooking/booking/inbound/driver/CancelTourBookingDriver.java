@@ -21,7 +21,7 @@ import java.util.UUID;
  * <p>Owns the transaction boundary. Orchestrates aggregate loading, state transition,
  * persistence, and post-commit event publication without containing any domain rules.
  *
- * <p>SDD: See {@code documentation/use-cases/uc03-cancle-tour-booking.spec.md}.
+ * <p>SDD: See {@code documentation/use-cases/uc03-cancel-tour-booking.spec.md}.
  */
 @Service
 @Transactional

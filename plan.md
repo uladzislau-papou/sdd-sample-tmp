@@ -1,142 +1,218 @@
-# Plan – Extract Guide Bounded Context
+# Plan – Clean Baseline (no open ends)
 
-## Motivation
+Replaces the previous `plan.md`, which was the fully-executed ADR-0003 guide-context
+extraction (all 51 tasks in `tasks.md` ticked).
 
-`GuideTour` and all related code currently lives in the `booking` bounded context.
-UC06 confirms the boundary: `guideTourId` is a plain string correlation ID in `booking` —
-proof that `booking` has no business knowing about `GuideTour` internals.
+## Goal
 
-ADR: `documentation/adr/0003-separate-guide-bounded-context.adr.md`
+Close every finding surfaced by the `ddd-hex-reviewer` and `spec-documenter`
+verification runs, so that:
+
+- `ddd-hex-reviewer` returns `PASS` on the whole tree, not just on an increment
+- every DoD box in UC01–UC06 is ticked with named evidence
+- no documented rule is dead text, and no rule needed by the reviewer is unwritten
+- the § 6 dependency rules are mechanically enforced, not review-enforced
+
+## Findings inventory
+
+31 open items. Legend: **[D]** needs your decision · **[doc]** documentation only ·
+**[code]** production or test code · **[tool]** build/CI.
+
+### Architecture violations
+| # | Finding | Rule |
+|---|---------|------|
+| A1 | `BookingExceptionHandler:7` imports `booking.core.outport.AvailabilityUnavailableException` | `architecture.definition.md` § 6.3 / § 4.5 — controllers depend only on `core.inport` |
+| A2 | `RequestTourBookingUseCase:7` imports a `core.outport` type | § 4.2 — usecase interfaces may reference only `inport.command`, `inport.result`, `core.domain.<agg>.exception` |
+| A3 | `TourStartedListener:43` filters `status() == CONFIRMED` | § 4.8 — listeners must not contain business logic. Also untested |
+| A4 | `LoggingDomainEventPublisher`, `SystemClockPort` implement `shared.outport` from inside `booking`; `guide` consumes them via `BookingConfig` | § 4.7 + ADR-0003's claim "both contexts depend on `shared.domain` only", now false. **Blocked on U1** |
+
+A2 is A1's root cause: the exception is part of the inport contract but lives in
+`core.outport`. Fix A2 first and A1 dissolves.
+
+### Naming divergence from ADR-0003
+| # | Finding |
+|---|---------|
+| B1 | `GuideOperationsConfig` — ADR-0003 § Decision and `architecture.definition.md` § 3 (`<ContextName>Config`) both say `GuideConfig` |
+| B2 | `GuideOperationsExceptionHandler` — ADR-0003 says `GuideExceptionHandler` |
+
+### Missing tests
+| # | Finding | Rule |
+|---|---------|------|
+| C1 | No `StartTourDriverTest` — every booking driver has one | `test.definition.md` § 2.2 (mandatory), § 6 |
+| C2 | No test for `TourStartedListener` / `TourBookingEventListener` — UC06's fan-out and the ADR-0002 `AFTER_COMMIT` boundary are unverified | § 2.2, § 6 |
+| C3 | UC01: no web test asserting 400 for `participantCount < 1` or a past `tourDate` | § 2.4 |
+| C4 | UC04: no web test for 400 or 502 | § 2.4 |
+| C5 | UC06: persistence IT does not cover the ACTIVE transition, `started_at`, or `guide_tour_id` | § 2.3, § 6 |
+| C6 | UC04: persistence IT does not cover a `participant_count` update | § 2.3, § 6 |
+
+### Missing specs
+| # | Finding |
+|---|---------|
+| D1 | `documentation/domain/aggregate-guide-tour.spec.md` — the `guide` context has no domain spec; `GuideTour`'s invariants and state model are undocumented |
+| D2 | `documentation/ports/guide-tour-repository.outport.spec.md` — outport implemented, unspecified |
+| D3 | `documentation/ports/start-tour.inport.spec.md` — `booking`'s counterpart exists |
+
+### Stale or dead documentation
+| # | Finding |
+|---|---------|
+| E1 | `coding-style.definition.md` § 3.2 names the layers `domain / application / in / out / adapter.*` with direction `adapter → application → domain`. The enforced ontology is `core / inbound / outbound`. No code follows it — dead text that misleads anyone treating it as authoritative |
+| E2 | `tasks.md` is the completed ADR-0003 checklist with four stale paths (`guide/core/domain/*`, `guide/core/domain/event/TourStarted`, `GuideExceptionHandler`, `GuideConfig`) |
+| E3 | `plan.md` was the completed ADR-0003 plan — **resolved by this file** |
+| E4 | ADR-0003 names `GuideConfig`/`GuideExceptionHandler` and sketches `guide.core.domain` + a guide-local event package; disk differs on all three. ADRs are immutable |
+| E5 | `notes.md` records three gaps; two independently confirmed (guide domain spec missing, no read side) |
+
+### Undocumented rules — needed before dependent fixes
+| # | Question |
+|---|----------|
+| U1 | **Where do adapters for `shared.outport` live?** § 3's tree gives `shared` only `domain/event`; nothing says whether a `ClockPort` implementation belongs in `shared.outbound`, in `bootstrap`, or in one arbitrary context (today: `booking`). **A4 is unresolvable until this is written down** |
+| U2 | **Is there a one-aggregate-per-transaction rule?** `TourStartedListener` updates every CONFIRMED booking for a tour in one `REQUIRES_NEW` transaction. § 10 forbids only cross-aggregate *invariants*, so this is not currently a violation — but if per-aggregate transactions are intended, it needs writing down |
+| U3 | **How is spec-before-code ordering made auditable for *rule* changes?** `tdd.definition.md` § 2 makes TDD auditable for code — the quoted RED failure is the evidence. Nothing does the equivalent for doctrine. A rule and the code it sanctions, landing in one snapshot, are indistinguishable from the code arriving first and the rule being written to authorise it. Found by `ddd-hex-reviewer` against this very change: `test.definition.md` § 1.3 names `WebTestApplication`/`GuideWebTestApplication`, and arrived in the same uncommitted tree as those classes. It declined to call it drift (the rule *tightens* and cites five-month-old precedent rather than inventing cover) but reported the unverifiability |
+
+### Build and tooling
+| # | Finding |
+|---|---------|
+| ~~G1~~ | **RESOLVED.** Baseline bumped to Java 25 LTS with the vendor pinned to Temurin — `adr/0006-java-25-baseline.adr.md`. Toolchain, `.sdkmanrc` and IDE all on `25.0.4-tem`; verified class file major version 69 and 124/124 tests green |
+| G2 | **No ArchUnit.** § 6's seven "enforceable" rules are enforced only by model-driven review. A1/A2/A4 existed for months precisely because nothing checked |
+| G3 | Spotless is in `libs.versions.toml` `[versions]` and `[plugins]` but never applied — no formatting gate |
+| G4 | No CI. Quality gates run only when a human or agent remembers |
+| G5 | No jacoco. `test.definition.md` § 6 targets qualitative coverage, so this may be deliberate — confirm |
+| G6 | `.gitignore` covers `/data/` but not `app/data/`. Moot now that no test writes there, but latent |
+| G7 | `settings.local.json` has a stray `Bash(test:*)` matching the shell builtin, not Gradle |
+
+### Governance decisions blocking feature work
+| # | Item |
+|---|------|
+| H1 | UC08 replaces `TourBooking.cancel(Instant)` with `cancel(Instant, CancelledBy, String)`, changing a method five call sites and UC03 depend on — ADR needed? |
+| H2 | UC09 + UC12 make a synchronous cross-context call inside the caller's transaction — ADR required (`sdd.playbook.md` § 6 items 5 and 10). One ADR should cover both |
+| H3 | UC07 has no trigger until UC11 publishes `TourCompleted` |
 
 ---
 
-## Target Structure
+## Phase 0 — Decisions (no code)
+
+Nothing here is mine to decide. Five rulings unblock the rest.
+
+- [ ] **U1** — where `shared.outport` adapters live. Recommendation: `shared.outbound.*`,
+      wired in a new `bootstrap/SharedConfig`. It keeps the shared kernel's ports and
+      their adapters symmetric, and stops `guide` depending on `BookingConfig` for a
+      clock. Write it into `architecture.definition.md` § 9, then A4 becomes mechanical.
+- [ ] **U2** — one-aggregate-per-transaction. Recommendation: document it as a
+      *guideline*, not a rule, and leave `TourStartedListener` as-is. Making it a rule
+      forces per-booking transactions and an outbox for the fan-out, which is a bigger
+      design change than the finding warrants.
+- [ ] **E4 / B1 / B2** — the ADR-0003 naming divergence. Three options: rename the
+      classes to match the ADR (recommended — the ADR and `architecture.definition.md`
+      § 3 agree, and `GuideOperations*` is a leftover from when the context was called
+      `guideoperations`); or write a superseding ADR blessing the current names; or
+      record it as accepted historical drift.
+- [ ] **E1** — `coding-style.definition.md` § 3.2. Recommendation: delete the section
+      and replace it with a pointer to `architecture.definition.md` § 3. It is the only
+      place in the docs describing a layering that does not exist.
+- [x] **G1** — **Done.** Java 25 LTS baseline, Temurin pinned, ADR 0006 written.
+- [ ] **U3** — auditable ordering for doctrine changes. Recommendation: a commit-discipline
+      rule in `sdd.playbook.md`, not more prose in the definitions —
+      **a change to a `*.definition.md` or `*.playbook.md` lands in its own commit, before
+      any code that relies on it.** Then ordering is a fact in the history rather than a
+      claim in a report, and `ddd-hex-reviewer` can check it with
+      `git log --diff-filter=M -- documentation/` instead of reporting "unverifiable".
+      Cheap, mechanical, and it closes the one hole the reviewer cannot otherwise see
+      through. Worth adopting before Phase 2, since Phase 2 changes rules and code together.
+
+## Phase 1 — Documentation only
+
+No code, no build risk. Can run in parallel with Phase 0's decisions.
+
+- [ ] **D1** `aggregate-guide-tour.spec.md` from `domain.spec.template.md` — reverse-engineer
+      `GuideTour`'s invariants, the SCHEDULED → RUNNING → FINISHED/CANCELLED state model,
+      and `TourStarted` emission. Feeds UC11 and UC12's DoD.
+- [ ] **D2** `guide-tour-repository.outport.spec.md`, **D3** `start-tour.inport.spec.md`,
+      following the existing five port specs' shape.
+- [ ] **E1** apply the § 3.2 ruling.
+- [ ] **E2** rebuild `tasks.md` as a live DoD scoreboard (`/loop-uc` rebuilds it per
+      iteration, so seeding it with UC01–UC06's current state is enough).
+- [ ] **E5** prune `notes.md` entries now tracked as DoD items; keep the read-model musing.
+- [ ] **G6** add `app/data/` to `.gitignore`; **G7** drop `Bash(test:*)`.
+
+## Phase 2 — Architecture fixes (TDD, `/loop-uc`-drivable)
+
+Order matters: A2 before A1.
+
+- [ ] **A2** move `AvailabilityUnavailableException` to the inport contract surface —
+      `booking.core.domain.tourbooking.exception` is the documented home (§ 4.2 permits
+      usecase interfaces to reference it there). Touches the usecase, the driver, the
+      handler and `StubAvailabilityChecker`.
+- [ ] **A1** falls out of A2 — verify `BookingExceptionHandler` imports only `core.inport`
+      and domain exceptions afterwards.
+- [ ] **A3 + C2** together. Write the listener test first (C2), which will pin the current
+      fan-out behaviour, then move the CONFIRMED decision onto the aggregate — `markActive`
+      already owns "which statuses may activate" (`TourBooking:164-169`), so the listener
+      should attempt and let the aggregate no-op rather than pre-filtering.
+- [ ] **A4** after U1 — relocate the two adapters, add `SharedConfig`, remove `guide`'s
+      dependency on `BookingConfig`.
+
+Each item is one RED → GREEN → REFACTOR cycle with a drift review, per
+`execution.playbook.md` § 3.4–3.5.
+
+## Phase 3 — Close the test gaps
+
+- [ ] **C1** `StartTourDriverTest` — happy path (both clock-supplied and explicit
+      `startedAt`), not-found, invalid state, too-early. Closes the one open behaviour box
+      in UC05's DoD.
+- [ ] **C3** UC01 web tests for 400 on `participantCount < 1` and past `tourDate`.
+- [ ] **C4** UC04 web tests for 400 and 502.
+- [ ] **C5** UC06 persistence IT for the ACTIVE transition incl. `started_at` / `guide_tour_id`.
+- [ ] **C6** UC04 persistence IT for a `participant_count` update.
+
+After Phase 3, UC01–UC06's DoDs are fully ticked except the gate-shaped items.
+
+## Phase 4 — Naming (only if Phase 0 chose "rename")
+
+- [ ] **B1** `GuideOperationsConfig` → `GuideConfig`; **B2**
+      `GuideOperationsExceptionHandler` → `GuideExceptionHandler`. Mechanical rename plus
+      every `SDD:` Javadoc citation and `GuideTourControllerTest`'s reference.
+
+## Phase 5 — Make the rules mechanical
+
+This is what stops the baseline decaying again. Do it *after* Phases 2–4 so it starts green.
+
+- [ ] **G2 ArchUnit** — the highest-value item in this plan. Encode
+      `architecture.definition.md` § 6's seven rules, § 11's context registry (including
+      no `booking` ↔ `guide` imports), the `*RestAPI`/`*Controller` annotation split, and
+      the no-`Instant.now()`-in-domain rule. `architecture.definition.md` § 1 has
+      anticipated this since March. New test dependency → ADR trigger 2.
+      Turns `ddd-hex-reviewer` from the only guard into a second opinion.
+- [ ] **G3** apply Spotless (already in the catalog, just unapplied) and add it to the gates.
+- [ ] **G4** CI running `./gradlew clean test build` plus the new ArchUnit and Spotless
+      checks on push.
+- [ ] **G5** confirm jacoco stays out, and say so in `test.definition.md` § 6 so its
+      absence reads as a decision rather than an omission.
+
+## Phase 6 — Feature work
+
+Now genuinely `/loop-uc`-drivable, since the DoDs are honest and the reviewer is clean.
+
+- [ ] **UC11** CompleteTour — unblocks UC07 by publishing `TourCompleted` (H3)
+- [ ] **UC07** MarkBookingCompleted
+- [ ] **UC08** CancelBookingByUser — resolve **H1** first; modifies UC03's endpoint and spec
+- [ ] **H2** ADR for the synchronous cross-context call, then **UC12** + **UC09** together
+
+## Sequencing
 
 ```
-com.dominikgaller.alpinebooking
-├── bootstrap
-│   ├── AlpineBookingApplication
-│   ├── BookingConfig           (unchanged)
-│   └── GuideConfig   (new)
-├── shared.domain
-│   ├── event.DomainEvent       (unchanged)
-│   └── TourId                  (moved from booking.core.domain)
-├── booking                     (TourBooking and its ports only — no GuideTour refs)
-└── guide             (new bounded context)
-    ├── core.domain
-    │   ├── GuideTour
-    │   ├── GuideTourId
-    │   ├── GuideTourStatus
-    │   ├── event.TourStarted
-    │   └── exception.*
-    ├── core.inport
-    │   ├── command.StartTourCommand
-    │   ├── result.StartTourResult
-    │   └── usecase.StartTourUseCase
-    ├── core.outport.GuideTourRepository
-    ├── inbound.driver.StartTourDriver
-    ├── inbound.rest
-    │   ├── GuideExceptionHandler (new — replaces GuideTour handlers in BookingExceptionHandler)
-    │   ├── GuideTourController
-    │   ├── GuideTourRestAPI
-    │   ├── request.StartTourRequest
-    │   └── response.StartTourResponse
-    └── outbound.persistence.write
-        ├── GuideTourJooqRepository
-        └── GuideTourMapper
+Phase 0 (decisions) ─┬─> Phase 1 (docs) ────────┐
+                     ├─> Phase 2 (arch fixes) ──┼─> Phase 5 (ArchUnit/CI) ─> Phase 6
+                     └─> Phase 4 (renames) ─────┤
+                         Phase 3 (test gaps) ───┘
 ```
 
----
+Phases 1 and 3 have no dependency on Phase 0 except where noted (E1, U1) and can start
+immediately. Phase 5 must come last of the cleanup phases or ArchUnit lands red.
 
-## Inventory of Changes
+## Definition of Done for this plan
 
-### Move and re-package (package declaration + imports only)
-
-| Old location | New location |
-|---|---|
-| `booking.core.domain.TourId` | `shared.domain.TourId` |
-| `booking.core.domain.GuideTour` | `guide.core.domain.GuideTour` |
-| `booking.core.domain.GuideTourId` | `guide.core.domain.GuideTourId` |
-| `booking.core.domain.GuideTourStatus` | `guide.core.domain.GuideTourStatus` |
-| `booking.core.domain.event.TourStarted` | `guide.core.domain.event.TourStarted` |
-| `booking.core.domain.exception.GuideTourNotFoundException` | `guide.core.domain.exception.GuideTourNotFoundException` |
-| `booking.core.domain.exception.InvalidGuideTourStateException` | `guide.core.domain.exception.InvalidGuideTourStateException` |
-| `booking.core.domain.exception.TourStartTooEarlyException` | `guide.core.domain.exception.TourStartTooEarlyException` |
-| `booking.core.outport.GuideTourRepository` | `guide.core.outport.GuideTourRepository` |
-| `booking.core.inport.command.StartTourCommand` | `guide.core.inport.command.StartTourCommand` |
-| `booking.core.inport.result.StartTourResult` | `guide.core.inport.result.StartTourResult` |
-| `booking.core.inport.usecase.StartTourUseCase` | `guide.core.inport.usecase.StartTourUseCase` |
-| `booking.inbound.driver.StartTourDriver` | `guide.inbound.driver.StartTourDriver` |
-| `booking.inbound.rest.GuideTourController` | `guide.inbound.rest.GuideTourController` |
-| `booking.inbound.rest.GuideTourRestAPI` | `guide.inbound.rest.GuideTourRestAPI` |
-| `booking.inbound.rest.request.StartTourRequest` | `guide.inbound.rest.request.StartTourRequest` |
-| `booking.inbound.rest.response.StartTourResponse` | `guide.inbound.rest.response.StartTourResponse` |
-| `booking.outbound.persistence.write.GuideTourJooqRepository` | `guide.outbound.persistence.write.GuideTourJooqRepository` |
-| `booking.outbound.persistence.write.GuideTourMapper` | `guide.outbound.persistence.write.GuideTourMapper` |
-
-### Tests (same moves)
-
-| Old location | New location |
-|---|---|
-| `booking.core.domain.GuideTourTest` | `guide.core.domain.GuideTourTest` |
-| `booking.inbound.rest.GuideTourControllerTest` | `guide.inbound.rest.GuideTourControllerTest` |
-| `booking.outbound.persistence.write.GuideTourJooqRepositoryIT` | `guide.outbound.persistence.write.GuideTourJooqRepositoryIT` |
-
-### New files
-
-| File | Purpose |
-|---|---|
-| `guide.inbound.rest.GuideExceptionHandler` | Exception handler for `GuideTour*` exceptions, extracted from `BookingExceptionHandler` |
-| `bootstrap.GuideConfig` | Wiring config for `guide` context (ClockPort and DomainEventPublisher are already beans — no new adapters needed) |
-
-### Modified files
-
-| File | Change |
-|---|---|
-| `booking.core.domain.TourBooking` | Update `TourId` import → `shared.domain.TourId` |
-| `booking.core.domain.event.TourBookingRequested` | Update `TourId` import |
-| `booking.core.outport.AvailabilityChecker` | Update `TourId` import |
-| `booking.core.inport.command.RequestTourBookingCommand` | No `TourId` reference (uses String) — unchanged |
-| `booking.outbound.persistence.write.TourBookingMapper` | Update `TourId` import |
-| `booking.inbound.rest.BookingExceptionHandler` | Remove `GuideTour*` exception handlers; update SDD Javadoc |
-| All `booking.*` files that import `booking.core.domain.TourId` | Update import |
-| All moved files | Update `package` declaration and all imports |
-
----
-
-## Risks
-
-- **`TourId` is used in 5+ places in `booking`**: all must be updated atomically. A compilation
-  failure will catch any missed update.
-- **`GuideTourJooqRepository` uses jOOQ generated types** (`GuideTourRecord`): the generated
-  package (`com.dominikgaller.alpinebooking.jooq.*`) is unaffected — only the repository
-  wrapper moves.
-- **`GuideTourControllerTest` uses `@SpringBootTest(classes = AlpineBookingApplication.class)`**:
-  this works as long as `AlpineBookingApplication` scan covers the new `guide` package,
-  which it does (`scanBasePackages = "com.dominikgaller.alpinebooking"`).
-
----
-
-## Implementation Steps
-
-1. Move `TourId` to `shared.domain` — update all imports in `booking` files
-2. Create all `guide` domain files (re-package `GuideTour`, `GuideTourId`, `GuideTourStatus`, exceptions, `TourStarted`)
-3. Create `guide` inport files (`StartTourCommand`, `StartTourResult`, `StartTourUseCase`)
-4. Create `guide` outport file (`GuideTourRepository`)
-5. Create `guide` driver (`StartTourDriver`)
-6. Create `guide` REST layer (`GuideTourRestAPI`, `GuideTourController`, DTOs, `GuideExceptionHandler`)
-7. Create `guide` persistence layer (`GuideTourMapper`, `GuideTourJooqRepository`)
-8. Create `bootstrap.GuideConfig`
-9. Migrate tests to `guide.*` packages
-10. Clean up `booking`: remove old files, strip `GuideTour*` handlers from `BookingExceptionHandler`
-11. Run `./gradlew clean test` — full suite green
-12. Run `./gradlew build`
-
----
-
-## Acceptance Criteria
-
-- `booking.*` contains zero references to `GuideTour`, `GuideTourId`, `GuideTourStatus`, `TourStarted`, or `guide.*`
-- `guide.*` contains zero references to `booking.*` (only `shared.*` allowed)
-- All existing tests pass unchanged (only package declarations differ)
-- `./gradlew clean test` and `./gradlew build` succeed
+- [ ] `ddd-hex-reviewer` returns `PASS` on the full tree with an empty `Pre-existing` list
+- [ ] `spec-documenter` reports no `Conflicts` and no `Gaps`
+- [ ] Every UC01–UC06 DoD box ticked with named evidence
+- [ ] `Undocumented` is empty — no rule the reviewer needs is unwritten
+- [ ] ArchUnit enforces `architecture.definition.md` § 6 and § 11 in CI
+- [ ] `./gradlew clean test build` green from a clean clone, and `app/data/` never appears

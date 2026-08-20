@@ -44,9 +44,15 @@ dependencies {
     runtimeOnly(libs.jooq.codegen)
 }
 
+// Toolchain is the single authoritative Java version declaration (ADR 0006).
+// The vendor is pinned so the build is reproducible: without it, Gradle's
+// auto-detection matches any locally installed JDK reporting language version 25 —
+// including early-access builds — so the selected JDK would depend on the machine.
+// foojay-resolver (see settings.gradle.kts) provisions Temurin if it is absent.
 java {
     toolchain {
         languageVersion.set(javaVersion)
+        vendor.set(JvmVendorSpec.ADOPTIUM)
     }
 }
 

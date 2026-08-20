@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew clean:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew test:*)",
+      "Bash(./gradlew compileJava:*)",
+      "Bash(./gradlew :app:test:*)",
+      "Bash(./gradlew :app:compileJava:*)",
+      "Bash(./gradlew :app:jooqCodegen:*)",
+      "Bash(./gradlew flywayMigrate:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
+    ]
+  }
+}

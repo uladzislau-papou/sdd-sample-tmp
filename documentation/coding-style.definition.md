@@ -41,7 +41,7 @@ Tests (naming and structure)
 
 ## 2. Language Level & Modern Java Policy
 
-Target: Java 21+
+Target: Java 25 (LTS baseline — `adr/0006-java-25-baseline.adr.md`)
 
 ### 2.1 record
 
@@ -83,19 +83,29 @@ sealed interface for role/contract types.
 
 ### 3.2 Layer naming
 
--   domain --- domain model
--   application --- use cases / drivers
--   in --- inbound ports
--   out --- outbound ports
--   adapter.\* --- technical adapters
+**Defined in `architecture.definition.md` § 3 and § 4. Not restated here.**
 
-Dependency direction: adapter -\> application -\> domain
+The ontology is `core` (`domain` / `inport` / `outport`) · `inbound`
+(`driver` / `listener` / `rest`) · `outbound` (`persistence` / `integration`) ·
+`bootstrap` · `shared`.
+
+This section previously described a different layering — `domain / application / in /
+out / adapter.*`, with direction `adapter → application → domain`. No code in the
+repository has ever followed it, and it contradicted the higher-ranked
+`architecture.definition.md`. It was dead text that would mislead anyone reading it as
+authoritative, so it is removed rather than reconciled
+(`file-usage.definition.md` § 4).
 
 ### 3.3 REST split
 
--   \*RestAPI = inbound port
--   \*Controller = adapter implementing port
+-   \*RestAPI = the HTTP contract: an interface carrying all Spring MVC annotations
+-   \*Controller = the web adapter: implements \*RestAPI, carries no HTTP annotations
 -   Controllers MUST only map, normalize, delegate, translate errors
+-   Controllers depend on `core.inport` interfaces, never on drivers
+
+Note on terminology: `*RestAPI` is **not** the inbound port. The inbound port is
+`core.inport.usecase.*UseCase`; `*RestAPI` is a delivery-side interface that exists so
+the HTTP contract sits in one place. See `architecture.definition.md` § 4.5.
 
 ------------------------------------------------------------------------
 

@@ -11,6 +11,20 @@ Tests are not optional. They are the enforcement mechanism for:
 - Persistence correctness (Flyway + jOOQ)
 
 
+# 0. Scope of This Document
+
+This document defines **what** a test asserts: taxonomy, assertion rules,
+fixtures, naming, coverage, and the canonical quality gates (§ 7).
+
+It does **not** define *when* a test is written. That is `tdd.definition.md`,
+which mandates test-first (RED before any production code) and owns the RED
+evidence rule. The two documents are complementary and must not restate each
+other.
+
+- "Which assertion style, at which layer, covering what?" → this document
+- "Written before or after the code, and how is that proven?" → `tdd.definition.md`
+
+
 # 1. Tooling Baseline
 
 ## 1.1 Frameworks
@@ -29,6 +43,34 @@ Domain tests SHOULD NOT require Spring.
 - **H2** is the default database for tests.
 - **Flyway** MUST run migrations for any test that touches persistence.
 - **jOOQ** is used to read/write database state in persistence adapter tests (no JPA/Hibernate).
+
+### No test may create a file-based database
+
+`application-test.yml` (in-memory H2) is **profile-specific**: it loads only when the
+`test` profile is active. A test that boots a Spring context without activating it
+falls back to `application.yml` — the *production* datasource, `jdbc:h2:file:./data/…`
+— and writes a real database file relative to the test JVM's working directory
+(`app/`, for a Gradle `Test` task).
+
+That file survives across runs, and `./gradlew clean` does not remove it, so run *n+1*
+inherits run *n*'s state. This is order-dependence (§ 8) and latent flakiness (§ 7)
+arriving through configuration rather than through test code.
+
+Therefore:
+
+- Any test that starts a Spring context and genuinely needs a database MUST declare
+  `@ActiveProfiles("test")`.
+- A test that does **not** need a database MUST NOT start one — use a slice
+  (§ 2.4), which auto-configures no DataSource at all.
+- `app/data/` must never appear after `./gradlew clean test`. If it does, a test is
+  running against the production datasource.
+
+Because `bootstrap` sits outside every bounded-context package
+(`architecture.definition.md` § 4.9), `@WebMvcTest` and `@SpringBootTest` cannot find
+`AlpineBookingApplication` by searching upwards. Each slice therefore supplies its own
+minimal `@SpringBootApplication` in its own test package — `WebTestApplication`,
+`GuideWebTestApplication`, `PersistenceTestApplication`, `GuidePersistenceTestApplication`.
+Follow that pattern rather than widening a slice to the whole application.
 
 
 # 2. Test Taxonomy (Required Types)
@@ -51,7 +93,7 @@ Examples of assertions (style guidance):
 
 ## 2.2 Use Case Tests (Mandatory)
 **Scope:** Application layer (Use Cases / Application Services) with ports mocked/stubbed.
-ALways prefer good stubs before mocks.
+Always prefer good stubs before mocks.
 
 Rules:
 - SHOULD be Spring-free where possible.
@@ -129,9 +171,28 @@ Rules:
 ## 5.1 Test Names
 Tests MUST be behavior-driven and domain-oriented.
 
-Preferred styles:
-- `should_<expected_behavior>_when_<condition>`
-- AND JUnit5 `@DisplayName` with Given/When/Then narrative
+**Convention: `<method>_<condition>_<expectedResult>`.**
+
+```
+confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed
+markActive_idempotent_whenAlreadyActive_noEventEmitted
+start_usesClockPort_whenStartedAtIsEmpty
+update_changesParticipantCount_inDatabase
+```
+
+The method under test comes first, so tests for one method sort together and a failure
+name points straight at the production method. Where there is no single method — value
+object construction, for instance — the subject takes its place
+(`value0Throws`, `blankEmailThrows`).
+
+`@DisplayName` with a Given/When/Then narrative MAY be added where the name alone is
+not self-explanatory. It is not required, and none of the current tests use it.
+
+> This section previously listed `should_<behavior>_when_<condition>` as the preferred
+> style. **No test in the repository has ever used it** — all 145 use the
+> method-first form above. The written rule was documenting an aspiration rather than
+> the convention, so it has been replaced with the real one. If the aspiration is
+> preferred, that is a rename of every test method and belongs in its own increment.
 
 ## 5.2 Package Placement
 Tests SHOULD mirror production packages to support navigation and traceability.
@@ -159,13 +220,27 @@ If coverage is intentionally missing, it MUST be documented in the Use Case Spec
 
 # 7. Quality Gates (Merge Blockers)
 
+**Canonical list. This is the only quality-gate list in the project** — it
+supersedes the copies that previously lived in `sdd.playbook.md` § 5 and
+`technical.spec.md`. Both now point here.
+
 A change MUST NOT be considered complete unless:
 
-- `./gradlew clean test` succeeds
-- `./gradlew build` succeeds
-- All new/changed behavior is test-covered according to this definition
-- No ignored/disabled tests are introduced
-- No flaky tests are introduced
+1. `./gradlew clean test` succeeds
+2. `./gradlew build` succeeds
+3. All new/changed behavior is test-covered according to this definition
+4. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2)
+5. No ignored/disabled tests are introduced
+6. No flaky tests are introduced
+7. No test was weakened, loosened, or deleted to reach green
+8. `ddd-hex-reviewer` returns `PASS`
+9. Specs, port specs and `rest/*.http` reflect the code as built
+
+Gates are merge blockers, not advisories — see `sdd.playbook.md` § 5 for the
+principle. There is no partial credit.
+
+The outer loop (`loop.playbook.md`) uses this list verbatim as one of its three
+exit conditions, which is why it must exist in exactly one place.
 
 
 # 8. Anti-Patterns (Forbidden)
@@ -185,7 +260,12 @@ Every code change MUST be traceable to at least one spec.
 
 Minimum traceability for tests:
 - Domain Test ↔ Domain Spec / invariant reference
-- Use Case Test ↔ Use Case Spec acceptance criteria
+- Use Case Test ↔ Use Case Spec `AC-NN` (cite the identifier, not the prose)
 - Adapter Integration Test ↔ Port specification / adapter contract
+- API / Web Test ↔ Use Case Spec REST section + the matching `rest/uc<nn>-*.http` request
 
 If a test cannot be traced to a spec, the spec is missing or the test is noise.
+
+Traceability runs in both directions. A DoD item (`use-case spec` § 10) must
+name the test that satisfies it — `covered by <TestClass>.<method>`, not
+"implemented". An unnamed DoD item is untickable.

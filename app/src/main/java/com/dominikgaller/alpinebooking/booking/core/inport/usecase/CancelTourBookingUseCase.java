@@ -14,7 +14,7 @@ import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBook
  * <p>The transaction boundary is owned by the driver implementation.
  * Callers (e.g., REST controllers) must not wrap this call in their own transaction.
  *
- * <p>SDD: See {@code documentation/use-cases/uc03-cancle-tour-booking.spec.md}.
+ * <p>SDD: See {@code documentation/use-cases/uc03-cancel-tour-booking.spec.md}.
  */
 public interface CancelTourBookingUseCase {
 

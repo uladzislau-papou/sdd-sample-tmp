@@ -13,7 +13,9 @@ import java.time.Instant;
  *
  * <p>Immutable. Published after the guide tour's transaction commits (see ADR 0002).
  *
- * <p>SDD: See {@code documentation/use-cases/uc05-start-tour.spec.md}, section 6.
+ * <p>SDD: See {@code documentation/use-cases/uc05-start-tour.spec.md}, section 6,
+ *          and {@code documentation/adr/0005-bounded-context-identity-boundaries.adr.md}
+ *          for the foreign-identity rule.
  */
 public record TourStarted(
         String guideTourId,

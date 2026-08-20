@@ -1,9 +1,32 @@
-Based on the requirements defined in use-case $ARGUMENTS 
-find all necessary specifications, define missing ones, 
-define missing requirements and architecture decisions 
-and create a file `plan.md` in the project root directory.
-The `plan.md` file MUST contain the specification,
-clarification and implementation steps
-you want to do. Do not change any files.
+---
+description: Turn a use case spec into plan.md — find and fill spec gaps, then propose implementation steps
+argument-hint: uc05 (or UC05)
+---
 
-Ask questions to clarify if necessary. 
+Based on the requirements defined in use-case $ARGUMENTS, find all necessary
+specifications, define missing ones, define missing requirements and architecture
+decisions, and create a file `plan.md` in the project root directory.
+
+Resolve the use case by globbing `documentation/use-cases/uc<nn>-*.spec.md` — do
+not guess the filename stem.
+
+The `plan.md` file MUST contain the specification, clarification and
+implementation steps you want to do. Do not change any files.
+
+Read `CLAUDE.md` for the authority order first, then the always-read documents
+listed there.
+
+The plan MUST account for:
+
+- **`## 10. Definition of Done`** — if the spec has none, or has criteria that are
+  not objectively checkable, say so. It is the exit condition for `/loop-uc`
+  (`loop.playbook.md` § 1), so a vague DoD is a blocking spec defect.
+- **`AC-NN` identifiers** in § 7, and which test will cover each
+  (`sdd.playbook.md` § 4).
+- **TDD ordering** — the plan's steps are RED-first, inside-out per
+  `tdd.definition.md` § 3. Do not plan "implement X, then test X".
+- **ADR triggers** — check `sdd.playbook.md` § 6. Any trigger means the ADR comes
+  before implementation.
+- **A `SUPERSEDED` spec is not a target.** Point at its successors instead.
+
+Ask questions to clarify if necessary.

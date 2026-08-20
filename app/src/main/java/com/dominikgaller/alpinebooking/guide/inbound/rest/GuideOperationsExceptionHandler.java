@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Translates guideoperations domain exceptions into HTTP error responses.
+ * Translates guide domain exceptions into HTTP error responses.
  *
  * <p>Each handler returns {@code { "error": "<message>" }} with the appropriate HTTP status.
  *

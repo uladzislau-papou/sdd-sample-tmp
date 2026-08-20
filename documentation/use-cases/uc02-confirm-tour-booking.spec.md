@@ -29,40 +29,30 @@ Validation rules:
 
 ## 3. Output Contract
 
-### Success
-
-HTTP `200 OK`
+Return type:
+- `status` (String – always `"CONFIRMED"` on success), HTTP `200 OK`
 
 ```json
 { "status": "CONFIRMED" }
 ```
 
-### Errors
+Error types:
 
-| Error | Exception | HTTP Status | Response body |
-|-------|-----------|-------------|---------------|
-| Booking not found | `BookingNotFoundException` | `404 Not Found` | `{ "error": "<message>" }` |
-| Invalid state transition | `InvalidBookingStateException` | `409 Conflict` | `{ "error": "<message>" }` |
+| Exception | Condition | HTTP Status |
+|-----------|-----------|-------------|
+| `BookingNotFoundException` | no booking with the given id | 404 |
+| `InvalidBookingStateException` | booking exists but state ≠ REQUESTED | 409 |
 
-
-## 4. REST Endpoint
-
-```
-POST /api/v1/bookings/{bookingId}/confirm
-```
-
-- No request body
-- Path variable: `bookingId` (UUID string)
-- Success: `200 OK` with `{ "status": "CONFIRMED" }`
+All errors return `{ "error": "<message>" }`.
 
 
-## 5. Preconditions
+## 4. Preconditions
 
 - Booking must exist
 - State must be REQUESTED
 
 
-## 6. Flow
+## 5. Flow
 
 1. Parse `BookingId` from path variable
 2. Load aggregate via `TourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
@@ -72,22 +62,33 @@ POST /api/v1/bookings/{bookingId}/confirm
 6. Return `{ "status": "CONFIRMED" }`
 
 
-## 7. Side Effects
+## 6. Side Effects
 
 - Persistence: status column updated to `CONFIRMED`
 - Event publication: `TourBookingConfirmed` published after transaction commit (ADR-0002)
 
 
-## 8. Acceptance Criteria
+## 7. Acceptance Criteria
 
+**AC-01 – Happy Path**
 Given a booking in REQUESTED state
 When `POST /api/v1/bookings/{bookingId}/confirm` is called
 Then the response is `200 OK` with `{ "status": "CONFIRMED" }`
 And the booking is persisted with status `CONFIRMED`
 And a `TourBookingConfirmed` domain event is published after commit
 
+**AC-02 – Booking Not Found**
+Given no booking exists for the given id
+When confirm is called
+Then HTTP 404 is returned and nothing is persisted
 
-## 9. Failure Scenarios
+**AC-03 – Invalid State Transition**
+Given a booking that is not in REQUESTED state (e.g. already CONFIRMED)
+When confirm is called
+Then HTTP 409 is returned and the status is unchanged
+
+
+## 8. Failure Scenarios
 
 | Scenario | Exception | HTTP |
 |----------|-----------|------|
@@ -95,11 +96,52 @@ And a `TourBookingConfirmed` domain event is published after commit
 | Booking exists but is not in REQUESTED state (e.g. already CONFIRMED) | `InvalidBookingStateException` | 409 |
 
 
-## 10. Test Requirements
+## 9. REST Contract
 
-Must include:
-- Happy path test (domain, driver, REST, persistence)
-- `confirm()` guard: throws `InvalidBookingStateException` when state ≠ REQUESTED
-- Not-found guard: throws `BookingNotFoundException` when ID unknown
-- Persistence verification: `findById` after `update` returns CONFIRMED status
-- Event verification: `TourBookingConfirmed` is published on happy path
+Endpoint:
+```
+POST /api/v1/bookings/{bookingId}/confirm
+```
+
+- No request body
+- Path variable: `bookingId` (UUID string)
+
+Response body (200 OK):
+```json
+{ "status": "CONFIRMED" }
+```
+
+HTTP status mapping:
+- `200 OK` – booking confirmed
+- `404 Not Found` – booking does not exist
+- `409 Conflict` – state ≠ REQUESTED
+
+
+## 10. Definition of Done
+
+### Behaviour
+- [x] AC-01 covered by `TourBookingTest.confirm_transitionsStatusToConfirmed`,
+      `ConfirmTourBookingDriverTest.confirm_happyPath_returnsConfirmedStatus`,
+      `ConfirmTourBookingDriverTest.confirm_happyPath_callsUpdateOnRepository`,
+      `TourBookingControllerTest.confirmBooking_returns200_withConfirmedStatus`
+- [x] AC-02 covered by `ConfirmTourBookingDriverTest.confirm_throwsBookingNotFoundException_whenNotFound`,
+      `TourBookingControllerTest.confirmBooking_returns404_whenNotFound`
+- [x] AC-03 covered by `TourBookingTest.confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed`,
+      `ConfirmTourBookingDriverTest.confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed`,
+      `ConfirmTourBookingDriverTest.confirm_doesNotCallUpdate_whenStateInvalid`,
+      `TourBookingControllerTest.confirmBooking_returns409_whenInvalidState`
+- [x] `TourBookingConfirmed` emission covered by
+      `TourBookingTest.confirm_publishesTourBookingConfirmedEvent`,
+      `TourBookingTest.pullDomainEvents_returnsOnlyConfirmedEvent_afterPullingRequestedAndCallingConfirm`,
+      `ConfirmTourBookingDriverTest.confirm_happyPath_publishesTourBookingConfirmedEvent`
+
+### Contracts
+- [x] `rest/uc02-confirm-tour-booking.http` covers 200, 404 and 409
+- [x] Persistence roundtrip covered by `TourBookingJooqRepositoryIT.update_changesStatus_inDatabase`
+- [x] Port specs `ports/tour-booking-repository.outport.spec.md` and
+      `ports/domain-event-publisher.outport.spec.md` reflect the ports as implemented
+
+### Governance
+- [x] Spec sections § 1–9 reconciled against the code on disk
+- [ ] `ddd-hex-reviewer` returns `PASS` (not yet run against this use case)
+- [ ] Quality gates green (`test.definition.md` § 7)

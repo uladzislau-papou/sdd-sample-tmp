@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  *
  * <p>SDD: See {@code documentation/use-cases/uc01-request-tour-booking.spec.md},
  *          {@code documentation/use-cases/uc02-confirm-tour-booking.spec.md},
- *          {@code documentation/use-cases/uc03-cancle-tour-booking.spec.md}, and
+ *          {@code documentation/use-cases/uc03-cancel-tour-booking.spec.md}, and
  *          {@code documentation/use-cases/uc04-change-participants.spec.md}.
  */
 @RequestMapping("/api/v1/bookings")

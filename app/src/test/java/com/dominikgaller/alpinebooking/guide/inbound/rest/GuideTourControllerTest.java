@@ -1,6 +1,5 @@
 package com.dominikgaller.alpinebooking.guide.inbound.rest;
 
-import com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTourId;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTourStatus;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.GuideTourNotFoundException;
@@ -10,9 +9,7 @@ import com.dominikgaller.alpinebooking.guide.core.inport.result.StartTourResult;
 import com.dominikgaller.alpinebooking.guide.core.inport.usecase.StartTourUseCase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,16 +23,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Web layer tests for {@link GuideTourController}.
+ * Web layer slice tests for {@link GuideTourController}.
  *
- * <p>Uses {@link SpringBootTest} with {@link AutoConfigureMockMvc} to start the full
- * application context with a mock web environment. The use case port is replaced by a
- * Mockito mock via {@link MockitoBean} so no real persistence runs.
- * {@link GuideOperationsExceptionHandler} is loaded automatically as part of the context.
+ * <p>Uses {@link WebMvcTest} so only the web layer is instantiated: no DataSource, no
+ * Flyway, no jOOQ. The inbound port is replaced by a Mockito mock via {@link MockitoBean},
+ * so this test asserts HTTP concerns only — routing, status mapping, request validation
+ * and the error response contract. {@link GuideOperationsExceptionHandler} is picked up
+ * because {@code @WebMvcTest} includes {@code @RestControllerAdvice} beans.
+ *
+ * <p>SDD: slice test per {@code documentation/test.definition.md} section 2.4. Booting the
+ * full application here previously created a file-based H2 database under {@code app/data/},
+ * because {@code application-test.yml} is profile-specific and the {@code test} profile was
+ * never activated.
  */
-@SpringBootTest(classes = AlpineBookingApplication.class)
-@AutoConfigureMockMvc
-@AutoConfigureRestTestClient
+@WebMvcTest(controllers = GuideTourController.class)
 class GuideTourControllerTest {
 
     private static final String GUIDE_TOUR_ID = GuideTourId.generate().value().toString();

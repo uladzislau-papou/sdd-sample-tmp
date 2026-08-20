@@ -142,12 +142,54 @@ HTTP status mapping:
 - `502` – availability check infrastructure failure
 
 
-## 10. Test Requirements
+## 10. Definition of Done
 
-Must include:
-- Happy path test (domain, use case, persistence IT, web)
-- Capacity exceeded test (domain, use case, web)
-- Invalid participant count test (domain, web)
-- Past tour date test (domain, web)
-- Availability failure test (use case, web)
-- Persistence interaction verification (use case stub, persistence IT)
+### Behaviour
+- [x] AC-01 covered by `TourBookingTest.requestSetsStatusToRequested`,
+      `TourBookingTest.requestStoresAllFieldsCorrectly`,
+      `RequestTourBookingDriverTest.happyPath_returnsNonNullBookingIdAndStatusRequested`,
+      `TourBookingControllerTest.postWithValidBody_returns201WithBookingIdAndStatus`
+- [x] AC-02 covered by `TourBookingTest.participantCountExceedingCapacityThrowsCapacityExceededException`,
+      `RequestTourBookingDriverTest.capacityExceeded_throwsCapacityExceededExceptionAndSaveNotCalled`,
+      `TourBookingControllerTest.postWithCapacityExceeded_returns409`
+- [x] AC-03 covered by `ParticipantCountTest.value0Throws`, `ParticipantCountTest.negativeValueThrows`
+- [x] AC-04 covered by `TourBookingTest.pastTourDateThrowsInvalidBookingRequestException`,
+      `TourDateTest.isInFutureReturnsFalseForYesterday`, `TourDateTest.isInFutureReturnsFalseForToday`
+- [x] AC-05 covered by `RequestTourBookingDriverTest.availabilityFailure_propagatesExceptionAndSaveNotCalled`,
+      `TourBookingControllerTest.postWithAvailabilityFailure_returns502`
+- [x] `TourBooking` invariants covered by `TourBookingTest`; value object invariants by
+      `BookingIdTest`, `ParticipantContactTest`, `ParticipantCountTest`, `TourDateTest`
+- [x] `TourBookingRequested` emission covered by
+      `TourBookingTest.pullDomainEventsReturnsExactlyOneTourBookingRequested`,
+      `TourBookingTest.pullDomainEventsCalledTwiceReturnsEmptyListOnSecondCall`,
+      `RequestTourBookingDriverTest.happyPath_publisherReceivesExactlyOneTourBookingRequested`
+- [x] AC-03 rejected at the REST boundary with 400 —
+      `TourBookingControllerTest.postWithParticipantCountBelowMinimum_returns400`
+      (Bean Validation `@Min(1)`, a syntactic rule at the boundary)
+- [x] AC-04 mapping covered by
+      `TourBookingControllerTest.postWithInvalidBookingRequestFromDomain_returns400`.
+      "Tour date must be in the future" is **semantic** — it depends on the current
+      time — so the domain owns it (`TourDate` + `ClockPort`) and there is deliberately
+      no `@Future` on the request DTO, which would duplicate the rule outside the
+      domain. The web layer owns only the `InvalidBookingRequestException` → 400
+      mapping, which is what this test asserts
+
+### Contracts
+- [x] `rest/uc01-request-tour-booking.http` has a request per status in § 9 — 201, 400
+      (three variants), 409 and 502. **Two are annotated as not locally reproducible**,
+      both because of `StubAvailabilityChecker`: it never fails (so 502 is unreachable)
+      and it returns `AvailableCapacity(Integer.MAX_VALUE)` (so no `participantCount`
+      can exceed it and 409 is unreachable). Both are reachable only by binding a
+      different `AvailabilityChecker` in `bootstrap/BookingConfig`; both are covered by
+      unit and web tests
+- [x] Persistence roundtrip covered by `TourBookingJooqRepositoryIT.save_persistsAllFields`,
+      `.findById_returnsAggregate_afterSave`, `.save_duplicateId_throwsDuplicateKeyException`
+- [x] Port specs `ports/availability-checker.outport.spec.md`,
+      `ports/tour-booking-repository.outport.spec.md`,
+      `ports/domain-event-publisher.outport.spec.md`,
+      `ports/request-tour-booking.inport.spec.md` reflect the ports as implemented
+
+### Governance
+- [x] Spec sections § 1–9 reconciled against the code on disk
+- [ ] `ddd-hex-reviewer` returns `PASS` (not yet run against this use case)
+- [ ] Quality gates green (`test.definition.md` § 7)

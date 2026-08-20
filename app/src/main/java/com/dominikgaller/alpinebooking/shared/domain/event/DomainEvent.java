@@ -8,7 +8,7 @@ package com.dominikgaller.alpinebooking.shared.domain.event;
  *
  * <p>Framework-free: no Spring, no IO.
  *
- * <p>SDD: See {@code documentation/architecture.definition.md}, section 10.
+ * <p>SDD: See {@code documentation/architecture.definition.md}, section 9 (Shared Kernel).
  */
 public interface DomainEvent {
 }

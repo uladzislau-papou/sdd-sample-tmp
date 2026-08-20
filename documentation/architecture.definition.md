@@ -35,9 +35,11 @@ com.dominikgaller.alpinebooking              ← shared root
 │   ├── AlpineBookingApplication
 │   └── <ContextName>Config
 ├── shared                                   ← shared kernel (cross-context building blocks)
-│   └── domain
-│       └── event
-│           └── DomainEvent                  ← marker interface for all domain events
+│   ├── domain                               ← see § 9
+│   │   └── event
+│   │       └── DomainEvent                  ← marker interface for all domain events
+│   ├── outport                              ← ports needed by more than one context
+│   └── outbound                             ← adapters implementing shared.outport
 └── <bounded-context>                        ← one sub-package per bounded context (e.g. booking)
     ├── core
     │   ├── domain
@@ -315,22 +317,135 @@ Guiding rule:
 - Never call Instant.now() in the domain.
 - Use an outbound port ClockPort or provide time from application service.
 
-## 10. Shared Kernel (`shared`)
+## 9. Shared Kernel (`shared`)
 
 Cross-cutting building blocks that are not owned by any single bounded context.
 
-### `shared.domain.event`
+```
+shared
+├── domain
+│   ├── TourId                    ← identity owned by no context (ADR 0005 category 3)
+│   └── event
+│       ├── DomainEvent           ← marker interface
+│       └── <CrossContextEvent>   ← e.g. TourStarted
+├── outport                       ← ports every context needs
+│   ├── ClockPort
+│   └── DomainEventPublisher
+└── outbound                      ← adapters implementing shared.outport
+    ├── clock
+    └── integration
+```
 
-- Contains `DomainEvent` — the marker interface all domain events implement.
+### `shared.domain` and `shared.domain.event`
+
+- `DomainEvent` — the marker interface all domain events implement.
+- Cross-context integration events, so a consuming context need not depend on the
+  publishing one (e.g. `TourStarted`; see § 11 rule 3 and ADR 0002).
+- Identities owned by no context in this system (`TourId`; ADR 0005 category 3).
 - Framework-free; no Spring, no IO.
-- Any bounded context may depend on `shared`; `shared` must not depend on any bounded context.
+
+### `shared.outport`
+
+Ports the core of **more than one** context needs, where neither context owns the
+abstraction — `ClockPort`, `DomainEventPublisher`.
+
+A port used by exactly one context belongs in that context's `core.outport`, not here.
+
+### `shared.outbound`
+
+**Adapters implementing `shared.outport` live here, not inside a bounded context.**
+
+Rationale: an implementation of a shared port is not owned by any context either. Putting
+`ClockPort`'s adapter in `booking.outbound.integration` forces `guide` to obtain a clock
+from `BookingConfig`, which makes `guide` depend on `booking`'s wiring for something
+neither context owns. That is a dependency the context split exists to prevent, and it
+made ADR 0003's claim that "both contexts depend on `shared.domain` only" false.
+
+Wiring: `bootstrap.SharedConfig` declares the shared beans. Per-context configs
+(`BookingConfig`, `GuideConfig`) declare only their own context's adapters.
 
 Rules:
 - Keep `shared` minimal. Only add here what is genuinely cross-context.
-- Do not add context-specific types here (e.g., `TourBookingRequested` stays in `booking.core.domain.tourbooking.event`).
+- Do not add context-specific types here (e.g., `TourBookingRequested` stays in
+  `booking.core.domain.tourbooking.event`).
+- `shared` must not depend on any bounded context. Any context may depend on `shared`.
+- The test is **ownership, not usage**. "Both contexts use it" is not sufficient — if one
+  context owns it, the other goes through an event or its own port.
+- A context MUST NOT wire another context's beans. If `guide` needs a shared adapter, it
+  comes from `SharedConfig`, never from `BookingConfig`.
 
-## 11. Anti-patterns (explicitly forbidden)
+## 10. Anti-patterns (explicitly forbidden)
 - JPA annotations in domain objects.
 - Calling repositories from aggregates/entities/value objects.
 - Using primitives for domain concepts when they carry meaning (money, ids, email, etc.).
+  **Scoped for identities:** this applies to identities the context *owns*. A reference to
+  an identity owned by another bounded context MAY be a plain `String` — see
+  `modelling.definition.md` § Identity and `adr/0005-bounded-context-identity-boundaries.adr.md`.
 - Cross-aggregate invariants enforced inside one transaction “because it’s convenient”.
+- Introducing a top-level package that is not registered in § 11.
+
+### Multiple aggregates in one transaction — guideline, not rule
+
+Updating several instances of the **same** aggregate type in one transaction is
+**permitted**. The forbidden thing above is narrower: enforcing an *invariant that spans
+aggregates* inside one transaction, which couples their consistency boundaries.
+
+Guideline: prefer one aggregate per transaction. It bounds lock duration and keeps
+failures isolated.
+
+Where the guideline is deliberately not followed: `TourStartedListener` activates every
+CONFIRMED booking for a tour in a single `REQUIRES_NEW` transaction (UC06). Accepted
+because no invariant spans the bookings — each `markActive` is independent, and the
+listener is simply a fan-out. The alternative (one transaction per booking, plus an
+outbox to make the fan-out reliable) is a substantially larger design for no invariant
+gained.
+
+If a genuine cross-aggregate invariant ever appears, that is not a transaction-scoping
+question but a modelling error: the aggregate boundary is wrong. Raise it rather than
+widening the transaction.
+
+## 11. Registered Bounded Contexts
+
+This table is the **authoritative registry** of top-level packages under
+`com.dominikgaller.alpinebooking`. It exists so that context boundaries are a
+checkable fact rather than a matter of opinion: `ddd-hex-reviewer` enumerates the
+top-level packages on disk and diffs them against this table on every increment.
+
+| Package | Kind | Owns | ADR |
+|---------|------|------|-----|
+| `booking` | Bounded Context | `TourBooking` aggregate — request, confirm, cancel, change participants, activate, complete | — (original context) |
+| `guide` | Bounded Context | `GuideTour` aggregate — guide-side tour lifecycle (start, complete, cancel-by-guide) | `adr/0003-separate-guide-bounded-context.adr.md` |
+| `shared` | Shared Kernel | Cross-context building blocks only (`TourId`, `DomainEvent`, cross-context events, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | `adr/0003-…` (`TourId` extraction) |
+| `bootstrap` | Composition Root | Wiring only. Not a context. See § 4.9. | — |
+
+### Rules
+
+1. **Adding a row requires an ADR.** A new bounded context is an ADR trigger
+   (`sdd.playbook.md` § 6, item 9). `adr/0003-separate-guide-bounded-context.adr.md`
+   is the precedent: it states the context boundary, the integration pattern, and
+   what moved to `shared`.
+2. **A new top-level package that is not in this table is drift**, regardless of
+   how reasonable it looks. The reviewer reports it as `DRIFT` and the increment
+   is blocked until either the package is removed or the ADR exists and this
+   table is updated.
+3. **Contexts do not import each other.** No `booking` → `guide` import and no
+   `guide` → `booking` import. Cross-context communication goes through
+   `shared.domain.event` (see `adr/0002-domain-event-publication.adr.md`) or an
+   explicit outport.
+4. **`shared` must not depend on any bounded context** (§ 9). Adding a
+   context-specific type to `shared` is drift even though `shared` is registered.
+5. Every context follows the same internal ontology (§ 3): `core` /
+   `inbound` / `outbound`. A context that invents its own internal layout is
+   drift.
+
+### Growing the registry
+
+The pressure to add a context usually means one of three things. Only the third
+justifies a new row:
+
+- A new **use case** on an existing aggregate → belongs in the existing context.
+- A new **read model / projection** → `outbound.persistence.read` in the owning
+  context (§ 4.6), not a new context.
+- A genuinely different **ubiquitous language** with its own invariants and
+  lifecycle, where sharing the model would force one aggregate to serve two
+  meanings → new context, with an ADR making that argument explicitly.

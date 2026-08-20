@@ -5,12 +5,12 @@ import java.util.Objects;
 /**
  * Cross-context identity value object for an external tour definition.
  *
- * <p>Used by both the {@code booking} and {@code guideoperations} bounded contexts
+ * <p>Used by both the {@code booking} and {@code guide} bounded contexts
  * to reference the same tour catalog entry without coupling the contexts to each other.
  *
  * <p>Wraps a non-blank {@link String}.
  *
- * <p>SDD: See {@code documentation/adr/0003-separate-guideoperations-bounded-context.adr.md}.
+ * <p>SDD: See {@code documentation/adr/0003-separate-guide-bounded-context.adr.md}.
  */
 public record TourId(String value) {
 

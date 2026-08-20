@@ -1,8 +1,8 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
-import com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
@@ -16,9 +16,7 @@ import com.dominikgaller.alpinebooking.booking.core.inport.usecase.RequestTourBo
 import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,16 +32,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Web layer tests for {@link TourBookingController}.
+ * Web layer slice tests for {@link TourBookingController}.
  *
- * <p>Uses {@link SpringBootTest} with {@link AutoConfigureMockMvc} to start the full
- * application context with a mock web environment. Use case ports are replaced by Mockito
- * mocks via {@link MockitoBean} so no real persistence runs.
- * {@link BookingExceptionHandler} is loaded automatically as part of the context.
+ * <p>Uses {@link WebMvcTest} so only the web layer is instantiated: no DataSource, no
+ * Flyway, no jOOQ. Inbound ports are replaced by Mockito mocks via {@link MockitoBean},
+ * so this test asserts HTTP concerns only — routing, status mapping, request validation
+ * and the error response contract. {@link BookingExceptionHandler} is picked up because
+ * {@code @WebMvcTest} includes {@code @RestControllerAdvice} beans.
+ *
+ * <p>SDD: slice test per {@code documentation/test.definition.md} section 2.4. Booting the
+ * full application here previously created a file-based H2 database under {@code app/data/},
+ * because {@code application-test.yml} is profile-specific and the {@code test} profile was
+ * never activated.
  */
-@SpringBootTest(classes = AlpineBookingApplication.class)
-@AutoConfigureMockMvc
-@AutoConfigureRestTestClient
+@WebMvcTest(controllers = TourBookingController.class)
 class TourBookingControllerTest {
 
     private static final String VALID_BODY = """
@@ -102,6 +104,49 @@ class TourBookingControllerTest {
         mockMvc.perform(post("/api/v1/bookings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bodyMissingTourId))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * UC01 AC-03 at the HTTP boundary. {@code @Min(1)} on
+     * {@code RequestTourBookingRequest.participantCount} is a syntactic rule, so Bean
+     * Validation rejects it before the use case is reached.
+     */
+    @Test
+    void postWithParticipantCountBelowMinimum_returns400() throws Exception {
+        final String bodyWithZeroParticipants = """
+                {
+                  "tourId": "TOUR-42",
+                  "tourDate": "2026-06-15",
+                  "participantCount": 0,
+                  "contactName": "Alice",
+                  "contactEmail": "alice@example.com"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithZeroParticipants))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * UC01 AC-04 at the HTTP boundary.
+     *
+     * <p>"Tour date must be in the future" is a <em>semantic</em> rule that depends on
+     * the current time, so the domain owns it ({@code TourDate} + {@code ClockPort}) and
+     * there is deliberately no {@code @Future} annotation on the request DTO — that would
+     * duplicate the rule outside the domain. What the web layer owns, and what this test
+     * asserts, is the <em>mapping</em>: {@code InvalidBookingRequestException} → 400.
+     */
+    @Test
+    void postWithInvalidBookingRequestFromDomain_returns400() throws Exception {
+        when(useCase.request(any()))
+                .thenThrow(new InvalidBookingRequestException("Tour date must be in the future"));
+
+        mockMvc.perform(post("/api/v1/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY))
                 .andExpect(status().isBadRequest());
     }
 
@@ -229,6 +274,33 @@ class TourBookingControllerTest {
                         .content("{\"newParticipantCount\": 5}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    /**
+     * UC04 400. {@code @Min(1)} on {@code ChangeParticipantsRequest.newParticipantCount}
+     * is a syntactic rule, rejected before the use case is reached.
+     */
+    @Test
+    void changeParticipants_returns400_whenCountBelowMinimum() throws Exception {
+        mockMvc.perform(patch("/api/v1/bookings/{bookingId}/participants", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newParticipantCount\": 0}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * UC04 502. Mirrors {@code postWithAvailabilityFailure_returns502} — an availability
+     * infrastructure failure is not a client error.
+     */
+    @Test
+    void changeParticipants_returns502_whenAvailabilityUnavailable() throws Exception {
+        when(changeParticipantsUseCase.change(any()))
+                .thenThrow(new AvailabilityUnavailableException("infrastructure failure"));
+
+        mockMvc.perform(patch("/api/v1/bookings/{bookingId}/participants", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newParticipantCount\": 5}"))
+                .andExpect(status().isBadGateway());
     }
 
     @Test

@@ -57,9 +57,15 @@ public class TourBookingJooqRepository implements TourBookingRepository {
 
     @Override
     public void update(final TourBooking booking) {
+        // Every mutable field of the aggregate must be written here. Immutable fields
+        // (id, tour_id, tour_date, contact) are set once by save() and never change.
+        // Listing only `status` silently dropped UC04's participant-count and capacity
+        // changes — see TourBookingJooqRepositoryIT.update_changes*_inDatabase.
         final int rowsUpdated = dsl
                 .update(TOUR_BOOKING)
                 .set(TOUR_BOOKING.STATUS, booking.status().name())
+                .set(TOUR_BOOKING.PARTICIPANT_COUNT, booking.participantCount().value())
+                .set(TOUR_BOOKING.AVAILABLE_CAPACITY, booking.availableCapacity().value())
                 .where(TOUR_BOOKING.ID.eq(booking.bookingId().value().toString()))
                 .execute();
         if (rowsUpdated != 1) {

@@ -112,13 +112,68 @@ Silent acceptance of invalid domain state is NOT allowed.
 Entities and Aggregates MUST have identity.
 
 ID Modelling
-- IDs MUST be modeled as Value Objects.
-- IDs SHOULD NOT be primitive types.
+
+The rule is **scoped to the owning bounded context**. Inside the context that owns
+an identity, it is a Value Object. Crossing a context boundary, it is a string.
+
+**Own identities — MUST be Value Objects.**
+- An identity owned by *this* bounded context MUST be modelled as a Value Object.
+- It MUST NOT be a primitive type.
+- It MUST be immutable, and MUST validate its own format at construction.
 - Placement depends on reuse:
   - If only used inside the aggregate → may be defined inline.
-  - If referenced across aggregates → define in a shared domain type package within the bounded context.
+  - If referenced across aggregates → define in a shared domain type package
+    **within the bounded context** (not in `shared`).
 
-IDs MUST be immutable.
+Examples: `BookingId` in `booking.core.domain.tourbooking`, `GuideTourId` in
+`guide.core.domain.guidetour`.
+
+**Foreign identities — MAY be plain `String`.**
+
+A reference to an identity **owned by another bounded context** MAY be carried as a
+plain `String`. This is a deliberate exception, not an oversight, and it applies to
+commands, results, domain events and aggregate state alike.
+
+Rationale: the alternative is to promote every referenced identity into the shared
+kernel so both contexts can share the type. That inverts the point of having
+contexts — it makes them co-evolve through `shared`, so a change to one context's
+identity format becomes a change to the other's compile-time dependencies. Treating
+the boundary as a **serialization boundary** keeps the contexts independent, which is
+worth more than type safety on a value the receiving context only ever stores and
+echoes back.
+
+The receiving context does not own the identity, cannot validate its invariants, and
+must not reason about its structure. A `String` states that honestly; a Value Object
+would imply knowledge the context does not have.
+
+Example: `guideTourId` is owned by `guide` (as `GuideTourId`). Where `booking`
+carries it — `TourBooking.markActive(Instant, String)`, `BookingActivated`,
+`TourStarted` — it is a plain `String` correlation id.
+
+Constraints on foreign identities:
+- MUST be treated as opaque. No parsing, no substring, no format assumptions, no
+  reconstructing the owning context's Value Object from it.
+- MUST NOT carry business meaning in the receiving context. It is a correlation
+  handle for tracing and for calling back through a port — never a value to branch on.
+- SHOULD be named so the ownership is obvious (`guideTourId`, not `id`).
+- If the receiving context starts enforcing rules about a foreign identity, that is a
+  signal the boundary is wrong — raise it rather than promoting the type.
+
+**Identities owned by no context in this system.**
+
+An identifier belonging to an *external* system, referenced by more than one of our
+contexts and owned by none of them, is a third category. It MAY live in `shared` as a
+Value Object, because doing so couples our contexts to the external contract rather
+than to each other — which is what the shared kernel is for
+(`architecture.definition.md` § 9).
+
+`shared.domain.TourId` is the only such case today: there is no `Tour` aggregate in
+this system, the tour catalogue is external, and both contexts must validate the
+reference identically. See `adr/0005-bounded-context-identity-boundaries.adr.md`.
+
+This category is deliberately narrow. "Both contexts use it" is not sufficient
+justification — the test is whether *neither* context owns it. If one does, the other
+uses a `String`.
 
 
 ## Aggregate

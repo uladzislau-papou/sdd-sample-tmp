@@ -156,7 +156,11 @@ public class TourBooking {
      * no domain event is emitted.
      *
      * @param startedAt   the moment the tour execution started; must not be null
-     * @param guideTourId optional correlation id linking to the guide tour execution; may be null
+     * @param guideTourId optional correlation id linking to the guide tour execution; may be null.
+     *                    Deliberately a plain {@link String}: the identity is owned by the
+     *                    {@code guide} context, so {@code booking} treats it as opaque and never
+     *                    parses or branches on it. See
+     *                    {@code documentation/adr/0005-bounded-context-identity-boundaries.adr.md}.
      * @throws InvalidBookingStateException if the current state is neither {@code CONFIRMED}
      *                                      nor {@code ACTIVE}
      */

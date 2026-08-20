@@ -134,6 +134,64 @@ class TourBookingJooqRepositoryIT {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    /**
+     * UC04 — the participant count is mutable domain state, so its round-trip needs its
+     * own assertion. The other update tests only cover {@code status}.
+     */
+    @Test
+    void update_changesParticipantCount_inDatabase() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.changeParticipants(new ParticipantCount(7), new AvailableCapacity(50), NOW);
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().participantCount()).isEqualTo(new ParticipantCount(7));
+    }
+
+    /**
+     * UC04 — {@code changeParticipants} also refreshes {@code availableCapacity}
+     * ({@code TourBooking:203}), so that field is mutable domain state too and must
+     * survive an update. Same defect class as the participant count.
+     */
+    @Test
+    void update_changesAvailableCapacity_inDatabase() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.changeParticipants(new ParticipantCount(7), new AvailableCapacity(42), NOW);
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().availableCapacity()).isEqualTo(new AvailableCapacity(42));
+    }
+
+    /**
+     * UC06 — the ACTIVE transition round-trip.
+     *
+     * <p>Only {@code status} is asserted, and deliberately so: {@code TourBooking} holds
+     * no {@code startedAt} or {@code guideTourId} field. {@code markActive(Instant, String)}
+     * takes both purely as {@code BookingActivated} event payload, so there is nothing
+     * further to persist and {@code tour_booking} correctly has no such columns.
+     */
+    @Test
+    void update_changesStatus_toActive_afterMarkActive() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+        booking.confirm(NOW);
+        repository.update(booking);
+
+        booking.markActive(NOW, "guide-tour-1");
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.ACTIVE);
+    }
+
     private TourBooking sampleBooking() {
         return TourBooking.request(
                 BookingId.generate(),

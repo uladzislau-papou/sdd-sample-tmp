@@ -11,8 +11,13 @@ SDD: See `documentation/architecture.definition.md` Section 8 – "Time, randomn
 ## 1. Interface
 
 ```
-core.outport.ClockPort
+shared.outport.ClockPort
 ```
+
+Lives in `shared.outport`, not a context's `core.outport`: both `booking` and
+`guide` need it, so it is shared-kernel infrastructure
+(`architecture.definition.md` § 9, § 11). Moved there during the guide-context
+extraction (`adr/0003-separate-guide-bounded-context.adr.md`).
 
 ## 2. Method Contract
 

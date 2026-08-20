@@ -9,20 +9,15 @@ It prevents rule duplication, circular governance, and specification drift.
 
 # 1. Authority Order (Source of Truth)
 
-The documents follow this strict precedence order:
+**The ranked authority order lives in [`../CLAUDE.md`](../CLAUDE.md) and nowhere else.**
 
-1. project.definition.md
-2. architecture.definition.md
-3. modelling.definition.md
-4. technical.spec.md
-5. test.definition.md
-6. sdd.playbook.md
-7. execution.playbook.md
-8. domain-vs-use-case.definition.md
-9. ADRs (`/adr/*.adr.md`)
-10. Concrete Specs (`/domain/*.md`, `/use-cases/*.md`)
-11. coding-style.definition.md
-12. notes.md
+`CLAUDE.md` is loaded into every agent's context automatically, so it must be
+self-contained — which makes it the only sensible home for the order. This file
+previously carried a second, divergent ranking; that copy has been removed under
+§ 4 (No Duplication Rule).
+
+This document defines what each file is **responsible for**. `CLAUDE.md` defines
+which file **wins** when two disagree.
 
 Higher documents override lower ones.
 
@@ -78,34 +73,57 @@ Defines:
 - Test taxonomy
 - Assertion rules
 - Coverage expectations
-- Merge blockers
+- **Quality gates (merge blockers) — canonical location**
 
 Does NOT redefine architectural layering.
+Does NOT define *when* in the cycle a test is written — that is `tdd.definition.md`.
+
+
+## tdd.definition.md
+Defines:
+- The RED → GREEN → REFACTOR cycle
+- Test-first ordering across the layers
+- The RED evidence requirement
+- TDD anti-patterns
+
+Refines `test.definition.md`; MUST NOT restate its taxonomy or assertion rules.
+Answers *when* a test is written. `test.definition.md` answers *what* it asserts.
 
 
 ## sdd.playbook.md
 Defines:
 - Spec hierarchy
 - Governance discipline
-- ADR triggers
-- Quality gate principles
+- **ADR triggers — canonical location**
+- Quality gate principles (the gate *list* lives in `test.definition.md` § 7)
 
 Does NOT describe step-by-step execution.
 
 
 ## execution.playbook.md
 Defines:
-- Operational execution loop
+- Operational execution loop (the **inner** loop — one increment)
 - Task workflow
-- Verification steps
-- Output contract
+- Review & document dispatch
+- Agent output contract
 
 It MUST NOT redefine rules already defined in:
 - technical.spec
 - modelling.definition
 - test.definition
+- tdd.definition
+- sdd.playbook (ADR triggers)
 
 It may reference them.
+
+
+## loop.playbook.md
+Defines:
+- The **outer** loop — repeat the inner loop until a use case's Definition of Done is met
+- Loop exit conditions and hard stops
+- Model routing across loop stages
+
+It MUST NOT redefine the inner-loop phases; it composes them.
 
 
 ## domain-vs-use-case.definition.md
@@ -119,9 +137,19 @@ Concrete domain specifications.
 Must follow `domain.spec.template.md`.
 
 
+## /ports/*.{inport,outport}.spec.md
+Concrete inbound/outbound port specifications.
+One file per port: responsibility, method contracts, exception model,
+transactional and idempotency expectations.
+
+
 ## /use-cases/*.md
 Concrete use case specifications.
 Must follow `use-case.spec.template.md`.
+
+Each spec owns its `## 10. Definition of Done` — the **authoritative** exit
+condition for the outer loop. `tasks.md` mirrors it as a working scoreboard;
+the spec always wins.
 
 
 ## /adr/*.adr.md
@@ -129,7 +157,7 @@ Records architectural decisions.
 Immutable once accepted.
 
 
-# coding-style.definition.md
+## coding-style.definition.md
 Defines how the actual code should look like.
 Does not introduce any architectural decisions or functionality.
 Changes over time.
@@ -172,6 +200,39 @@ When modifying rules:
 2. Update that file.
 3. Remove duplicated rules from lower documents.
 4. Document change in ADR if architectural.
+5. **Commit the doctrine change on its own, before any code that relies on it** (§ 5.1).
+
+## 5.1 Doctrine Lands First
+
+**A change to a `*.definition.md` or `*.playbook.md` lands in its own commit, before any
+code that relies on it.**
+
+Why this is a rule and not a preference: `tdd.definition.md` § 2 makes TDD auditable for
+code — the quoted RED failure is the evidence. Nothing made spec-before-code auditable
+for *rules*. A doctrine change and the code it sanctions, arriving in one commit, are
+indistinguishable from the code arriving first and the rule being written afterwards to
+authorise it. Both produce an identical diff, so "this was spec-first" becomes an
+unfalsifiable claim in a project whose entire premise is that it is not.
+
+Separating the commits makes the ordering a fact in the history rather than an assertion
+in a report.
+
+Rules:
+
+- Doctrine change → its own commit, whose message states which rule changed and why.
+- Code relying on it → a **later** commit.
+- Never amend a doctrine commit to accommodate code written after it. If the rule turns
+  out to be wrong, change it in a new commit and say so.
+- A doctrine commit that *loosens* a rule deserves particular scrutiny: tightening a rule
+  cannot retroactively legalise existing code, but loosening one can.
+- `ddd-hex-reviewer` verifies ordering with
+  `git log --diff-filter=M -- documentation/`, replacing its previous
+  "ordering unverifiable from a single snapshot" finding.
+
+Adopted after `ddd-hex-reviewer` observed that a `test.definition.md` § 1.3 rule naming
+`WebTestApplication`/`GuideWebTestApplication` had arrived in the same uncommitted tree
+as those classes. It declined to call it drift — the rule tightened rather than
+legalised — but correctly reported that the ordering could not be verified.
 
 
 # 6. Anti-Patterns
@@ -180,5 +241,31 @@ When modifying rules:
 - Letting execution.playbook redefine architecture
 - Letting templates introduce new constraints
 - Treating notes.md as specification
+- Encoding a rule in an agent prompt instead of in the definition file it belongs to
 
 Clarity over convenience.
+
+
+# 7. Executable Layer (`.claude/`)
+
+`/documentation` states the rules. `.claude/` executes them. The executable
+layer is **subordinate**: it may enforce a documented rule, never invent one.
+
+| Path | Role |
+|------|------|
+| `.claude/agents/*.md` | Subagent definitions. Each agent's checklist MUST cite the definition file and section it enforces. |
+| `.claude/skills/*/SKILL.md` | Multi-step workflows (e.g. the outer loop). Compose playbook phases; do not redefine them. |
+| `.claude/commands/*.md` | Single-shot slash commands. |
+| `.claude/settings.json` | Checked-in harness config: tool permissions. Reproducible for anyone cloning the repo. |
+| `.claude/settings.local.json` | Personal overrides. Never authoritative. |
+
+Rules:
+
+- If an agent needs a rule that is not written down, the rule goes into the
+  appropriate `.definition.md` **first**, and the agent references it.
+  A checklist item with no upstream citation is a governance bug.
+- Agents that review MUST NOT edit. Agents that document MUST NOT touch
+  `app/src/**`. Enforced by their `tools:` frontmatter, not by good intentions.
+- A hardcoded list inside an agent prompt is duplication under § 4. Machine-checkable
+  facts belong in the documents — e.g. the registered bounded contexts live in
+  `architecture.definition.md` § 11, and the agent reads them from there.

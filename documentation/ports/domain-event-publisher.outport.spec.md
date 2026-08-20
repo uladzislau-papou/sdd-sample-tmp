@@ -11,15 +11,20 @@ SDD: See `documentation/adr/0002-domain-event-publication.adr.md` for the post-c
 ## 1. Interface
 
 ```
-core.outport.DomainEventPublisher
+shared.outport.DomainEventPublisher
 ```
+
+Lives in `shared.outport`, not a context's `core.outport`: both `booking` and
+`guide` need it, so it is shared-kernel infrastructure
+(`architecture.definition.md` § 9, § 11). Moved there during the guide-context
+extraction (`adr/0003-separate-guide-bounded-context.adr.md`).
 
 ## 2. Method Contract
 
 ### 2.1 publish
 
 ```
-void publish(TourBookingRequested event)
+void publish(DomainEvent event)
 ```
 
 **Responsibility:** Hand off a domain event for delivery after the active transaction commits.
@@ -34,8 +39,18 @@ void publish(TourBookingRequested event)
 
 **Exceptions:** No checked exceptions. Infrastructure failures in event delivery are logged and do not roll back the transaction.
 
-**Scope:** The method signature is specific to `TourBookingRequested` for UC01.
-Additional overloads or a generic signature may be introduced in later use cases via ADR.
+**Scope:** The signature is generic — typed to the `DomainEvent` marker interface,
+not to any concrete event type. Per-event-type overloads are **not** added; a new
+domain event requires no change to this port.
+
+Decided in `adr/0004-generic-domain-event-publisher-signature.adr.md`.
+
+This section previously specified `void publish(TourBookingRequested event)`,
+specific to UC01, and stated that a generic signature "may be introduced in later
+use cases **via ADR**". The code widened to `publish(DomainEvent)` without that
+ADR being written — a bypassed recording gate, found by `spec-documenter` and
+escalated under its Conflicts protocol rather than being silently reconciled.
+ADR 0004 supplies the missing record and accepts the implementation as correct.
 
 
 ## 3. Post-Commit Guarantee

@@ -9,13 +9,13 @@ import java.time.Instant;
  * Drivers call this port and pass the result as a parameter to aggregate methods.
  * This keeps domain logic deterministic and time-dependent invariants fully testable.
  *
- * <p>Used by both the {@code booking} and {@code guideoperations} bounded contexts.
+ * <p>Used by both the {@code booking} and {@code guide} bounded contexts.
  *
  * <p>Framework-free: implementations live in {@code outbound.integration.clock}.
  *
  * <p>SDD: See {@code documentation/ports/clock.outport.spec.md},
  *          {@code documentation/architecture.definition.md} section 8,
- *          and {@code documentation/adr/0003-separate-guideoperations-bounded-context.adr.md}.
+ *          and {@code documentation/adr/0003-separate-guide-bounded-context.adr.md}.
  */
 public interface ClockPort {
 
