@@ -38,6 +38,7 @@ dependencies {
     testImplementation(libs.spring.boot.resttestclient)
 
     testImplementation(libs.assertj.core)
+    testImplementation(libs.archunit.junit5)
 
     jooqCodegen(libs.h2)
     jooqCodegen(libs.jooq.meta)
