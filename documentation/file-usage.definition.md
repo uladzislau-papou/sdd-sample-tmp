@@ -220,7 +220,10 @@ in a report.
 Rules:
 
 - Doctrine change → its own commit, whose message states which rule changed and why.
-- Code relying on it → a **later** commit.
+- Anything relying on it → a **later** commit. "Anything" includes **build
+  configuration**: applying a plugin, adding a dependency or wiring a task counts as
+  relying on the rule that mandates it, exactly as production code does. A gate added to
+  `test.definition.md` § 7 and the tooling that enforces it are two commits, not one.
 - Never amend a doctrine commit to accommodate code written after it. If the rule turns
   out to be wrong, change it in a new commit and say so.
 - A doctrine commit that *loosens* a rule deserves particular scrutiny: tightening a rule
@@ -233,6 +236,24 @@ Adopted after `ddd-hex-reviewer` observed that a `test.definition.md` § 1.3 rul
 `WebTestApplication`/`GuideWebTestApplication` had arrived in the same uncommitted tree
 as those classes. It declined to call it drift — the rule tightened rather than
 legalised — but correctly reported that the ordering could not be verified.
+
+### Recorded violations
+
+Kept deliberately. A rule that lists the times it was broken is more credible than one
+that reads as though it never has been, and the two entries here are exactly the cases a
+carve-out would have been written to excuse.
+
+- **`a87d98c`** — the commit that adopted this rule. Doctrine and code co-evolved across
+  one exploratory session; slicing it retroactively into doctrine-then-code would have
+  fabricated an ordering that did not happen. The rule applies from `9f14103` onward.
+- **`d7c494e`** — added `spotlessCheck` to the § 7 gate list *and* applied the Spotless
+  plugin that satisfies it, in one commit. Found by self-audit
+  (`git log --diff-filter=M -- documentation/`). This is what prompted the build-config
+  clarification above: the ambiguity was real, and the honest resolution is that build
+  config counts, not that this commit was fine.
+
+Neither is corrected by rewriting history. A doctrine commit is not amended (see above),
+and that applies to the record of its own breaches too.
 
 
 # 6. Anti-Patterns
