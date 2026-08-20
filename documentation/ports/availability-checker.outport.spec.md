@@ -41,6 +41,15 @@ AvailableCapacity checkAvailability(TourId tourId, TourDate tourDate)
 |---|---|
 | `AvailabilityUnavailableException` | Infrastructure failure – the availability source cannot be reached or returns an invalid response. |
 
+**Package:** `booking.core.domain.tourbooking.exception`, **not** `core.outport` beside
+this port. It is an infrastructure failure, so that placement is admittedly odd — but it
+is the only package that both a `*UseCase` interface (`architecture.definition.md` § 4.2)
+and `inbound.rest` (§ 4.5) may reference, and both need it: the use cases declare it and
+`BookingExceptionHandler` maps it to 502. Keeping it in `core.outport` forced the handler
+to import from `core.outport`, violating § 6 rule 3. A dedicated
+`core.inport.exception` package would be tidier and requires an ADR — see the exception's
+own Javadoc.
+
 **Capacity enforcement:** This port does NOT throw on capacity exceeded.
 The `TourBooking` aggregate enforces the invariant `participantCount <= availableCapacity`.
 

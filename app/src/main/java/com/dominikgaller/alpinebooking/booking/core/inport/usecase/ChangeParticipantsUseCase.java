@@ -5,7 +5,7 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.inport.command.ChangeParticipantsCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.ChangeParticipantsResult;
-import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.AvailabilityUnavailableException;
 
 /**
  * Inbound port for the UC04 – ChangeParticipants use case.

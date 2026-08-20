@@ -4,7 +4,7 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
 import com.dominikgaller.alpinebooking.booking.core.inport.command.RequestTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.RequestTourBookingResult;
-import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.AvailabilityUnavailableException;
 
 /**
  * Inbound port for the UC01 – RequestTourBooking use case.

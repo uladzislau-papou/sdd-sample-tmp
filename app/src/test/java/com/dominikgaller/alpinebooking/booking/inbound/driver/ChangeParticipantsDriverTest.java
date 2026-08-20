@@ -16,7 +16,7 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception
 import com.dominikgaller.alpinebooking.booking.core.inport.command.ChangeParticipantsCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.ChangeParticipantsResult;
 import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityChecker;
-import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.AvailabilityUnavailableException;
 import com.dominikgaller.alpinebooking.shared.outport.ClockPort;
 import com.dominikgaller.alpinebooking.shared.outport.DomainEventPublisher;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;

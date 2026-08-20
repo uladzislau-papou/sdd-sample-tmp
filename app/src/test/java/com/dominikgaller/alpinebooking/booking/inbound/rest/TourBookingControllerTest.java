@@ -13,7 +13,7 @@ import com.dominikgaller.alpinebooking.booking.core.inport.result.ConfirmTourBoo
 import com.dominikgaller.alpinebooking.booking.core.inport.usecase.ConfirmTourBookingUseCase;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.RequestTourBookingResult;
 import com.dominikgaller.alpinebooking.booking.core.inport.usecase.RequestTourBookingUseCase;
-import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.AvailabilityUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;

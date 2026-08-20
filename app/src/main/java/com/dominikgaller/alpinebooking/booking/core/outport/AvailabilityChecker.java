@@ -1,5 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.core.outport;
 
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.AvailabilityUnavailableException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.AvailableCapacity;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourDate;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;

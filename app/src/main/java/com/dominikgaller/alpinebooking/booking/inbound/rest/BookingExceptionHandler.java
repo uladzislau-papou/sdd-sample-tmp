@@ -4,7 +4,7 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
-import com.dominikgaller.alpinebooking.booking.core.outport.AvailabilityUnavailableException;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.AvailabilityUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
