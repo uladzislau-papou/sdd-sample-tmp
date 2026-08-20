@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>Uses {@link WebMvcTest} so only the web layer is instantiated: no DataSource, no
  * Flyway, no jOOQ. The inbound port is replaced by a Mockito mock via {@link MockitoBean},
  * so this test asserts HTTP concerns only — routing, status mapping, request validation
- * and the error response contract. {@link GuideOperationsExceptionHandler} is picked up
+ * and the error response contract. {@link GuideExceptionHandler} is picked up
  * because {@code @WebMvcTest} includes {@code @RestControllerAdvice} beans.
  *
  * <p>SDD: slice test per {@code documentation/test.definition.md} section 2.4. Booting the

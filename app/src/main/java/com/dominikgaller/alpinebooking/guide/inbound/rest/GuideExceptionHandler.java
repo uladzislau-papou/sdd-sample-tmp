@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <p>SDD: See {@code documentation/use-cases/uc05-start-tour.spec.md}, section 3.
  */
 @RestControllerAdvice
-public class GuideOperationsExceptionHandler {
+public class GuideExceptionHandler {
 
     @ExceptionHandler(GuideTourNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)

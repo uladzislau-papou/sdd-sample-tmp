@@ -14,7 +14,7 @@ import java.util.Optional;
  * <p>Maps request DTOs to use case commands, delegates to the relevant inport,
  * and maps results to response DTOs. Contains no HTTP annotations, no domain
  * logic, and no error handling — those concerns belong to {@link GuideTourRestAPI}
- * and {@link GuideOperationsExceptionHandler} respectively.
+ * and {@link GuideExceptionHandler} respectively.
  */
 @RestController
 public class GuideTourController implements GuideTourRestAPI {

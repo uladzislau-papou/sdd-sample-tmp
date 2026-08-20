@@ -13,5 +13,5 @@ import org.springframework.context.annotation.Configuration;
  * <p>SDD: See {@code documentation/adr/0003-separate-guide-bounded-context.adr.md}.
  */
 @Configuration
-public class GuideOperationsConfig {
+public class GuideConfig {
 }

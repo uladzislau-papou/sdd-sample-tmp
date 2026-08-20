@@ -58,7 +58,7 @@ publish `TourStarted` for other contexts.
 - `StartTourResult.status()` is `"RUNNING"`.
 
 **Exceptions** (all `RuntimeException`, declared in the interface's imports and
-mapped to HTTP by `GuideOperationsExceptionHandler`):
+mapped to HTTP by `GuideExceptionHandler`):
 
 | Exception | Condition | HTTP |
 |-----------|-----------|------|
@@ -107,27 +107,29 @@ belong to the aggregate.
 
 ## 6. Test Usage
 
-- Web slice: `GuideTourControllerTest` mocks this port via `@MockitoBean` and
+- **Web slice:** `GuideTourControllerTest` mocks this port via `@MockitoBean` and
   asserts only HTTP concerns — status mapping, both body variants, the three error
   codes.
-### Known Gap — malformed id is not a 400
+- **Orchestration:** `StartTourDriverTest` — 14 Spring-free tests with in-line stubs.
+  Covers clock resolution (`start_usesClockPort_whenStartedAtIsEmpty`,
+  `.start_usesProvidedStartedAt_whenPresent`), the not-found path, all three illegal
+  states, the too-early guard, and that no `update` or event occurs on any failure.
+
+
+## 7. Known Gaps
+
+### Malformed id is not a 400
 
 § 5 states that id parsing failures should surface as a 400. They do not.
 `StartTourDriver` calls `UUID.fromString(command.guideTourId())`, which throws
-`IllegalArgumentException` from the driver, and `GuideOperationsExceptionHandler` maps
-only the three domain exceptions — so a malformed `guideTourId` becomes an unmapped
-500. No test covers it.
+`IllegalArgumentException` from the driver, and `GuideExceptionHandler` maps only the
+three domain exceptions — so a malformed `guideTourId` becomes an unmapped 500. No test
+covers it.
 
 The same gap exists in all four booking drivers, which call `UUID.fromString` on the
 path variable with no `@ExceptionHandler` for `IllegalArgumentException`. Fixing it is
 cross-cutting: either validate the id format at the `*RestAPI` boundary, or map
 `IllegalArgumentException` → 400 in both exception handlers.
 
-Recorded here rather than silently, per `test.definition.md` § 6.
-
-### Test coverage
-
-- Orchestration: `StartTourDriverTest` — 14 Spring-free tests with in-line stubs.
-  Covers clock resolution (`start_usesClockPort_whenStartedAtIsEmpty`,
-  `.start_usesProvidedStartedAt_whenPresent`), the not-found path, all three illegal
-  states, the too-early guard, and that no `update` or event occurs on any failure.
+Found by `ddd-hex-reviewer`. Recorded rather than fixed silently, per
+`test.definition.md` § 6.
