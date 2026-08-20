@@ -66,9 +66,15 @@ This guarantees:
 
 ## 4. Reference Implementation
 
-Class: `outbound.integration.LoggingDomainEventPublisher`
+Class: `shared.outbound.integration.LoggingDomainEventPublisher`, wired by
+`bootstrap.SharedConfig`.
 
 Behaviour: Calls Spring `ApplicationEventPublisher.publishEvent(event)`. The listener logs the event via SLF4J.
+
+It previously lived in `booking.outbound.integration` and was wired by `BookingConfig`,
+so the `guide` context published its events through `booking`'s configuration
+(`architecture.definition.md` § 9). Spring is permitted here: `shared.outbound` is an
+adapter package, and only `shared.domain` and `shared.outport` are framework-free.
 
 
 ## 5. Constraints

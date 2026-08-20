@@ -48,9 +48,15 @@ The domain MUST NOT call `Instant.now()` directly.
 
 ## 4. Reference Implementation
 
-Class: `outbound.integration.clock.SystemClockPort`
+Class: `shared.outbound.clock.SystemClockPort`, wired by `bootstrap.SharedConfig`.
 
-Behaviour: Returns `Instant.now()` (system clock, UTC).
+Behaviour: Returns `Instant.now()` (system clock, UTC). This is the only place in the
+codebase permitted to call `Instant.now()` (`architecture.definition.md` § 8).
+
+It previously lived in `booking.outbound.integration.clock` and was wired by
+`BookingConfig`, which meant the `guide` context obtained its clock from `booking`'s
+configuration — a cross-context dependency invisible to any import check
+(`architecture.definition.md` § 9).
 
 
 ## 5. Test Usage

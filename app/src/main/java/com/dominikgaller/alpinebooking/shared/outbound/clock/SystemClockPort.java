@@ -1,4 +1,4 @@
-package com.dominikgaller.alpinebooking.booking.outbound.integration.clock;
+package com.dominikgaller.alpinebooking.shared.outbound.clock;
 
 import com.dominikgaller.alpinebooking.shared.outport.ClockPort;
 
