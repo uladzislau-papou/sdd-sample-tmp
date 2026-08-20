@@ -192,6 +192,41 @@ class TourBookingJooqRepositoryIT {
         assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.ACTIVE);
     }
 
+    /**
+     * UC06 — the activation fan-out needs the CONFIRMED bookings for a tour. Expressing
+     * that as a query keeps the "which bookings are candidates" criterion out of
+     * {@code TourStartedListener}, which {@code architecture.definition.md} section 4.8
+     * forbids from holding business logic. The aggregate still guards the transition.
+     */
+    @Test
+    void findConfirmedByTourId_returnsOnlyConfirmedBookingsForThatTour() {
+        final TourBooking confirmed = sampleBooking();
+        repository.save(confirmed);
+        confirmed.confirm(NOW);
+        repository.update(confirmed);
+
+        final TourBooking stillRequested = sampleBooking();
+        repository.save(stillRequested);
+
+        final TourBooking cancelled = sampleBooking();
+        repository.save(cancelled);
+        cancelled.cancel(NOW);
+        repository.update(cancelled);
+
+        final var found = repository.findConfirmedByTourId(confirmed.tourId());
+
+        assertThat(found).extracting(b -> b.bookingId().value().toString())
+                .containsExactly(confirmed.bookingId().value().toString());
+    }
+
+    @Test
+    void findConfirmedByTourId_returnsEmpty_whenNoConfirmedBookingsExist() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        assertThat(repository.findConfirmedByTourId(booking.tourId())).isEmpty();
+    }
+
     private TourBooking sampleBooking() {
         return TourBooking.request(
                 BookingId.generate(),

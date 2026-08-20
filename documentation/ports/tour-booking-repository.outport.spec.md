@@ -8,7 +8,7 @@ This outport abstracts the storage mechanism from the domain and application lay
 SDD: See `documentation/domain/aggregate-tour-booking.spec.md`
 
 > This spec was written for UC01 and stated "Only `save` is required". Four more use
-> cases have since been implemented and the interface grew to four methods, but the
+> cases have since been implemented and the interface grew to five methods, but the
 > spec was never updated — so it documented a `save`-only port while five use cases
 > depended on `findById`, `update` and `findByTourId`. Found by `spec-documenter`.
 
@@ -106,7 +106,27 @@ driver never calls `update`).
 
 Used by: UC02, UC03, UC04, UC06.
 
-### 2.4 findByTourId
+### 2.4 findConfirmedByTourId
+
+```
+List<TourBooking> findConfirmedByTourId(TourId tourId)
+```
+
+**Responsibility:** Return the bookings for a tour that are eligible for activation.
+
+**Postconditions:** an empty list when none qualify, never null; each element fully
+reconstituted with no pending events; no ordering guaranteed.
+
+Used by: UC06 (`TourStartedListener`).
+
+> **Why the criterion lives here.** A `status() == CONFIRMED` filter in the listener is
+> business logic in an inbound adapter (`architecture.definition.md` § 4.8). It is also
+> load-bearing: the listener runs one `REQUIRES_NEW` transaction for the whole fan-out and
+> `markActive` throws for CANCELLED or COMPLETED, so removing the filter and relying on
+> the aggregate guard would let one ineligible booking roll back the entire batch. Making
+> it a query keeps the adapter free of conditionals without weakening the domain guard.
+
+### 2.5 findByTourId
 
 ```
 List<TourBooking> findByTourId(TourId tourId)
@@ -121,8 +141,8 @@ List<TourBooking> findByTourId(TourId tourId)
 - Each element is fully reconstituted with no pending events.
 - No ordering is guaranteed. Callers must not depend on one.
 
-Used by: UC06 (`TourStartedListener`) to fan out the ACTIVE transition across every
-booking for a started tour.
+Used by: nothing. `TourStartedListener` moved to `findConfirmedByTourId` so the status
+criterion would not sit in an inbound adapter. Retained for now; see Known Gaps.
 
 > **Write-side query.** This returns aggregates rather than a projection, which
 > `architecture.definition.md` § 4.6 assigns to `outbound.persistence.read`. It sits
@@ -185,5 +205,5 @@ Mapping notes:
   `V1__DDL_create_tour_booking.sql`. Adding one is an ADR (persistence strategy,
   `sdd.playbook.md` § 6 item 4).
 - **No `delete`.** Deliberate — bookings are cancelled, never removed.
-- **`findByTourId` has no test.** Its only caller is `TourStartedListener`, which is
-  itself untested (`uc06-mark-booking-active.spec.md` § 10, `tasks.md` block 2.3).
+- **`findByTourId` has no direct test and no remaining caller.** `TourStartedListener` now
+  uses `findConfirmedByTourId`. Consider removing it, or add a test if a caller appears.

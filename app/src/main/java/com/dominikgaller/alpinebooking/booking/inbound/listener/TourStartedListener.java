@@ -1,6 +1,5 @@
 package com.dominikgaller.alpinebooking.booking.inbound.listener;
 
-import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.inport.command.MarkBookingActiveCommand;
 import com.dominikgaller.alpinebooking.booking.core.inport.usecase.MarkBookingActiveUseCase;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
@@ -39,8 +38,7 @@ public class TourStartedListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onTourStarted(final TourStarted event) {
-        tourBookingRepository.findByTourId(event.tourId()).stream()
-                .filter(b -> b.status() == TourBookingStatus.CONFIRMED)
+        tourBookingRepository.findConfirmedByTourId(event.tourId())
                 .forEach(b -> markBookingActiveUseCase.markActive(
                         new MarkBookingActiveCommand(
                                 b.bookingId().value().toString(),

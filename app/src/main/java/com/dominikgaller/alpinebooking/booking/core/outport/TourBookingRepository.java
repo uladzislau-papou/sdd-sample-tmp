@@ -50,4 +50,16 @@ public interface TourBookingRepository {
      * @return all bookings for the given tour, or an empty list if none exist
      */
     List<TourBooking> findByTourId(TourId tourId);
+
+    /**
+     * Returns the bookings for a tour that are eligible for activation, i.e. CONFIRMED.
+     *
+     * <p>Exists so the UC06 activation fan-out does not have to filter by status in an
+     * inbound adapter — {@code architecture.definition.md} section 4.8 forbids business
+     * logic in a listener. The aggregate still enforces the transition guard; this query
+     * only selects candidates.
+     *
+     * @return possibly empty list, never null
+     */
+    List<TourBooking> findConfirmedByTourId(TourId tourId);
 }

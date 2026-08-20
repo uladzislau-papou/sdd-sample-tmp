@@ -238,6 +238,14 @@ class MarkBookingActiveDriverTest {
                     .toList();
         }
 
+        @Override
+        public List<TourBooking> findConfirmedByTourId(final TourId tourId) {
+            return store.values().stream()
+                    .filter(b -> b.tourId().equals(tourId))
+                    .filter(b -> b.status() == TourBookingStatus.CONFIRMED)
+                    .toList();
+        }
+
         List<TourBooking> updatedBookings() {
             return Collections.unmodifiableList(updated);
         }

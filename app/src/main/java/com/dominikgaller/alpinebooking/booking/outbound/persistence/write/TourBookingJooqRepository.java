@@ -2,6 +2,7 @@ package com.dominikgaller.alpinebooking.booking.outbound.persistence.write;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
 import com.dominikgaller.alpinebooking.jooq.tables.records.TourBookingRecord;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
@@ -51,6 +52,16 @@ public class TourBookingJooqRepository implements TourBookingRepository {
         return dsl
                 .selectFrom(TOUR_BOOKING)
                 .where(TOUR_BOOKING.TOUR_ID.eq(tourId.value()))
+                .fetch()
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<TourBooking> findConfirmedByTourId(final TourId tourId) {
+        return dsl
+                .selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.TOUR_ID.eq(tourId.value()))
+                .and(TOUR_BOOKING.STATUS.eq(TourBookingStatus.CONFIRMED.name()))
                 .fetch()
                 .map(mapper::toDomain);
     }

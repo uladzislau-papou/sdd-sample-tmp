@@ -60,11 +60,24 @@ No HTTP status mapping — this use case has no REST surface.
 ## 5. Flow
 
 1. `TourStartedListener` receives the `TourStarted` event (`AFTER_COMMIT`, new transaction)
-2. Load all `TourBooking` aggregates for `event.tourId()`
-3. For each booking in CONFIRMED status:
+2. Load the **CONFIRMED** bookings for `event.tourId()` via
+   `TourBookingRepository.findConfirmedByTourId(...)`
+3. For each of them:
    1. `booking.markActive(startedAt, guideTourId)`
    2. Persist via `TourBookingRepository.update(booking)`
    3. Publish `BookingActivated`
+
+The status criterion lives in the **query**, not in the listener. Two reasons:
+
+- `architecture.definition.md` § 4.8 forbids business logic in an inbound adapter, and a
+  `status() == CONFIRMED` filter in the listener was exactly that.
+- It is also load-bearing for correctness, which is easy to miss. The listener runs one
+  `REQUIRES_NEW` transaction for the whole fan-out, and `markActive` **throws** for a
+  CANCELLED or COMPLETED booking. Simply deleting the filter and "letting the aggregate
+  guard" — the obvious-looking fix — would make one ineligible booking roll back the
+  entire batch, activating none of them.
+
+The aggregate still enforces the transition; the query only selects candidates.
 
 
 ## 6. Side Effects
@@ -140,10 +153,16 @@ endpoint, therefore no `rest/uc06-*.http` file is required.
 - [x] `BookingActivated` emission covered by
       `TourBookingTest.markActive_happyPath_recordsBookingActivatedEvent`,
       `MarkBookingActiveDriverTest.markActive_happyPath_publishesBookingActivatedEvent`
-- [ ] `TourStartedListener` covered by a test — **no test exists** for
-      `booking.inbound.listener.TourStartedListener` or `TourBookingEventListener`.
-      The fan-out in § 5 step 2 (load *all* bookings for a tour, filter to CONFIRMED)
-      is therefore unverified, as is the `AFTER_COMMIT` boundary from ADR-0002
+- [x] `TourStartedListener` covered by `TourStartedListenerTest` — 9 tests: the fan-out
+      across multiple CONFIRMED bookings, event-payload propagation, each of the four
+      non-CONFIRMED statuses left alone, mixed statuses, other tours ignored, and the
+      empty case. Verified non-vacuous by mutation: removing the status criterion fails 5
+      of the 9.
+      **Not covered:** the `@TransactionalEventListener(AFTER_COMMIT)` + `REQUIRES_NEW`
+      semantics from ADR-0002. Those are Spring wiring rather than listener logic, and
+      asserting them in a unit test would be testing the framework
+      (`test.definition.md` § 8). They need a Spring integration test, which does not
+      exist — see Known Gaps below
 
 ### Contracts
 - [x] No `rest/` file required — § 9 is not applicable
