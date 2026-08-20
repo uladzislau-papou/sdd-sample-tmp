@@ -21,10 +21,10 @@ verification runs, so that:
 ### Architecture violations
 | # | Finding | Rule |
 |---|---------|------|
-| A1 | `BookingExceptionHandler:7` imports `booking.core.outport.AvailabilityUnavailableException` | `architecture.definition.md` § 6.3 / § 4.5 — controllers depend only on `core.inport` |
-| A2 | `RequestTourBookingUseCase:7` imports a `core.outport` type | § 4.2 — usecase interfaces may reference only `inport.command`, `inport.result`, `core.domain.<agg>.exception` |
-| A3 | `TourStartedListener:43` filters `status() == CONFIRMED` | § 4.8 — listeners must not contain business logic. Also untested |
-| A4 | `LoggingDomainEventPublisher`, `SystemClockPort` implement `shared.outport` from inside `booking`; `guide` consumes them via `BookingConfig` | § 4.7 + ADR-0003's claim "both contexts depend on `shared.domain` only", now false. **Blocked on U1** |
+| ~~A1~~ | `BookingExceptionHandler:7` imports `booking.core.outport.AvailabilityUnavailableException` | `architecture.definition.md` § 6.3 / § 4.5 — controllers depend only on `core.inport` |
+| ~~A2~~ | `RequestTourBookingUseCase:7` imports a `core.outport` type | § 4.2 — usecase interfaces may reference only `inport.command`, `inport.result`, `core.domain.<agg>.exception` |
+| ~~A3~~ | `TourStartedListener:43` filters `status() == CONFIRMED` | § 4.8 — listeners must not contain business logic. Also untested |
+| ~~A4~~ | `LoggingDomainEventPublisher`, `SystemClockPort` implement `shared.outport` from inside `booking`; `guide` consumes them via `BookingConfig` | § 4.7 + ADR-0003's claim "both contexts depend on `shared.domain` only", now false. **Blocked on U1** |
 
 A2 is A1's root cause: the exception is part of the inport contract but lives in
 `core.outport`. Fix A2 first and A1 dissolves.
@@ -32,52 +32,52 @@ A2 is A1's root cause: the exception is part of the inport contract but lives in
 ### Naming divergence from ADR-0003
 | # | Finding |
 |---|---------|
-| B1 | `GuideOperationsConfig` — ADR-0003 § Decision and `architecture.definition.md` § 3 (`<ContextName>Config`) both say `GuideConfig` |
-| B2 | `GuideOperationsExceptionHandler` — ADR-0003 says `GuideExceptionHandler` |
+| ~~B1~~ | `GuideOperationsConfig` — ADR-0003 § Decision and `architecture.definition.md` § 3 (`<ContextName>Config`) both say `GuideConfig` |
+| ~~B2~~ | `GuideOperationsExceptionHandler` — ADR-0003 says `GuideExceptionHandler` |
 
 ### Missing tests
 | # | Finding | Rule |
 |---|---------|------|
-| C1 | No `StartTourDriverTest` — every booking driver has one | `test.definition.md` § 2.2 (mandatory), § 6 |
-| C2 | No test for `TourStartedListener` / `TourBookingEventListener` — UC06's fan-out and the ADR-0002 `AFTER_COMMIT` boundary are unverified | § 2.2, § 6 |
-| C3 | UC01: no web test asserting 400 for `participantCount < 1` or a past `tourDate` | § 2.4 |
-| C4 | UC04: no web test for 400 or 502 | § 2.4 |
-| C5 | UC06: persistence IT does not cover the ACTIVE transition, `started_at`, or `guide_tour_id` | § 2.3, § 6 |
-| C6 | UC04: persistence IT does not cover a `participant_count` update | § 2.3, § 6 |
+| ~~C1~~ | No `StartTourDriverTest` — every booking driver has one | `test.definition.md` § 2.2 (mandatory), § 6 |
+| ~~C2~~ | No test for `TourStartedListener` / `TourBookingEventListener` — UC06's fan-out and the ADR-0002 `AFTER_COMMIT` boundary are unverified | § 2.2, § 6 |
+| ~~C3~~ | UC01: no web test asserting 400 for `participantCount < 1` or a past `tourDate` | § 2.4 |
+| ~~C4~~ | UC04: no web test for 400 or 502 | § 2.4 |
+| ~~C5~~ | UC06: persistence IT does not cover the ACTIVE transition, `started_at`, or `guide_tour_id` | § 2.3, § 6 |
+| ~~C6~~ | UC04: persistence IT does not cover a `participant_count` update | § 2.3, § 6 |
 
 ### Missing specs
 | # | Finding |
 |---|---------|
-| D1 | `documentation/domain/aggregate-guide-tour.spec.md` — the `guide` context has no domain spec; `GuideTour`'s invariants and state model are undocumented |
-| D2 | `documentation/ports/guide-tour-repository.outport.spec.md` — outport implemented, unspecified |
-| D3 | `documentation/ports/start-tour.inport.spec.md` — `booking`'s counterpart exists |
+| ~~D1~~ | `documentation/domain/aggregate-guide-tour.spec.md` — the `guide` context has no domain spec; `GuideTour`'s invariants and state model are undocumented |
+| ~~D2~~ | `documentation/ports/guide-tour-repository.outport.spec.md` — outport implemented, unspecified |
+| ~~D3~~ | `documentation/ports/start-tour.inport.spec.md` — `booking`'s counterpart exists |
 
 ### Stale or dead documentation
 | # | Finding |
 |---|---------|
-| E1 | `coding-style.definition.md` § 3.2 names the layers `domain / application / in / out / adapter.*` with direction `adapter → application → domain`. The enforced ontology is `core / inbound / outbound`. No code follows it — dead text that misleads anyone treating it as authoritative |
-| E2 | `tasks.md` is the completed ADR-0003 checklist with four stale paths (`guide/core/domain/*`, `guide/core/domain/event/TourStarted`, `GuideExceptionHandler`, `GuideConfig`) |
-| E3 | `plan.md` was the completed ADR-0003 plan — **resolved by this file** |
-| E4 | ADR-0003 names `GuideConfig`/`GuideExceptionHandler` and sketches `guide.core.domain` + a guide-local event package; disk differs on all three. ADRs are immutable |
-| E5 | `notes.md` records three gaps; two independently confirmed (guide domain spec missing, no read side) |
+| ~~E1~~ | `coding-style.definition.md` § 3.2 names the layers `domain / application / in / out / adapter.*` with direction `adapter → application → domain`. The enforced ontology is `core / inbound / outbound`. No code follows it — dead text that misleads anyone treating it as authoritative |
+| ~~E2~~ | `tasks.md` is the completed ADR-0003 checklist with four stale paths (`guide/core/domain/*`, `guide/core/domain/event/TourStarted`, `GuideExceptionHandler`, `GuideConfig`) |
+| ~~E3~~ | `plan.md` was the completed ADR-0003 plan — **resolved by this file** |
+| ~~E4~~ | ADR-0003 names `GuideConfig`/`GuideExceptionHandler` and sketches `guide.core.domain` + a guide-local event package; disk differs on all three. ADRs are immutable |
+| ~~E5~~ | `notes.md` records three gaps; two independently confirmed (guide domain spec missing, no read side) |
 
 ### Undocumented rules — needed before dependent fixes
 | # | Question |
 |---|----------|
-| U1 | **Where do adapters for `shared.outport` live?** § 3's tree gives `shared` only `domain/event`; nothing says whether a `ClockPort` implementation belongs in `shared.outbound`, in `bootstrap`, or in one arbitrary context (today: `booking`). **A4 is unresolvable until this is written down** |
-| U2 | **Is there a one-aggregate-per-transaction rule?** `TourStartedListener` updates every CONFIRMED booking for a tour in one `REQUIRES_NEW` transaction. § 10 forbids only cross-aggregate *invariants*, so this is not currently a violation — but if per-aggregate transactions are intended, it needs writing down |
-| U3 | **How is spec-before-code ordering made auditable for *rule* changes?** `tdd.definition.md` § 2 makes TDD auditable for code — the quoted RED failure is the evidence. Nothing does the equivalent for doctrine. A rule and the code it sanctions, landing in one snapshot, are indistinguishable from the code arriving first and the rule being written to authorise it. Found by `ddd-hex-reviewer` against this very change: `test.definition.md` § 1.3 names `WebTestApplication`/`GuideWebTestApplication`, and arrived in the same uncommitted tree as those classes. It declined to call it drift (the rule *tightens* and cites five-month-old precedent rather than inventing cover) but reported the unverifiability |
+| ~~U1~~ | **Where do adapters for `shared.outport` live?** § 3's tree gives `shared` only `domain/event`; nothing says whether a `ClockPort` implementation belongs in `shared.outbound`, in `bootstrap`, or in one arbitrary context (today: `booking`). **A4 is unresolvable until this is written down** |
+| ~~U2~~ | **Is there a one-aggregate-per-transaction rule?** `TourStartedListener` updates every CONFIRMED booking for a tour in one `REQUIRES_NEW` transaction. § 10 forbids only cross-aggregate *invariants*, so this is not currently a violation — but if per-aggregate transactions are intended, it needs writing down |
+| ~~U3~~ | **How is spec-before-code ordering made auditable for *rule* changes?** `tdd.definition.md` § 2 makes TDD auditable for code — the quoted RED failure is the evidence. Nothing does the equivalent for doctrine. A rule and the code it sanctions, landing in one snapshot, are indistinguishable from the code arriving first and the rule being written to authorise it. Found by `ddd-hex-reviewer` against this very change: `test.definition.md` § 1.3 names `WebTestApplication`/`GuideWebTestApplication`, and arrived in the same uncommitted tree as those classes. It declined to call it drift (the rule *tightens* and cites five-month-old precedent rather than inventing cover) but reported the unverifiability |
 
 ### Build and tooling
 | # | Finding |
 |---|---------|
 | ~~G1~~ | **RESOLVED.** Baseline bumped to Java 25 LTS with the vendor pinned to Temurin — `adr/0006-java-25-baseline.adr.md`. Toolchain, `.sdkmanrc` and IDE all on `25.0.4-tem`; verified class file major version 69 and 124/124 tests green |
-| G2 | **No ArchUnit.** § 6's seven "enforceable" rules are enforced only by model-driven review. A1/A2/A4 existed for months precisely because nothing checked |
-| G3 | Spotless is in `libs.versions.toml` `[versions]` and `[plugins]` but never applied — no formatting gate |
-| G4 | No CI. Quality gates run only when a human or agent remembers |
-| G5 | No jacoco. `test.definition.md` § 6 targets qualitative coverage, so this may be deliberate — confirm |
-| G6 | `.gitignore` covers `/data/` but not `app/data/`. Moot now that no test writes there, but latent |
-| G7 | `settings.local.json` has a stray `Bash(test:*)` matching the shell builtin, not Gradle |
+| ~~G2~~ | **No ArchUnit.** § 6's seven "enforceable" rules are enforced only by model-driven review. A1/A2/A4 existed for months precisely because nothing checked |
+| ~~G3~~ | Spotless is in `libs.versions.toml` `[versions]` and `[plugins]` but never applied — no formatting gate |
+| ~~G4~~ | No CI. Quality gates run only when a human or agent remembers |
+| ~~G5~~ | No jacoco. `test.definition.md` § 6 targets qualitative coverage, so this may be deliberate — confirm |
+| ~~G6~~ | `.gitignore` covers `/data/` but not `app/data/`. Moot now that no test writes there, but latent |
+| ~~G7~~ | `settings.local.json` has a stray `Bash(test:*)` matching the shell builtin, not Gradle |
 
 ### Governance decisions blocking feature work
 | # | Item |
@@ -195,6 +195,31 @@ Now genuinely `/loop-uc`-drivable, since the DoDs are honest and the reviewer is
 - [ ] **UC07** MarkBookingCompleted
 - [ ] **UC08** CancelBookingByUser — resolve **H1** first; modifies UC03's endpoint and spec
 - [ ] **H2** ADR for the synchronous cross-context call, then **UC12** + **UC09** together
+
+## Carried forward — one increment, not yet scheduled
+
+Three findings that surfaced during the cleanup, all the same defect, none belonging to
+any phase above. They want one increment together.
+
+**Unmapped `IllegalArgumentException` surfaces as 500 where 400 is correct.**
+
+| Site | Trigger | Today | Should be |
+|------|---------|-------|-----------|
+| `UUID.fromString` in all five drivers | malformed id in a path variable | 500, unmapped, untested | 400 |
+| `TourId` constructor | blank `tourId` in a command | 500 | 400 via a domain exception |
+| `ParticipantContact` constructor | blank name/email in a command | 500 | 400 via a domain exception |
+
+All three have the same shape: a value built from a command throws
+`IllegalArgumentException`, no `@ExceptionHandler` maps it, and no test covers it. Bean
+Validation hides all three today — which is exactly why `coding-style.definition.md` § 6.2
+now says boundary validation is not part of the core's contract. Drive these use cases from
+anything other than the REST adapter and they surface as 500s.
+
+Fix shape: domain exceptions in the two value objects, plus `IllegalArgumentException` →
+400 in both `*ExceptionHandler`s as a backstop. Needs a RED per site — behaviour change,
+not reconciliation.
+
+Recorded in `ports/start-tour.inport.spec.md` § 7 and `coding-style.definition.md` § 6.2.
 
 ## Sequencing
 
