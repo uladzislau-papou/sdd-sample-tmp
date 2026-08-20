@@ -197,31 +197,42 @@ drivers, adapters and configs.
 
 Do NOT use IllegalArgumentException for business semantics.
 
-**The test is reachability from a client, not the construct doing the throwing.**
+**The test is where the value comes from, not what validates it upstream.**
 
-- Invalid input that **can reach** the constructor from a request is business semantics →
-  throw a domain exception, which the `*ExceptionHandler` maps to a status.
-- Input that **cannot** reach it — because Bean Validation rejects it at the HTTP boundary,
-  or because the value comes from an internal source — means a programmer error, and
-  `IllegalArgumentException` is acceptable.
+- A value object constructed from a **command** — i.e. from data that entered through an
+  inport — MUST throw a **domain exception** on an invariant violation. Boundary validation
+  is an adapter concern and is **not** part of the core's contract: the same use case may
+  later be driven by a message consumer or a scheduler with no Bean Validation in front of
+  it, and the value object is then the only guard. The domain may not assume an adapter
+  ran.
+- A value object constructed from an **internal or infrastructure source**, never from a
+  command, MAY throw `IllegalArgumentException` — reaching it means a programmer error.
 - `Objects.requireNonNull` for null guards is out of scope; nulls are always programmer
   errors.
 
 Applied to the current value objects:
 
-| Type | Throws | Correct? |
-|------|--------|----------|
-| `ParticipantCount` | `InvalidBookingRequestException` | Yes — "at least one participant" is a business rule, and it maps to 400 |
-| `AvailableCapacity` | `IllegalArgumentException` | Yes — the value comes from `AvailabilityChecker`, never from a client |
-| `ParticipantContact` | `IllegalArgumentException` | Yes — `@NotBlank` rejects blanks at the boundary |
-| `TourId` | `IllegalArgumentException` | **No** — blank is business semantics and `TourId` is constructed from client input in `RequestTourBookingDriver` |
+| Type | Constructed from | Throws | Correct? |
+|------|------------------|--------|----------|
+| `ParticipantCount` | command (`RequestTourBooking`, `ChangeParticipants`) | `InvalidBookingRequestException` | **Yes** |
+| `TourId` | command (`RequestTourBookingDriver`) | `IllegalArgumentException` | **No** — needs a domain exception |
+| `ParticipantContact` | command (`RequestTourBookingDriver`) | `IllegalArgumentException` | **No** — needs a domain exception |
+| `AvailableCapacity` | `AvailabilityChecker` outport | `IllegalArgumentException` | **Yes** |
 
-`TourId` is therefore the outlier, not `ParticipantCount`. `ddd-hex-reviewer` flagged the
-inconsistency and named `ParticipantCount` as the odd one out; on inspection the reverse is
-true — `ParticipantCount` is the only one of the four that gets it right.
+> **This rule was wrong on its first attempt, twice over.** `ddd-hex-reviewer` first named
+> `ParticipantCount` as the outlier; I replaced that with a "reachability from a client"
+> criterion and named `TourId` instead. The reviewer then showed the criterion refuted its
+> own conclusion: `tourId`, `contactName`, `contactEmail` and `participantCount` all carry
+> Bean Validation on a `@Valid` endpoint, so all four were equally "unreachable" and the
+> criterion cleared everything — including the row it was written to condemn. The
+> discriminator above (source of the value, not upstream validation) is the one that
+> actually decides the four rows, and it makes **two** of them wrong rather than one.
 
-Fixing `TourId` changes an exception type, so it is behaviour change requiring its own RED
-and its own increment. Recorded here rather than done silently.
+Fixing `TourId` and `ParticipantContact` changes exception types, which is behaviour
+change: `IllegalArgumentException` is currently unmapped and surfaces as 500, while a
+domain exception maps to 400. It needs its own RED and its own increment — the same
+increment as the unmapped `IllegalArgumentException` from `UUID.fromString` recorded in
+`ports/start-tour.inport.spec.md` § 7, since both are the same defect.
 
 ------------------------------------------------------------------------
 

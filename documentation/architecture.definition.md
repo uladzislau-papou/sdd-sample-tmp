@@ -196,6 +196,34 @@ Typical characteristics:
 - Transaction-aware (but transaction boundary is owned by driver/use case)
 - Focused on **consistency and invariants** (aggregate boundaries)
 
+##### Selection criteria in write-side queries
+
+A write-side query MAY filter on a domain criterion — `findConfirmedByTourId` rather than
+`findByTourId` plus a filter in the caller. Three conditions:
+
+1. **The aggregate still enforces the rule.** The query *selects candidates*; it does not
+   replace the guard. `markActive` must reject a non-CONFIRMED booking whether or not the
+   query already excluded it. A query that becomes the only enforcement is drift.
+2. **The criterion is named in the method.** `findConfirmedByTourId`, not
+   `findByTourIdAndStatus(status)` with the constant supplied by the caller — that just
+   relocates the knowledge to the caller.
+3. **It is specified.** The port spec states the criterion, so the duplication between SQL
+   and aggregate guard is deliberate and visible rather than discovered later.
+
+Why permit the duplication at all: the alternative is a status filter in the caller, and
+for an inbound adapter that is business logic in the wrong layer (§ 4.8). It can also be
+load-bearing — `TourStartedListener` fans out across bookings in one transaction, and
+`markActive` throws for a non-activatable one, so filtering in the caller is what stops a
+single ineligible booking rolling back the batch.
+
+The duplication is the accepted cost. If the criterion changes, both places change, and the
+port spec is where that is recorded.
+
+> Previously this rule existed only as an argument inside
+> `ports/tour-booking-repository.outport.spec.md` § 2.4 — an authority-level-16 document,
+> which made the precedent unappealable and unenforceable. Raised to definition level after
+> `ddd-hex-reviewer` reported it as the last remaining undocumented rule.
+
 #### `outbound.persistence.read`
 
 Read-side persistence:
