@@ -364,6 +364,17 @@ made ADR 0003's claim that "both contexts depend on `shared.domain` only" false.
 Wiring: `bootstrap.SharedConfig` declares the shared beans. Per-context configs
 (`BookingConfig`, `GuideConfig`) declare only their own context's adapters.
 
+**Framework dependencies are permitted in `shared.outbound`** (and in a future
+`shared.inbound`), on the same terms as any other adapter package — § 4.7. These are
+adapters, so Spring, HTTP clients and messaging libraries belong here.
+`LoggingDomainEventPublisher` wrapping Spring's `ApplicationEventPublisher` is the
+intended shape.
+
+The framework-free constraint applies to `shared.domain` and `shared.outport`, exactly as
+it applies to a context's `core`. The boundary is core-versus-adapter, not
+shared-versus-context: `shared` is not a privileged framework-free island, it is a
+context-neutral one.
+
 Rules:
 - Keep `shared` minimal. Only add here what is genuinely cross-context.
 - Do not add context-specific types here (e.g., `TourBookingRequested` stays in
