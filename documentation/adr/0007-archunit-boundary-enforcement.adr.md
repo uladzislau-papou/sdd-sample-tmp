@@ -1,10 +1,11 @@
 # ADR 0007 – ArchUnit Boundary Enforcement
 
 ## Status
-Proposed
+Accepted
 
-Awaiting confirmation. `sdd.playbook.md` § 6 item 2 (new external dependency) fired;
-implementation waits.
+Confirmed by the maintainer. `sdd.playbook.md` § 6 item 2 (new external dependency)
+fired and implementation waited for this confirmation, per `execution.playbook.md`
+§ 3.2.4.
 
 ## Context
 
