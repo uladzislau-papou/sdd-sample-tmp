@@ -31,16 +31,22 @@ a witnessed green run, not on predicted ones.
 
 | Use case | Ticked | Open |
 |----------|--------|------|
-| UC01 RequestTourBooking | 13/15 | reviewer PASS, gates → 5.8 |
-| UC02 ConfirmTourBooking | 8/10 | reviewer PASS, gates → 5.8 |
-| UC03 CancelTourBooking | 9/11 | reviewer PASS, gates → 5.8 |
-| UC04 ChangeParticipants | 13/15 | reviewer PASS, gates → 5.8 |
-| UC05 StartTour | 14/16 | reviewer PASS, gates → 5.8 |
-| UC06 MarkBookingActive | 10/13 | **`TourStartedListener` test → 2.3**, reviewer PASS, gates → 5.8 |
+| UC01 RequestTourBooking | **15/15** | — |
+| UC02 ConfirmTourBooking | **10/10** | — |
+| UC03 CancelTourBooking | **11/11** | — |
+| UC04 ChangeParticipants | **15/15** | — |
+| UC05 StartTour | **16/16** | — |
+| UC06 MarkBookingActive | **13/13** | — |
 
-Closed this pass: UC01 AC-03/AC-04 REST boundary (3.2) · UC04 400, 502 (3.3) and
-persistence (3.4) · UC05 driver test (3.1), domain spec (1.1), port specs (1.2, 1.3) ·
-UC06 persistence (3.5).
+**80/80.** Closed across the effort: UC01 AC-03/AC-04 REST boundary (3.2) · UC04 400 and
+502 (3.3), persistence (3.4) · UC05 driver test (3.1), domain spec (1.1), port specs
+(1.2, 1.3) · UC06 persistence (3.5), listener test (2.3) · and the twelve gate-shaped
+boxes at 5.8.
+
+Two of these were real bugs rather than coverage gaps: `TourBookingJooqRepository.update`
+wrote only `status`, silently discarding UC04's entire effect; and the controller tests
+booted the full application without the `test` profile, writing a file-based H2 database
+that leaked state between runs.
 
 ---
 
