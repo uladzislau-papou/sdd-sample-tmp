@@ -22,7 +22,7 @@ Kept for provenance only. **Not a `/loop-uc` target** — the loop refuses
 | Original block | Successor | Status |
 |----------------|-----------|--------|
 | StartTour (Guide) | [`uc05-start-tour.spec.md`](uc05-start-tour.spec.md) | IMPLEMENTED |
-| CompleteTour (Guide) | [`uc11-complete-tour.spec.md`](uc11-complete-tour.spec.md) | SPECIFIED |
+| CompleteTour (Guide) | [`uc11-complete-tour.spec.md`](uc11-complete-tour.spec.md) | IMPLEMENTED |
 | CancelTourByGuide (Guide) | [`uc12-cancel-tour-by-guide.spec.md`](uc12-cancel-tour-by-guide.spec.md) | SPECIFIED |
 
 The original note asked whether these were "still necessary after implementing

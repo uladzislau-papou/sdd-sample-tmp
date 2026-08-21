@@ -21,15 +21,20 @@ import java.util.List;
  * <p>A {@code GuideTour} is the guide-side record of a tour session. It is independent
  * of individual {@code TourBooking} aggregates, which represent customer-side reservations.
  *
- * <p>State changes are performed via named methods ({@link #start}). Each method records
- * the resulting domain event internally and exposes events via {@link #pullDomainEvents()}.
+ * <p>State changes are performed via named methods ({@link #start}, {@link #complete}).
+ * Each records the resulting domain event internally and exposes events via
+ * {@link #pullDomainEvents()}.
  *
  * <p>Reconstitution from persistence uses {@link #reconstitute} — no invariants are
- * re-checked when loading an already-valid past fact.
+ * re-checked when loading an already-valid past fact. The consequence is that a
+ * {@code RUNNING} aggregate with a null {@code startedAt} is representable, so
+ * {@link #complete} guards for it explicitly (invariant I-06).
  *
  * <p>Framework-free: no Spring, no JPA, no IO.
  *
- * <p>SDD: See {@code documentation/use-cases/uc05-start-tour.spec.md}.
+ * <p>SDD: See {@code documentation/domain/aggregate-guide-tour.spec.md},
+ * {@code documentation/use-cases/uc05-start-tour.spec.md} and
+ * {@code documentation/use-cases/uc11-complete-tour.spec.md}.
  */
 public class GuideTour {
 
@@ -121,11 +126,22 @@ public class GuideTour {
      * @param completedAt the actual completion time; must not be null
      * @throws InvalidGuideTourStateException     if the current state is not {@code RUNNING}
      * @throws TourCompletedBeforeStartException  if {@code completedAt} is before {@code startedAt}
+     * @throws IllegalStateException              if the tour is {@code RUNNING} with no
+     *                                            {@code startedAt} — corrupt data (I-06)
      */
     public void complete(final Instant completedAt) {
         Objects.requireNonNull(completedAt, "completedAt must not be null");
         if (status != GuideTourStatus.RUNNING) {
             throw new InvalidGuideTourStateException(status);
+        }
+        if (startedAt == null) {
+            // RUNNING with no startedAt is an impossible state that only corrupt data or
+            // misuse of reconstitute can produce - the column is nullable with no CHECK.
+            // Guarded explicitly so it surfaces as a named data fault rather than as an
+            // NPE from the comparison below. See I-06/I-07 in the aggregate spec.
+            throw new IllegalStateException(
+                    "GuideTour " + id.value() + " is RUNNING but has no startedAt; "
+                            + "cannot determine whether completion precedes the start");
         }
         if (completedAt.isBefore(startedAt)) {
             throw new TourCompletedBeforeStartException(startedAt, completedAt);

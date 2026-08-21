@@ -42,11 +42,19 @@ Error types:
 
 | Exception | Condition | HTTP Status |
 |-----------|-----------|-------------|
+| `IllegalArgumentException` | `guideTourId` is not a well-formed UUID | 400 |
 | `GuideTourNotFoundException` | no guide tour with the given id | 404 |
 | `InvalidGuideTourStateException` | status ≠ RUNNING | 409 |
 | `TourCompletedBeforeStartException` | `completedAt` is before `startedAt` | 409 |
+| `IllegalStateException` | stored row is `RUNNING` with a null `started_at` | 500 |
 
 All errors return `{ "error": "<message>" }`.
+
+The 400 comes from `UUID.fromString` inside `CompleteTourDriver`, not from the
+controller — the path variable is a `String` all the way to the driver, so the web
+layer has nothing to validate. The 500 is an unmapped data-integrity fault and is
+listed for completeness, not as a contract anyone should rely on
+(see I-06 in `documentation/domain/aggregate-guide-tour.spec.md`).
 
 `FINISHED` is the terminal status name already used by `GuideTourStatus` — do not
 introduce a second name such as `COMPLETED` for the same state.
@@ -135,8 +143,11 @@ Response body (200 OK):
 
 HTTP status mapping:
 - `200 OK` – tour completed
+- `400 Bad Request` – `{guideTourId}` is not a well-formed UUID
 - `404 Not Found` – guide tour does not exist
 - `409 Conflict` – not RUNNING, or completed before start
+
+All four are exercised in `rest/uc11-complete-tour.http`.
 
 
 ## 10. Definition of Done

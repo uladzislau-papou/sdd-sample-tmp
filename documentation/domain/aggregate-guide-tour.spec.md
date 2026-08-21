@@ -58,11 +58,20 @@ Enforced today:
   methods. Enforced structurally: all three are private with no setters.
 - **I-07** — A tour MUST NOT complete before it started.
   Enforced in `complete(Instant)`; violation → `TourCompletedBeforeStartException`.
+  **Depends on I-06:** the comparison needs a non-null `startedAt` to compare against,
+  so I-07 is only as strong as I-06. `complete(...)` therefore guards the dependency
+  explicitly rather than assuming it — see below.
 - **I-08** — A tour MUST NOT complete unless it is `RUNNING`.
   Enforced in `complete(Instant)`; violation → `InvalidGuideTourStateException`.
 - **I-06** — `startedAt` is non-null if and only if the tour has left `SCHEDULED`
-  via `start(...)`. Currently an emergent property of `start(...)` rather than a
-  checked invariant.
+  via `start(...)`. An emergent property of `start(...)` rather than a checked
+  invariant: `reconstitute(...)` accepts `RUNNING` with a null `startedAt`, and
+  `guide_tour.started_at` is nullable with no CHECK constraint, so the database
+  does not enforce it either. `complete(...)` consequently checks it and throws
+  `IllegalStateException` naming the aggregate — a data-integrity fault, not a
+  business-rule violation (`coding-style.definition.md` § 6.2). Before that guard
+  existed, the pairing surfaced as a bare `NullPointerException`, i.e. a 500.
+  Covered by `GuideTourTest.complete_throwsIllegalStateException_whenRunningWithoutStartedAt`.
 
 Violations MUST result in an exception.
 
@@ -157,14 +166,18 @@ Emitted events: `TourStarted`.
 ### `complete(Instant completedAt)` — UC11
 
 Preconditions:
-- `status == RUNNING` (else `InvalidGuideTourStateException`)
-- `completedAt >= startedAt` (else `TourCompletedBeforeStartException`)
 - `completedAt` non-null (explicit `requireNonNull`)
+- `status == RUNNING` (else `InvalidGuideTourStateException`)
+- `startedAt != null` (else `IllegalStateException` — I-06, unenforceable upstream)
+- `completedAt >= startedAt` (else `TourCompletedBeforeStartException`)
+
+Listed in evaluation order, which matters: the `startedAt` check must precede the
+comparison it feeds.
 
 Postconditions:
 - `status == FINISHED`
 - `completedAt` set to the supplied value
-- On failure, **no state change** — both guards run before any mutation
+- On failure, **no state change** — every guard runs before any mutation
 
 Emitted events: `TourCompleted`.
 
@@ -231,13 +244,24 @@ Trigger: successful `complete(...)`.
 |----------|-----------|--------|
 | Start when not `SCHEDULED` | `InvalidGuideTourStateException` | no state change, no event |
 | Start before `scheduledStart` | `TourStartTooEarlyException` | no state change, no event |
+| Complete when not `RUNNING` | `InvalidGuideTourStateException` | no state change, no event |
+| Complete before `startedAt` | `TourCompletedBeforeStartException` | no state change, no event |
+| Complete a `RUNNING` tour with a null `startedAt` | `IllegalStateException` | corrupt-data guard (I-06), message names the aggregate id |
 | Load a non-existent tour | `GuideTourNotFoundException` | thrown by the driver, not the aggregate |
 | `start(null)` | `NullPointerException` | explicit guard (G-02) — nulls are programmer errors, not business semantics |
+| `complete(null)` | `NullPointerException` | explicit guard, same rationale |
 | `schedule` with a null argument | `NullPointerException` | explicit guard (G-01) |
 
-All three domain exceptions extend `RuntimeException` and carry a message naming the
+All four domain exceptions — `InvalidGuideTourStateException`,
+`TourStartTooEarlyException`, `TourCompletedBeforeStartException` and
+`GuideTourNotFoundException` — extend `RuntimeException` and carry a message naming the
 offending state or time. `GuideTourNotFoundException` lives in the aggregate's
-`exception` package but is thrown by `StartTourDriver`, not by the aggregate.
+`exception` package but is thrown by the drivers (`StartTourDriver`,
+`CompleteTourDriver`), never by the aggregate.
+
+`IllegalStateException` is deliberately **not** one of them. It signals a data fault
+rather than a business rule, so it stays a JDK type and maps to a 500 — which is the
+honest answer when the stored row is inconsistent.
 
 
 ## 7. Test Requirements
@@ -258,9 +282,9 @@ Expressed as checkable items, naming the test that satisfies each.
       `.schedule_hasNoPendingEvents`
 - [x] Event emission — `GuideTourTest.start_emitsTourStartedEvent`
 - [x] Event drain semantics — `GuideTourTest.pullDomainEvents_returnsEmptyOnSecondCall`
-- [x] Persistence round-trip incl. UTC handling — `GuideTourJooqRepositoryIT` (5 methods)
+- [x] Persistence round-trip incl. UTC handling — `GuideTourJooqRepositoryIT` (7 methods)
 
-### Open
+### Closed gaps and later increments
 - [x] G-01 `schedule` rejects nulls — three `GuideTourTest.schedule_throwsNullPointerException_*` tests
 - [x] G-02 `start(null)` guarded — `GuideTourTest.start_throwsNullPointerException_whenStartedAtIsNull`
 - [x] G-03 `reconstitute` restricted — `ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers`
@@ -268,7 +292,12 @@ Expressed as checkable items, naming the test that satisfies each.
 - [x] Orchestration: `StartTourDriverTest` — 14 tests covering happy path, clock
       resolution, not-found, all three illegal states and the too-early guard.
       Verified non-vacuous by mutation testing
-- [x] `complete(...)` transitions and `TourCompleted` emission — UC11. Ten
+- [x] `complete(...)` transitions and `TourCompleted` emission — UC11. Eleven
       `GuideTourTest.complete_*` / `completedAt_*` tests, eleven in `CompleteTourDriverTest`,
-      five in `GuideTourControllerTest`, and two persistence ITs
+      five in `GuideTourControllerTest`, and three persistence ITs
+      (`update_changesStatus_andCompletedAt_afterComplete`,
+      `completedAt_isEmpty_forATourThatWasNeverCompleted`, plus the UTC assertion)
+- [x] I-06 guarded where it is relied upon —
+      `GuideTourTest.complete_throwsIllegalStateException_whenRunningWithoutStartedAt`.
+      Found by `ddd-hex-reviewer` during the UC11 review, not by the original tests
 - [ ] `cancel(...)` transitions and `TourCancelledByGuide` emission — UC12, not implemented

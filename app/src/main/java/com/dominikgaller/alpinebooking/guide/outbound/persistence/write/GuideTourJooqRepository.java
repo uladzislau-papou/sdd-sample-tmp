@@ -19,7 +19,9 @@ import static com.dominikgaller.alpinebooking.jooq.Tables.GUIDE_TOUR;
  * <p>Supports insert ({@link #save}), point-lookup ({@link #findById}),
  * and state update ({@link #update}) on the {@code guide_tour} table.
  *
- * <p>SDD: See {@code documentation/use-cases/uc05-start-tour.spec.md}.
+ * <p>SDD: See {@code documentation/ports/guide-tour-repository.outport.spec.md},
+ * {@code documentation/use-cases/uc05-start-tour.spec.md} and
+ * {@code documentation/use-cases/uc11-complete-tour.spec.md}.
  */
 @Repository
 public class GuideTourJooqRepository implements GuideTourRepository {

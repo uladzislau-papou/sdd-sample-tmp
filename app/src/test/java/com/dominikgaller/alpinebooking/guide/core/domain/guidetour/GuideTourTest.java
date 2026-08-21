@@ -220,6 +220,24 @@ class GuideTourTest {
                 .isThrownBy(() -> tour.complete(AFTER_SCHEDULED_START));
     }
 
+    /**
+     * A RUNNING tour with no {@code startedAt} is a state only corrupt data or misuse of
+     * {@code reconstitute} can produce — the column is nullable and has no CHECK. Before
+     * this guard, {@code complete} dereferenced {@code startedAt} and raised a bare
+     * {@code NullPointerException}, i.e. a 500. It is a data-integrity fault rather than a
+     * business-rule violation, so {@code IllegalStateException} with a message naming the
+     * aggregate is the honest signal ({@code coding-style.definition.md} § 6.2).
+     */
+    @Test
+    void complete_throwsIllegalStateException_whenRunningWithoutStartedAt() {
+        final GuideTour corrupt = GuideTour.reconstitute(
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.RUNNING, null, null);
+
+        assertThatExceptionOfType(IllegalStateException.class)
+                .isThrownBy(() -> corrupt.complete(AFTER_SCHEDULED_START))
+                .withMessageContaining("startedAt");
+    }
+
     @Test
     void complete_throwsInvalidGuideTourStateException_whenCancelled() {
         final GuideTour tour = GuideTour.reconstitute(

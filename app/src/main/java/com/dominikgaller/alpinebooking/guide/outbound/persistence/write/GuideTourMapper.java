@@ -19,7 +19,9 @@ import java.util.UUID;
  * <p>No Spring dependency. No IO. {@code TIMESTAMP} columns are stored as UTC
  * {@link LocalDateTime} and converted to/from {@link Instant} using UTC offset.
  *
- * <p>SDD: See {@code documentation/use-cases/uc05-start-tour.spec.md}.
+ * <p>SDD: See {@code documentation/ports/guide-tour-repository.outport.spec.md},
+ * {@code documentation/use-cases/uc05-start-tour.spec.md} and
+ * {@code documentation/use-cases/uc11-complete-tour.spec.md}.
  */
 class GuideTourMapper {
 
