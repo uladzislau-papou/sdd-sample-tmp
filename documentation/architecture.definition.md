@@ -472,10 +472,30 @@ top-level packages on disk and diffs them against this table on every increment.
    how reasonable it looks. The reviewer reports it as `DRIFT` and the increment
    is blocked until either the package is removed or the ADR exists and this
    table is updated.
-3. **Contexts do not import each other.** No `booking` → `guide` import and no
-   `guide` → `booking` import. Cross-context communication goes through
-   `shared.domain.event` (see `adr/0002-domain-event-publication.adr.md`) or an
-   explicit outport.
+3. **Contexts do not import each other's internals.** A context's `core.inport` triple is
+   its **published API** — § 4.2 calls it "the application boundary" — and one context MAY
+   depend on another's inport. Everything else is closed: no import of another context's
+   `core.domain`, `core.outport`, `inbound.*` or `outbound.*`, in either direction.
+
+   Cross-context communication therefore has three sanctioned forms:
+
+   | Form | When | Example |
+   |------|------|---------|
+   | Domain event via `shared.domain.event` | The publisher does not need to know the outcome | UC05 → UC06 (`TourStarted`) |
+   | Synchronous call to the other context's **inport**, from the orchestrating driver | The caller's own outcome depends on the callee's | UC12 → UC09 |
+   | The caller's own outport | The dependency is on something outside this system | `AvailabilityChecker` |
+
+   **Why the inport and not an outport.** The second form is ordinary orchestration:
+   § 4.4 makes a driver responsible for coordinating a use case, and calling a published
+   API is what coordination looks like. Declaring an outport for it would add an interface
+   whose only implementation is a single known adapter delegating to that same inport —
+   indirection that changes the import graph without reducing the coupling, since the
+   caller still depends on the callee's behaviour, contract and availability.
+
+   **This narrows ADR-0003.** That ADR asserted "both contexts depend on `shared.domain`
+   only", which was true when `guide` was extracted and is no longer the rule. ADR-0003 is
+   immutable and stands as the record of the extraction; this table is the current rule.
+   The coupling it permits is deliberate and bounded — a published API, never an internal.
 4. **`shared` must not depend on any bounded context** (§ 9). Adding a
    context-specific type to `shared` is drift even though `shared` is registered.
 5. Every context follows the same internal ontology (§ 3): `core` /
