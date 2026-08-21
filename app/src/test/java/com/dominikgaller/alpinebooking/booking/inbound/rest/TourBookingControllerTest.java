@@ -3,6 +3,7 @@ package com.dominikgaller.alpinebooking.booking.inbound.rest;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.BookingNotFoundException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
+import com.dominikgaller.alpinebooking.booking.core.inport.command.CancelTourBookingCommand;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingStateException;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.inport.result.CancelTourBookingResult;
@@ -17,15 +18,18 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import java.time.Instant;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -229,16 +233,88 @@ class TourBookingControllerTest {
                 .andExpect(jsonPath("$.error").isNotEmpty());
     }
 
-    // ── UC03: DELETE /api/v1/bookings/{bookingId} ─────────────────────────────
+    // ── UC03/UC08: POST /api/v1/bookings/{bookingId}/cancel ───────────────────
 
     @Test
     void cancelBooking_returns200_withCancelledStatus() throws Exception {
         when(cancelUseCase.cancel(any()))
                 .thenReturn(new CancelTourBookingResult("CANCELLED"));
 
-        mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    /**
+     * UC08 — a body of {@code {}} must behave exactly like no body at all.
+     *
+     * <p>Distinct from {@code cancelBooking_returns200_withCancelledStatus} above, which
+     * sends no body and exercises the {@code @RequestBody(required = false)} null the
+     * controller normalises. This one sends a real but empty object, so the controller
+     * receives a non-null {@code CancelTourBookingRequest} with both components null — a
+     * different branch of the same normalisation. An earlier revision of this test issued a
+     * byte-identical request to the one above and therefore asserted nothing new.
+     */
+    @Test
+    void cancelBooking_returns200_whenBodyIsAnEmptyObject() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenReturn(new CancelTourBookingResult("CANCELLED"));
+
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        final ArgumentCaptor<CancelTourBookingCommand> captor =
+                ArgumentCaptor.forClass(CancelTourBookingCommand.class);
+        verify(cancelUseCase).cancel(captor.capture());
+        assertThat(captor.getValue().cancelledAt()).isNull();
+        assertThat(captor.getValue().reason()).isNull();
+    }
+
+    /**
+     * UC08 — the reason and cancellation time must reach the inport. Asserted with a captor
+     * rather than by observing the response, because the response carries only the status:
+     * a controller that dropped the body would look identical from the outside.
+     */
+    @Test
+    void cancelBooking_passesCancelledAtAndReasonToTheUseCase() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenReturn(new CancelTourBookingResult("CANCELLED"));
+
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cancelledAt":"2026-03-05T08:30:00Z","reason":"Travel plans changed"}
+                                """))
+                .andExpect(status().isOk());
+
+        final ArgumentCaptor<CancelTourBookingCommand> captor =
+                ArgumentCaptor.forClass(CancelTourBookingCommand.class);
+        verify(cancelUseCase).cancel(captor.capture());
+        assertThat(captor.getValue().reason()).isEqualTo("Travel plans changed");
+        assertThat(captor.getValue().cancelledAt())
+                .isEqualTo(Instant.parse("2026-03-05T08:30:00Z"));
+    }
+
+    /**
+     * UC08 — a blank or over-long reason is a 400. The validation itself lives in
+     * `CancellationReason` and is exercised by `CancellationReasonTest` and the driver test;
+     * this slice mocks the inport, so what it verifies is the other half — that
+     * `BookingExceptionHandler` maps the resulting exception to 400 with an error body.
+     */
+    @Test
+    void cancelBooking_returns400_whenReasonIsInvalid() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenThrow(new InvalidBookingRequestException(
+                        "Cancellation reason must not be blank"));
+
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").isNotEmpty());
     }
 
     @Test
@@ -246,7 +322,7 @@ class TourBookingControllerTest {
         when(cancelUseCase.cancel(any()))
                 .thenThrow(new BookingNotFoundException(BOOKING_UUID));
 
-        mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").isNotEmpty());
     }
@@ -256,7 +332,7 @@ class TourBookingControllerTest {
         when(cancelUseCase.cancel(any()))
                 .thenThrow(new InvalidBookingStateException(TourBookingStatus.ACTIVE));
 
-        mockMvc.perform(delete("/api/v1/bookings/{id}", BOOKING_UUID))
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").isNotEmpty());
     }

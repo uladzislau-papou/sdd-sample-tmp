@@ -1,6 +1,7 @@
 package com.dominikgaller.alpinebooking.booking.outbound.persistence.write;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.CancellationReason;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
@@ -9,6 +10,8 @@ import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import org.jooq.DSLContext;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -72,12 +75,21 @@ public class TourBookingJooqRepository implements TourBookingRepository {
         // Every mutable field of the aggregate must be written here. Immutable fields
         // (id, tour_id, tour_date, contact) are set once by save() and never change.
         // Listing only `status` silently dropped UC04's participant-count and capacity
-        // changes — see TourBookingJooqRepositoryIT.update_changes*_inDatabase.
+        // changes — see TourBookingJooqRepositoryIT.update_changes*_inDatabase. UC08's
+        // three cancellation columns are here for the same reason; the port spec records
+        // this as a standing obligation, not a snapshot of today's field list.
         final int rowsUpdated = dsl
                 .update(TOUR_BOOKING)
                 .set(TOUR_BOOKING.STATUS, booking.status().name())
                 .set(TOUR_BOOKING.PARTICIPANT_COUNT, booking.participantCount().value())
                 .set(TOUR_BOOKING.AVAILABLE_CAPACITY, booking.availableCapacity().value())
+                .set(TOUR_BOOKING.CANCELLED_AT, booking.cancelledAt()
+                        .map(instant -> LocalDateTime.ofInstant(instant, ZoneOffset.UTC))
+                        .orElse(null))
+                .set(TOUR_BOOKING.CANCELLED_BY, booking.cancelledBy().map(Enum::name).orElse(null))
+                .set(TOUR_BOOKING.CANCELLATION_REASON, booking.cancellationReason()
+                        .map(CancellationReason::value)
+                        .orElse(null))
                 .where(TOUR_BOOKING.ID.eq(booking.bookingId().value().toString()))
                 .execute();
         if (rowsUpdated != 1) {

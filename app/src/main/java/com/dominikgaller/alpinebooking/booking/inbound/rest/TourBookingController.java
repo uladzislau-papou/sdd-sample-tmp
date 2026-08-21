@@ -1,5 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
+import com.dominikgaller.alpinebooking.booking.inbound.rest.request.CancelTourBookingRequest;
 import com.dominikgaller.alpinebooking.booking.inbound.rest.request.ChangeParticipantsRequest;
 import com.dominikgaller.alpinebooking.booking.inbound.rest.request.RequestTourBookingRequest;
 import com.dominikgaller.alpinebooking.booking.inbound.rest.response.CancelTourBookingResponse;
@@ -61,8 +62,15 @@ public class TourBookingController implements TourBookingRestAPI {
     }
 
     @Override
-    public CancelTourBookingResponse cancel(final String bookingId) {
-        final var result = cancelTourBookingUseCase.cancel(new CancelTourBookingCommand(bookingId));
+    public CancelTourBookingResponse cancel(
+            final String bookingId,
+            final CancelTourBookingRequest request) {
+        // A absent body is equivalent to one with both fields null: cancelling without a
+        // reason is permitted, so the controller normalises rather than rejects.
+        final var result = cancelTourBookingUseCase.cancel(new CancelTourBookingCommand(
+                bookingId,
+                request == null ? null : request.cancelledAt(),
+                request == null ? null : request.reason()));
         return new CancelTourBookingResponse(result.status());
     }
 

@@ -2,6 +2,8 @@ package com.dominikgaller.alpinebooking.booking.outbound.persistence.write;
 
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.AvailableCapacity;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.BookingId;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.CancellationReason;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.CancelledBy;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.ParticipantContact;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.ParticipantCount;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
@@ -18,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static com.dominikgaller.alpinebooking.jooq.Tables.TOUR_BOOKING;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -124,7 +128,7 @@ class TourBookingJooqRepositoryIT {
         final TourBooking booking = sampleBooking();
         repository.save(booking);
 
-        booking.cancel(NOW);
+        booking.cancel(NOW, CancelledBy.USER, null);
         repository.update(booking);
 
         final var reloaded = repository.findById(booking.bookingId());
@@ -210,7 +214,7 @@ class TourBookingJooqRepositoryIT {
 
         final TourBooking cancelled = sampleBooking();
         repository.save(cancelled);
-        cancelled.cancel(NOW);
+        cancelled.cancel(NOW, CancelledBy.USER, null);
         repository.update(cancelled);
 
         final var found = repository.findConfirmedByTourId(confirmed.tourId());
@@ -279,6 +283,89 @@ class TourBookingJooqRepositoryIT {
         repository.save(booking);
 
         assertThat(repository.findActiveByTourId(booking.tourId())).isEmpty();
+    }
+
+    /**
+     * UC08 — cancellation attribution must survive a round trip. This is the assertion the
+     * port spec's standing obligation demands for three newly mutable fields; without it
+     * the columns could be absent from the `update` statement and every other test would
+     * still pass, which is exactly how UC04's effect was lost.
+     */
+    @Test
+    void update_persistsCancellationAttribution() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.cancel(NOW, CancelledBy.USER, new CancellationReason("Travel plans changed"));
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.CANCELLED);
+        assertThat(reloaded.get().cancelledBy()).contains(CancelledBy.USER);
+        assertThat(reloaded.get().cancelledAt()).contains(NOW);
+        assertThat(reloaded.get().cancellationReason())
+                .contains(new CancellationReason("Travel plans changed"));
+    }
+
+    /**
+     * UC08 — cancelling without a reason is permitted, so the column stays null rather than
+     * holding an empty string. Asserted separately because a mapper that coerced null to ""
+     * would satisfy the test above and silently invent a reason nobody gave.
+     */
+    @Test
+    void update_persistsCancellation_withoutReason() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.cancel(NOW, CancelledBy.USER, null);
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().cancellationReason()).isEmpty();
+        assertThat(reloaded.get().cancelledBy()).contains(CancelledBy.USER);
+    }
+
+    /**
+     * UC08 — a live booking must come back with all three cancellation fields empty. Guards
+     * the mapper's null handling in the other direction: a non-null default would make every
+     * booking look cancelled.
+     */
+    @Test
+    void findById_returnsEmptyCancellationFields_forALiveBooking() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().cancelledAt()).isEmpty();
+        assertThat(reloaded.get().cancelledBy()).isEmpty();
+        assertThat(reloaded.get().cancellationReason()).isEmpty();
+    }
+
+    /**
+     * UC08 — `cancelled_at` is the first `Instant` column on `tour_booking`, so it pins the
+     * UTC convention the guide side already follows
+     * (`GuideTourJooqRepositoryIT.save_persistsScheduledStart_asUtcLocalDateTime`). Storing
+     * local time would make the value depend on the server's zone.
+     */
+    @Test
+    void update_persistsCancelledAt_asUtcLocalDateTime() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        booking.cancel(NOW, CancelledBy.USER, null);
+        repository.update(booking);
+
+        final var record = dsl.selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.ID.eq(booking.bookingId().value().toString()))
+                .fetchOne();
+
+        assertThat(record).isNotNull();
+        assertThat(record.getCancelledAt())
+                .isEqualTo(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
     }
 
     /**

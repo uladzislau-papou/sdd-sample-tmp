@@ -5,7 +5,8 @@ import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingActivated;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingCompleted;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.ParticipantsChanged;
-import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingCancelled;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingCancelledByGuide;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingCancelledByUser;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingConfirmed;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingRequested;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.CapacityExceededException;
@@ -19,10 +20,16 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class TourBookingTest {
 
     private static final Instant NOW = Instant.parse("2026-03-03T12:00:00Z");
+    private static final Instant LATER = Instant.parse("2026-03-04T12:00:00Z");
+    private static final CancellationReason REASON =
+            new CancellationReason("Travel plans changed");
+    private static final CancellationReason OTHER_REASON =
+            new CancellationReason("Guide fell ill");
     private static final LocalDate FUTURE_DATE = LocalDate.of(2026, 6, 15);
 
     private static final BookingId BOOKING_ID = BookingId.generate();
@@ -153,7 +160,7 @@ class TourBookingTest {
     void cancel_fromRequested_transitionsToCancelled() {
         final TourBooking booking = validBooking();
 
-        booking.cancel(NOW);
+        booking.cancel(NOW, CancelledBy.USER, null);
 
         assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
     }
@@ -163,7 +170,7 @@ class TourBookingTest {
         final TourBooking booking = validBooking();
         booking.confirm(NOW);
 
-        booking.cancel(NOW);
+        booking.cancel(NOW, CancelledBy.USER, null);
 
         assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
     }
@@ -175,7 +182,7 @@ class TourBookingTest {
                 TourBookingStatus.ACTIVE);
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
-                .isThrownBy(() -> booking.cancel(NOW));
+                .isThrownBy(() -> booking.cancel(NOW, CancelledBy.USER, null));
     }
 
     @Test
@@ -185,7 +192,7 @@ class TourBookingTest {
                 TourBookingStatus.COMPLETED);
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
-                .isThrownBy(() -> booking.cancel(NOW));
+                .isThrownBy(() -> booking.cancel(NOW, CancelledBy.USER, null));
     }
 
     @Test
@@ -195,22 +202,117 @@ class TourBookingTest {
                 TourBookingStatus.CANCELLED);
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
-                .isThrownBy(() -> booking.cancel(NOW));
+                .isThrownBy(() -> booking.cancel(NOW, CancelledBy.USER, null));
     }
 
+    // ── UC08: cancel attribution ─────────────────────────────────────────────
+
     @Test
-    void cancel_publishesTourBookingCancelledEvent() {
+    void cancel_byUser_publishesBookingCancelledByUserEvent() {
         final TourBooking booking = validBooking();
         booking.pullDomainEvents(); // drain TourBookingRequested
 
-        booking.cancel(NOW);
+        booking.cancel(NOW, CancelledBy.USER, REASON);
 
         final List<DomainEvent> events = booking.pullDomainEvents();
         assertThat(events).hasSize(1);
-        assertThat(events.get(0)).isInstanceOf(TourBookingCancelled.class);
-        final TourBookingCancelled event = (TourBookingCancelled) events.get(0);
+        assertThat(events.get(0)).isInstanceOf(BookingCancelledByUser.class);
+        final BookingCancelledByUser event = (BookingCancelledByUser) events.get(0);
         assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
-        assertThat(event.occurredAt()).isEqualTo(NOW);
+        assertThat(event.cancelledAt()).isEqualTo(NOW);
+        assertThat(event.reason()).isEqualTo(REASON);
+    }
+
+    /**
+     * The aggregate's contract is complete before UC09's inport exists: the event a
+     * cancellation emits is determined by who cancelled, which is aggregate behaviour, not
+     * use-case orchestration. UC09 adds the driver that supplies {@code GUIDE}.
+     */
+    @Test
+    void cancel_byGuide_publishesBookingCancelledByGuideEvent() {
+        final TourBooking booking = validBooking();
+        booking.pullDomainEvents();
+
+        booking.cancel(NOW, CancelledBy.GUIDE, REASON);
+
+        assertThat(booking.pullDomainEvents()).singleElement()
+                .isInstanceOf(BookingCancelledByGuide.class);
+    }
+
+    @Test
+    void cancel_byUser_fromRequested_recordsUserAttribution() {
+        final TourBooking booking = validBooking();
+
+        booking.cancel(NOW, CancelledBy.USER, REASON);
+
+        assertThat(booking.cancelledBy()).contains(CancelledBy.USER);
+        assertThat(booking.cancelledAt()).contains(NOW);
+    }
+
+    @Test
+    void cancel_byUser_fromConfirmed_recordsUserAttribution() {
+        final TourBooking booking = validBooking();
+        booking.confirm(NOW);
+
+        booking.cancel(NOW, CancelledBy.USER, REASON);
+
+        assertThat(booking.cancelledBy()).contains(CancelledBy.USER);
+    }
+
+    @Test
+    void cancel_byUser_recordsReason() {
+        final TourBooking booking = validBooking();
+
+        booking.cancel(NOW, CancelledBy.USER, REASON);
+
+        assertThat(booking.cancellationReason()).contains(REASON);
+    }
+
+    @Test
+    void cancel_withoutReason_leavesReasonEmpty() {
+        final TourBooking booking = validBooking();
+
+        booking.cancel(NOW, CancelledBy.USER, null);
+
+        assertThat(booking.cancellationReason()).isEmpty();
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
+    }
+
+    @Test
+    void cancellationFields_areEmpty_beforeCancellation() {
+        final TourBooking booking = validBooking();
+
+        assertThat(booking.cancelledAt()).isEmpty();
+        assertThat(booking.cancelledBy()).isEmpty();
+        assertThat(booking.cancellationReason()).isEmpty();
+    }
+
+    /**
+     * AC-06. The 409 is what protects the original attribution, so this asserts the
+     * consequence rather than trusting the guard: a second cancellation attempt by a
+     * different party must leave the first party's record intact.
+     */
+    @Test
+    void cancel_whenAlreadyCancelled_doesNotOverwriteAttribution() {
+        final TourBooking booking = validBooking();
+        booking.cancel(NOW, CancelledBy.USER, REASON);
+        booking.pullDomainEvents();
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.cancel(LATER, CancelledBy.GUIDE, OTHER_REASON));
+
+        assertThat(booking.cancelledBy()).contains(CancelledBy.USER);
+        assertThat(booking.cancelledAt()).contains(NOW);
+        assertThat(booking.cancellationReason()).contains(REASON);
+        assertThat(booking.pullDomainEvents()).isEmpty();
+    }
+
+    @Test
+    void cancel_throwsNullPointerException_whenCancelledByIsNull() {
+        final TourBooking booking = validBooking();
+
+        assertThatNullPointerException()
+                .isThrownBy(() -> booking.cancel(NOW, null, REASON));
     }
 
     // ── UC06: markActive ─────────────────────────────────────────────────────

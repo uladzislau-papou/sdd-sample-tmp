@@ -20,14 +20,15 @@ authoritative; this is a scoreboard.
 - [x] ArchUnit enforces § 6 and § 11, in CI, 30 rules
 - [x] `./gradlew clean test build` green, 187 tests, `app/data/` absent
 
-## DoD Scoreboard – UC01–UC06
+## DoD Scoreboard – Implemented use cases
 
 Mirrored from each use case spec's `## 10. Definition of Done`, recomputed from the
-specs. **0 open, down from 21.** Specs are authoritative.
+specs. Specs are authoritative.
 
-All closed. The last twelve were gate-shaped — six `ddd-hex-reviewer: PASS` and six
-`Quality gates green` — and closed together at task 5.8 on a witnessed `PASS` verdict and
-a witnessed green run, not on predicted ones.
+UC01–UC07 fully closed (the baseline's last twelve were gate-shaped — six
+`ddd-hex-reviewer: PASS` and six `Quality gates green` — and closed together at task 5.8
+on a witnessed `PASS` verdict and a witnessed green run, not on predicted ones). UC08's
+two remaining boxes are the same gate shape and close only on witnessed runs.
 
 | Use case | Ticked | Open |
 |----------|--------|------|
@@ -38,6 +39,7 @@ a witnessed green run, not on predicted ones.
 | UC05 StartTour | **16/16** | — |
 | UC06 MarkBookingActive | **13/13** | — |
 | UC07 MarkBookingCompleted | **21/21** | — |
+| UC08 CancelBookingByUser | **24/26** | 2 — `ddd-hex-reviewer: PASS` and quality gates, both gate-shaped and awaiting a witnessed run |
 
 UC07 (Phase 6 feature work) was added after the baseline paragraph above was written and
 is now closed at 21/21. Its two agent-reported contradictions were both real and were
@@ -320,9 +322,9 @@ Each use case is one `/loop-uc UC<nn>` run, not a hand-written task block.
 - [x] **Task 6.2.5**: `./gradlew clean test build` green, 262 tests, 0 failures.
 
 ### 6.3 - UC08 CancelBookingByUser
-- [x] **Task 6.3.1**: H1 resolved — **no ADR**. The change is confined to one aggregate's method signature and its callers, which is not an architectural decision under `sdd.playbook.md` § 6.
-- [ ] **Task 6.3.2**: `/loop-uc UC08`. Note UC08 **modifies UC03's endpoint**, so UC03's spec and `rest/uc03-cancel-tour-booking.http` change in the same increment.
-- [ ] **Task 6.3.3**: Confirm UC03's DoD is still fully ticked afterwards.
+- [x] **Task 6.3.1**: H1 resolved — **no ADR**. The change is confined to one aggregate's method signature and its callers, which is not an architectural decision under `sdd.playbook.md` § 6. (H1's `String` third parameter became `CancellationReason` during implementation — UC08 § 10 Contracts records the deviation and why.)
+- [ ] **Task 6.3.2**: `/loop-uc UC08`. Note UC08 **modifies UC03's endpoint**, so UC03's spec and `rest/uc03-cancel-tour-booking.http` change in the same increment. *In progress: implementation, tests, migration, REST file and all spec reconciliation are on disk (24/26 DoD boxes); the loop exits only on a witnessed `ddd-hex-reviewer: PASS` and green quality gates.* The endpoint verb changed `DELETE` → `POST .../cancel` — a maintainer-ruled breaking change, recorded in UC08 § 9 and UC03 § 9.
+- [x] **Task 6.3.3**: Confirm UC03's DoD is still fully ticked afterwards — re-verified against disk during UC08's reconciliation: all 11 boxes remain ticked, every named test method exists (`cancel_*`, `cancelBooking_*`, `update_changesStatus_toCancelled_afterCancel`), and the `.http` file covers 200/400/400/404/409 on the new route.
 
 ### 6.4 - UC12 + UC09 cancellation by guide
 - [x] **Task 6.4.1**: H2 resolved — ADR-0008 was written and then **Rejected** by the owner. The driver orchestrates and calls the booking inport synchronously; a `BookingCancellationPort` would only relocate the coupling behind an outport whose single implementation delegates to that very inport. `architecture.definition.md` § 11 rule 3 amended to permit driver-to-inport calls, and `ContextRegistryTest` enforces that only drivers may make them.

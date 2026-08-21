@@ -27,6 +27,14 @@ Confirmed by `spec-documenter`: only `outbound/persistence/write` exists, and
 that has no implementation. A read-side use case would exercise it — currently every
 use case is a command, so the CQRS half of the package ontology is unused.
 
+## UC12's DELETE verb vs the UC08 verb ruling
+UC12 § 9 still specifies `DELETE /api/v1/guide-tours/{guideTourId}` while its flow
+(`guideTour.cancel(cancelledAt, reason)`) carries a reason — the exact combination the
+maintainer ruled indefensible for UC08 (`DELETE` bodies are dropped by some clients and
+intermediaries; cancellation is a state transition, not a removal). UC12 is unimplemented,
+so this is a spec question, not drift: should UC12 § 9 become `POST .../cancel` before
+`/loop-uc UC12` runs? Raised by `spec-documenter` during the UC08 reconciliation.
+
 ---
 
 *Closed notes*

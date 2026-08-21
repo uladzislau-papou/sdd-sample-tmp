@@ -16,7 +16,7 @@ import java.time.Instant;
  *
  * <p>{@code guideTourId} is an optional correlation id and may be null — a record component
  * is a field, not a query, so {@link java.util.Optional} would be wrong here
- * ({@code documentation/domain/aggregate-guide-tour.spec.md} § 2). It is a plain
+ * ({@code coding-style.definition.md} § 1.4 exception). It is a plain
  * {@link String} because the identity belongs to the {@code guide} context and this one
  * treats it as opaque (ADR-0005 category 2). Carrying it keeps the booking lifecycle
  * traceable to its guide-side cause at completion as well as at activation, where

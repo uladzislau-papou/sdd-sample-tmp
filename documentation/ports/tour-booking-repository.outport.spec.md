@@ -65,11 +65,13 @@ Optional<TourBooking> findById(BookingId bookingId)
 - `Optional.empty()` when no row matches — **not** an exception. Translating absence
   into `BookingNotFoundException` is the driver's job, because "not found" is a use
   case outcome (a 404) rather than a persistence failure.
-- When present, rebuilt via `TourBooking.reconstitute(...)`, which deliberately skips
+- When present, rebuilt via `TourBooking.reconstitute(...)` — the full 10-argument
+  overload, so the three nullable cancellation fields (`cancelledAt`, `cancelledBy`,
+  `cancellationReason`, UC08) survive the round trip — which deliberately skips
   creation-time invariant checks (`modelling.definition.md` § Rehydration Rule).
 - The returned aggregate has **no pending domain events**.
 
-Used by: UC02, UC03, UC04, UC06, UC07.
+Used by: UC02, UC03/UC08, UC04, UC06, UC07.
 
 ### 2.3 update
 
@@ -84,8 +86,11 @@ void update(TourBooking booking)
 - Called inside the driver's transaction.
 
 **Postconditions:**
-- **Every mutable field is written**: `status`, `participant_count` and
-  `available_capacity`.
+- **Every mutable field is written**: `status`, `participant_count`,
+  `available_capacity`, and — since UC08 — `cancelled_at`, `cancelled_by` and
+  `cancellation_reason`. The cancellation columns are written as null for a live
+  booking, so a booking that was never cancelled is distinguishable from one cancelled
+  without a reason.
 - Immutable fields (`id`, `tour_id`, `tour_date`, contact) are set once by `save` and
   must not change.
 
@@ -97,7 +102,11 @@ void update(TourBooking booking)
 > aggregate must be added to the `update` statement *and* to an
 > `IT.update_changes*_inDatabase` assertion in the same increment**, or it will not
 > survive a write. UC07 conformed without extending it: `markCompleted` mutates only
-> `status`, and `completedAt` is event payload, not aggregate state. The guide-side
+> `status`, and `completedAt` is event payload, not aggregate state. UC08 is the first
+> increment to extend it — three new mutable fields, three new columns in the `update`
+> statement, pinned by `TourBookingJooqRepositoryIT.update_persistsCancellationAttribution`,
+> `.update_persistsCancellation_withoutReason` and
+> `.update_persistsCancelledAt_asUtcLocalDateTime`. The guide-side
 > port carries the same obligation
 > (`ports/guide-tour-repository.outport.spec.md` § update) — this port is where the
 > original defect occurred.
@@ -110,7 +119,7 @@ twice produces the same row. It is not a no-op guard: the aggregate decides whet
 transition should happen (e.g. `markActive` returns early when already ACTIVE, so the
 driver never calls `update`).
 
-Used by: UC02, UC03, UC04, UC06, UC07.
+Used by: UC02, UC03/UC08, UC04, UC06, UC07.
 
 ### 2.4 findConfirmedByTourId
 
@@ -193,12 +202,20 @@ so a rollback cannot leak an event for a change that never landed.
 `TourBookingMapper`.
 
 Technology: jOOQ over H2. Schema managed by Flyway
-(`V1__DDL_create_tour_booking.sql`).
+(`V1__DDL_create_tour_booking.sql`, extended by
+`V4__DDL_add_tour_booking_cancellation.sql`).
 
 Mapping notes:
 - `BookingId` ↔ `VARCHAR(36)`; `TourId` ↔ `VARCHAR(255)`; `TourDate` ↔ `DATE`.
 - `ParticipantContact` flattens to `contact_name` / `contact_email`.
 - `TourBookingStatus` ↔ `VARCHAR(50)` via `name()`.
+- UC08 cancellation attribution, all three columns nullable:
+  `cancelledAt` ↔ `cancelled_at TIMESTAMP` as UTC `LocalDateTime`
+  (`ZoneOffset.UTC`, matching the guide side — pinned by
+  `TourBookingJooqRepositoryIT.update_persistsCancelledAt_asUtcLocalDateTime`);
+  `CancelledBy` ↔ `cancelled_by VARCHAR(10)` via `name()`;
+  `CancellationReason` ↔ `cancellation_reason VARCHAR(400)`, the width matching
+  `CancellationReason.MAX_LENGTH` as a backstop — the value object is the enforcing side.
 - There are no `started_at` or `guide_tour_id` columns, and correctly so: `TourBooking`
   holds no such fields. `markActive(Instant, String)` takes both purely as
   `BookingActivated` event payload.

@@ -6,6 +6,15 @@ IMPLEMENTED
 ## Bounded Context
 `booking` — triggered via REST by an external client.
 
+> **Extended by UC08.** This use case owns the cancellation route, and UC08 changed it in
+> place rather than adding a second endpoint for the same transition. Two things moved:
+> the verb is now `POST .../cancel` instead of `DELETE`, and the cancellation is attributed
+> (`cancelledBy = USER`) with an optional reason. `TourBookingCancelled` was retired in
+> favour of `BookingCancelledByUser`.
+>
+> This spec describes the endpoint as it stands. UC08 carries the rationale for each
+> change — see `documentation/use-cases/uc08-cancel-booking-by-user.spec.md`.
+
 ## Purpose
 
 Cancel an existing tour booking by transitioning it to the CANCELLED state.
@@ -20,11 +29,14 @@ Transition a booking from `REQUESTED` or `CONFIRMED` to `CANCELLED`.
 
 Fields:
 - `bookingId` — path variable (UUID format, required)
+- `cancelledAt` (Instant) — optional, request body; defaults to `ClockPort.now()`
+- `reason` (String) — optional, request body; non-blank and at most 400 characters
 
 Validation rules:
-- Required
-- Must be a valid UUID string
-- Provided as a path variable, not a request body
+- `bookingId` required, must be a valid UUID string, provided as a path variable
+- The request body as a whole is optional — a bare `POST .../cancel` cancels without a
+  reason, which is the behaviour this use case had before UC08
+- `reason`, when supplied, is validated by the `CancellationReason` value object
 
 
 ## 3. Output Contract
@@ -40,6 +52,8 @@ Error types:
 
 | Exception | Condition | HTTP Status |
 |-----------|-----------|-------------|
+| `InvalidBookingRequestException` | `reason` is blank or longer than 400 characters | 400 |
+| `IllegalArgumentException` | `bookingId` is not a well-formed UUID | 400 |
 | `BookingNotFoundException` | no booking with the given id | 404 |
 | `InvalidBookingStateException` | state ∉ {REQUESTED, CONFIRMED} | 409 |
 
@@ -56,34 +70,40 @@ All errors return `{ "error": "<message>" }`.
 ## 5. Flow
 
 1. Parse `BookingId` from path variable
-2. Load aggregate via `TourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
-3. Call `booking.cancel(now)` → throws `InvalidBookingStateException` if state ∉ {REQUESTED, CONFIRMED}
-4. Persist status change via `TourBookingRepository.update(booking)`
-5. Publish `TourBookingCancelled` via `DomainEventPublisher`
-6. Return `{ "status": "CANCELLED" }`
+2. Build `CancellationReason` when `reason` is present → throws
+   `InvalidBookingRequestException` if blank or over 400 characters. Before loading, so a
+   400 costs no database round trip
+3. Resolve `cancelledAt` — from the body, else `ClockPort.now()`
+4. Load aggregate via `TourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
+5. Call `booking.cancel(cancelledAt, CancelledBy.USER, reason)` → throws
+   `InvalidBookingStateException` if state ∉ {REQUESTED, CONFIRMED}
+6. Persist via `TourBookingRepository.update(booking)`
+7. Publish `BookingCancelledByUser` via `DomainEventPublisher`
+8. Return `{ "status": "CANCELLED" }`
 
 
 ## 6. Side Effects
 
-- Persistence: status column updated to `CANCELLED`
-- Event publication: `TourBookingCancelled` published after transaction commit (ADR-0002)
+- Persistence: `status` set to `CANCELLED`, plus `cancelled_at`, `cancelled_by` and
+  `cancellation_reason` (added by `V4__DDL_add_tour_booking_cancellation.sql`)
+- Event publication: `BookingCancelledByUser` published after transaction commit (ADR-0002)
 
 
 ## 7. Acceptance Criteria
 
 **AC-01 – Happy Path from REQUESTED**
 Given a booking in REQUESTED state
-When `DELETE /api/v1/bookings/{bookingId}` is called
+When `POST /api/v1/bookings/{bookingId}/cancel` is called
 Then the response is `200 OK` with `{ "status": "CANCELLED" }`
 And the booking is persisted with status `CANCELLED`
-And a `TourBookingCancelled` domain event is published after commit
+And a `BookingCancelledByUser` domain event is published after commit
 
 **AC-02 – Happy Path from CONFIRMED**
 Given a booking in CONFIRMED state
-When `DELETE /api/v1/bookings/{bookingId}` is called
+When `POST /api/v1/bookings/{bookingId}/cancel` is called
 Then the response is `200 OK` with `{ "status": "CANCELLED" }`
 And the booking is persisted with status `CANCELLED`
-And a `TourBookingCancelled` domain event is published after commit
+And a `BookingCancelledByUser` domain event is published after commit
 
 **AC-03 – Booking Not Found**
 Given no booking exists for the given id
@@ -110,11 +130,17 @@ Then HTTP 409 is returned and the status is unchanged
 
 Endpoint:
 ```
-DELETE /api/v1/bookings/{bookingId}
+POST /api/v1/bookings/{bookingId}/cancel
 ```
 
-- No request body
 - Path variable: `bookingId` (UUID string)
+- Request body **optional** (UC08):
+
+```json
+{ "cancelledAt": "2026-07-15T09:00:00Z", "reason": "Travel plans changed" }
+```
+
+Both fields are optional, and the body may be omitted entirely.
 
 Response body (200 OK):
 ```json
@@ -123,8 +149,15 @@ Response body (200 OK):
 
 HTTP status mapping:
 - `200 OK` – booking cancelled
+- `400 Bad Request` – blank or over-long `reason`, or a malformed `bookingId`
 - `404 Not Found` – booking does not exist
 - `409 Conflict` – state ∉ {REQUESTED, CONFIRMED}
+
+All four are exercised in `rest/uc03-cancel-tour-booking.http`.
+
+**Breaking change.** `DELETE /api/v1/bookings/{bookingId}` no longer exists. Any client on
+the old route gets a 405. See UC08 § 9 for why the verb changed rather than a second
+endpoint being added.
 
 
 ## 10. Definition of Done
@@ -144,13 +177,21 @@ HTTP status mapping:
       `CancelTourBookingDriverTest.cancel_throwsInvalidBookingStateException_whenActive`,
       `CancelTourBookingDriverTest.cancel_doesNotCallUpdate_whenStateInvalid`,
       `TourBookingControllerTest.cancelBooking_returns409_whenInvalidState`
-- [x] `TourBookingCancelled` emission covered by
-      `TourBookingTest.cancel_publishesTourBookingCancelledEvent`,
-      `CancelTourBookingDriverTest.cancel_fromRequested_publishesTourBookingCancelledEvent`,
-      `CancelTourBookingDriverTest.cancel_fromConfirmed_publishesTourBookingCancelledEvent`
+- [x] `BookingCancelledByUser` emission covered by
+      `TourBookingTest.cancel_byUser_publishesBookingCancelledByUserEvent`,
+      `CancelTourBookingDriverTest.cancel_fromRequested_publishesBookingCancelledByUserEvent`,
+      `CancelTourBookingDriverTest.cancel_fromConfirmed_publishesBookingCancelledByUserEvent`.
+      Renamed from `TourBookingCancelled` by UC08 — see that spec for why the
+      undifferentiated event was retired
 
 ### Contracts
-- [x] `rest/uc03-cancel-tour-booking.http` covers 200, 404 and 409
+- [x] `rest/uc03-cancel-tour-booking.http` covers 200 (with and without a body), both
+      400s, 404 and 409 — updated by UC08 when the verb changed
+- [x] The route is `POST /{bookingId}/cancel`, exercised by
+      `TourBookingControllerTest.cancelBooking_returns200_withCancelledStatus` and
+      `.cancelBooking_returns200_whenBodyIsAnEmptyObject`. The first sends no body at all,
+      the second a literal `{}` — two distinct branches of the controller's normalisation.
+      The former `DELETE` route is gone
 - [x] Persistence roundtrip covered by
       `TourBookingJooqRepositoryIT.update_changesStatus_toCancelled_afterCancel`
 - [x] Port specs `ports/tour-booking-repository.outport.spec.md` and
@@ -160,3 +201,8 @@ HTTP status mapping:
 - [x] Spec sections § 1–9 reconciled against the code on disk
 - [x] `ddd-hex-reviewer` returns `PASS` — full-tree clean bill, `Undocumented: none`
 - [x] Quality gates green (`test.definition.md` § 7) — 187 tests, 0 failures, ArchUnit and spotlessCheck included
+
+**Re-verified during the UC08 increment.** UC08 modified this endpoint, so every box above
+was re-checked rather than assumed still green: the verb changed, the event was renamed,
+three columns were added, and the `.http` file was rewritten. The gate figures in the last
+box are the ones witnessed when UC03 closed; UC08's own DoD carries the current run.

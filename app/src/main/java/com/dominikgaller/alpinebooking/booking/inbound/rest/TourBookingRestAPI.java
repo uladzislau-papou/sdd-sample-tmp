@@ -1,5 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest;
 
+import com.dominikgaller.alpinebooking.booking.inbound.rest.request.CancelTourBookingRequest;
 import com.dominikgaller.alpinebooking.booking.inbound.rest.request.ChangeParticipantsRequest;
 import com.dominikgaller.alpinebooking.booking.inbound.rest.request.RequestTourBookingRequest;
 import com.dominikgaller.alpinebooking.booking.inbound.rest.response.CancelTourBookingResponse;
@@ -8,7 +9,6 @@ import com.dominikgaller.alpinebooking.booking.inbound.rest.response.ConfirmTour
 import com.dominikgaller.alpinebooking.booking.inbound.rest.response.RequestTourBookingResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,13 +51,24 @@ public interface TourBookingRestAPI {
     ConfirmTourBookingResponse confirm(@PathVariable String bookingId);
 
     /**
-     * UC03 – Cancels an existing tour booking.
+     * UC03/UC08 – Cancels an existing tour booking, recording the participant as the
+     * initiator and optionally why.
+     *
+     * <p>{@code POST}, not {@code DELETE}: cancelling is a state transition that leaves the
+     * booking addressable rather than a removal, and a {@code DELETE} body — which is how
+     * {@code reason} arrives — is dropped by some clients and intermediaries. Replaced the
+     * former {@code DELETE /{bookingId}} route in the UC08 increment; see
+     * {@code documentation/use-cases/uc08-cancel-booking-by-user.spec.md} section 9.
      *
      * @param bookingId the UUID of the booking to cancel
+     * @param request   optional body carrying {@code cancelledAt} and {@code reason};
+     *                  may be absent entirely
      * @return HTTP 200 with updated status
      */
-    @DeleteMapping("/{bookingId}")
-    CancelTourBookingResponse cancel(@PathVariable String bookingId);
+    @PostMapping("/{bookingId}/cancel")
+    CancelTourBookingResponse cancel(
+            @PathVariable String bookingId,
+            @RequestBody(required = false) CancelTourBookingRequest request);
 
     /**
      * UC04 – Changes the participant count of an existing tour booking.

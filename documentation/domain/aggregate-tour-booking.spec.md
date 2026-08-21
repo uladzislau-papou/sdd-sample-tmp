@@ -65,6 +65,24 @@ Violations MUST result in exception.
 - Represents the contact person for the booking.
 - No deep email format validation; non-blank check only.
 
+### CancellationReason (UC08)
+- Wraps `String` — the free-text reason a booking was cancelled.
+- Invariants: non-null (NPE), non-blank and at most **`MAX_LENGTH = 400`** characters;
+  blank or over-long text throws `InvalidBookingRequestException`.
+- Length is checked on the raw value, before any trimming, so trailing whitespace cannot
+  carry the text past the ceiling and then vanish.
+- An *absent* reason is represented by the absence of this object — cancelling without a
+  reason is permitted, cancelling with an empty one is not. Enforced here rather than by a
+  Bean Validation annotation on the request DTO so it holds for every caller: UC09 reaches
+  the same aggregate method from the `guide` side with no DTO in the path.
+
+### CancelledBy (UC08)
+- Enum, not a value object: `USER` (the participant cancelled their own booking, UC08) or
+  `GUIDE` (the guide cancelled the tour, cascading to its bookings, UC09/UC12). The set is
+  closed, there is nothing to validate, and no behaviour attaches to a member.
+- Selects which cancellation event `cancel(...)` emits — attribution lives in the event
+  *type*, not a payload field.
+
 
 ## 3. State Model
 
@@ -101,16 +119,25 @@ Illegal transitions:
 Public methods:
 
 - `request(...)` — static factory
-- `reconstitute(...)` — static factory, persistence only
+- `reconstitute(...)` — static factory, persistence only (two overloads, see below)
 - `confirm(Instant now)`
-- `cancel(Instant now)`
+- `cancel(Instant cancelledAt, CancelledBy cancelledBy, CancellationReason reason)`
 - `markActive(Instant startedAt, String guideTourId)`
 - `markCompleted(Instant completedAt, String guideTourId)`
 - `changeParticipants(ParticipantCount, AvailableCapacity, Instant now)`
 - `pullDomainEvents()`
 
 Plus read-only accessors: `bookingId()`, `tourId()`, `tourDate()`, `participantCount()`,
-`availableCapacity()`, `contact()`, `status()`. There are no setters.
+`availableCapacity()`, `contact()`, `status()`, and — new in UC08 —
+`cancelledAt()`, `cancelledBy()` and `cancellationReason()`, each returning `Optional`
+(empty unless the booking was cancelled; `cancellationReason()` is also empty when it was
+cancelled without a reason). `Optional` rather than nullable returns because
+`coding-style.definition.md` § 1.4 forbids the domain returning null. There are no setters.
+
+UC08 added three mutable fields to the aggregate — `cancelledAt`, `cancelledBy`,
+`cancellationReason` — bringing the mutable set to five (with `participantCount` and
+`availableCapacity`, plus `status`). Every mutable field must be written by
+`TourBookingRepository.update` (`ports/tour-booking-repository.outport.spec.md` § 2.3).
 
 ### request(BookingId, TourId, TourDate, ParticipantCount, AvailableCapacity, ParticipantContact, Instant now)
 Static factory method. Creates a new booking in REQUESTED state.
@@ -129,14 +156,37 @@ Emitted events:
 - TourBookingRequested (bookingId, tourId, tourDate, participantCount, occurredAt)
 
 
-### reconstitute(BookingId, TourId, TourDate, ParticipantCount, AvailableCapacity, ParticipantContact, TourBookingStatus)
-Static factory. Rebuilds a persisted booking.
+### reconstitute(BookingId, TourId, TourDate, ParticipantCount, AvailableCapacity, ParticipantContact, TourBookingStatus, Instant cancelledAt, CancelledBy cancelledBy, CancellationReason cancellationReason)
+Static factory. Rebuilds a persisted booking. UC08 widened it: the three cancellation
+fields are trailing parameters, each nullable — null for a booking that was never
+cancelled, and `cancellationReason` also null for one cancelled without a reason.
+
+A 7-argument convenience overload (without the three cancellation parameters) exists for
+the tests, which build non-cancelled aggregates constantly. That production reconstitution
+goes through the full-arity method is **convention, not enforcement**:
+`ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers` constrains *which
+classes* may call `reconstitute`, not *which overload* they pick, so nothing structurally
+stops the mapper reaching for the short form and dropping the attribution. What catches
+that is `TourBookingJooqRepositoryIT.update_persistsCancellationAttribution` — which fails
+if the attribution is lost on the way back — and
+`.findById_returnsEmptyCancellationFields_forALiveBooking`, which fails if it is invented.
+
+An earlier revision of this paragraph claimed the guarantee outright. The same false claim
+was made in `TourBooking`'s Javadoc and corrected there first; because this spec outranks
+the Javadoc in the `CLAUDE.md` authority order, correcting only the code left the
+*authoritative* statement as the wrong one. Caught by `ddd-hex-reviewer`.
+
+Both overloads delegate to a private `rehydrate` helper rather than one calling the other,
+because `ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers` forbids any
+class outside `..outbound.persistence..` — including the aggregate itself — from calling
+`reconstitute`.
 
 Preconditions: none by design — the data was valid when written
 (`modelling.definition.md` § Rehydration Rule).
 
 Postconditions:
-- The aggregate reflects stored state exactly, in any status
+- The aggregate reflects stored state exactly, in any status, including the cancellation
+  attribution when present
 - No pending domain events
 
 Emitted events: none. **Persistence mapper only** — `TourBookingMapper` is its sole
@@ -155,16 +205,33 @@ Postconditions:
 Emitted events:
 - `TourBookingConfirmed(bookingId, occurredAt)`
 
-### cancel(Instant now)
+### cancel(Instant cancelledAt, CancelledBy cancelledBy, CancellationReason reason)
+Transitions REQUESTED or CONFIRMED → CANCELLED, recording who cancelled and optionally
+why (UC08, UC09). Replaced `cancel(Instant)` in the UC08 increment.
+
 Preconditions:
+- `cancelledAt` and `cancelledBy` non-null → else `NullPointerException`
+- `reason` may be null — cancelling without a reason is permitted
 - State = REQUESTED or CONFIRMED → else `InvalidBookingStateException`
 - ACTIVE, COMPLETED and already-CANCELLED are all rejected
 
 Postconditions:
 - Status = CANCELLED
+- `cancelledAt`, `cancelledBy` and `cancellationReason` **stored on the aggregate** —
+  attribution is state the booking owns (UC08 § 6), unlike `startedAt`/`completedAt`,
+  which are event payload only
 
-Emitted events:
-- `TourBookingCancelled(bookingId, occurredAt)`
+Emitted events, selected by `cancelledBy`:
+- `BookingCancelledByUser(bookingId, cancelledAt, reason)` for `USER`
+- `BookingCancelledByGuide(bookingId, cancelledAt, reason)` for `GUIDE`
+
+Notes:
+- **Not idempotent**, unlike `markActive` and `markCompleted`: a second cancellation is
+  rejected rather than absorbed. Those two are driven by redeliverable integration events;
+  this is a deliberate act, and silently accepting a second attempt would let a later
+  caller overwrite the original attribution — the one thing UC08 exists to record (AC-06).
+- The attribution is carried in the event *type* rather than a `CancelledBy` payload
+  field, so consumers subscribe to the fact they care about instead of filtering.
 
 ### markActive(Instant startedAt, String guideTourId)
 Transitions CONFIRMED → ACTIVE when the guide starts the tour (UC06). Triggered by the
@@ -241,7 +308,7 @@ second call returns empty. This is the drain every driver uses:
 
 ## 5. Domain Events
 
-All six live in `booking.core.domain.tourbooking.event` and implement
+All seven live in `booking.core.domain.tourbooking.event` and implement
 `shared.domain.event.DomainEvent`. All are immutable records. Published post-commit via
 `DomainEventPublisher` (ADR 0002).
 
@@ -249,10 +316,16 @@ All six live in `booking.core.domain.tourbooking.event` and implement
 |-------|---------|---------|
 | `TourBookingRequested` | `request(...)` | `bookingId`, `tourId`, `tourDate`, `participantCount`, `occurredAt` |
 | `TourBookingConfirmed` | `confirm(...)` | `bookingId`, `occurredAt` |
-| `TourBookingCancelled` | `cancel(...)` | `bookingId`, `occurredAt` |
+| `BookingCancelledByUser` | `cancel(..., USER, ...)` | `bookingId`, `cancelledAt`, `reason` (`CancellationReason`, nullable) |
+| `BookingCancelledByGuide` | `cancel(..., GUIDE, ...)` | `bookingId`, `cancelledAt`, `reason` (`CancellationReason`, nullable) |
 | `ParticipantsChanged` | `changeParticipants(...)` | `bookingId`, `newParticipantCount`, `occurredAt` |
 | `BookingActivated` | `markActive(...)` | `bookingId`, `activatedAt`, `guideTourId` (plain `String`) |
 | `BookingCompleted` | `markCompleted(...)` | `bookingId`, `completedAt`, `guideTourId` (plain `String`, nullable) |
+
+`TourBookingCancelled` was **retired** by UC08: it recorded *that* a booking was cancelled
+but not *by whom*, leaving participant- and guide-initiated cancellations
+indistinguishable downstream. The two attributed events replace it — two events for two
+facts, never two events for one.
 
 Payloads differ by event and are **not** uniform — an earlier revision of this section
 claimed every event carries `bookingId`, `tourId`, `tourDate`, `participantCount` and a
@@ -273,6 +346,8 @@ guide-side events in `shared.domain.event`; `TourStarted` is what *triggers* `ma
 | New count exceeds refreshed capacity | `CapacityExceededException` | `changeParticipants` |
 | Confirm when not REQUESTED | `InvalidBookingStateException` | `confirm` |
 | Cancel when ACTIVE, COMPLETED or CANCELLED | `InvalidBookingStateException` | `cancel` |
+| Cancellation reason blank or over 400 characters | `InvalidBookingRequestException` | `CancellationReason` constructor |
+| Null `cancelledAt` or `cancelledBy` | `NullPointerException` | `cancel` |
 | Activate when not CONFIRMED (and not already ACTIVE) | `InvalidBookingStateException` | `markActive` |
 | Complete when not ACTIVE (and not already COMPLETED) | `InvalidBookingStateException` | `markCompleted` |
 | Change participants when CANCELLED | `InvalidBookingStateException` | `changeParticipants` |
@@ -280,7 +355,8 @@ guide-side events in `shared.domain.event`; `TourStarted` is what *triggers* `ma
 | Availability source unreachable | `AvailabilityUnavailableException` | the adapter; propagates through the driver |
 
 Value-object construction rejects its own invalid input: blank/null contact fields,
-`ParticipantCount < 1`, null `BookingId`, null/blank `TourId`, null `TourDate`.
+`ParticipantCount < 1`, null `BookingId`, null/blank `TourId`, null `TourDate`,
+blank/over-long/null `CancellationReason`.
 
 
 ## 7. Test Requirements
@@ -293,10 +369,20 @@ Expressed as checkable items naming the test that satisfies each.
       `.participantCountExceedingCapacityThrowsCapacityExceededException`,
       `.participantCountEqualToCapacityIsValid`
 - [x] Value object invariants — `BookingIdTest`, `ParticipantContactTest`,
-      `ParticipantCountTest`, `TourDateTest`
+      `ParticipantCountTest`, `TourDateTest`, `CancellationReasonTest` (7 tests, incl.
+      `.acceptsTextOfExactlyMaxLength`,
+      `.throwsInvalidBookingRequestException_whenOneCharacterOverMaxLength` and
+      `.countsLengthBeforeTrimming`)
 - [x] CONFIRMED transition and guard — `TourBookingTest.confirm_*` (3 tests)
 - [x] CANCELLED transition from both legal states, rejected from all three illegal ones —
-      `TourBookingTest.cancel_*` (6 tests)
+      `TourBookingTest.cancel_*` (13 tests, extended by UC08)
+- [x] Cancellation attribution (UC08) — `TourBookingTest.cancel_byUser_fromRequested_recordsUserAttribution`,
+      `.cancel_byUser_fromConfirmed_recordsUserAttribution`, `.cancel_byUser_recordsReason`,
+      `.cancel_withoutReason_leavesReasonEmpty`, `.cancellationFields_areEmpty_beforeCancellation`,
+      `.cancel_whenAlreadyCancelled_doesNotOverwriteAttribution`,
+      `.cancel_throwsNullPointerException_whenCancelledByIsNull`
+- [x] Attributed event per initiator (UC08) — `TourBookingTest.cancel_byUser_publishesBookingCancelledByUserEvent`,
+      `.cancel_byGuide_publishesBookingCancelledByGuideEvent`
 - [x] ACTIVE transition, idempotency, and both illegal states —
       `TourBookingTest.markActive_*` (6 tests)
 - [x] COMPLETED transition, idempotency, and all three illegal states —
@@ -310,9 +396,12 @@ Expressed as checkable items naming the test that satisfies each.
       `.pullDomainEventsCalledTwiceReturnsEmptyListOnSecondCall`,
       `.pullDomainEvents_returnsOnlyConfirmedEvent_afterPullingRequestedAndCallingConfirm`
 - [x] Persistence round-trip of every mutable field — `TourBookingJooqRepositoryIT`
-      (14 tests, incl. `update_changesParticipantCount_inDatabase`,
-      `.update_changesAvailableCapacity_inDatabase` and
-      `.update_changesStatus_toCompleted_afterMarkCompleted`)
+      (18 tests, incl. `update_changesParticipantCount_inDatabase`,
+      `.update_changesAvailableCapacity_inDatabase`,
+      `.update_changesStatus_toCompleted_afterMarkCompleted`, and for UC08
+      `.update_persistsCancellationAttribution`, `.update_persistsCancellation_withoutReason`,
+      `.findById_returnsEmptyCancellationFields_forALiveBooking` and
+      `.update_persistsCancelledAt_asUtcLocalDateTime`)
 - [x] No setters, no framework import, no `Instant.now()` in the domain — enforced
       mechanically by `DependencyRulesTest` and `ClassRoleRulesTest` (ADR 0007)
 
