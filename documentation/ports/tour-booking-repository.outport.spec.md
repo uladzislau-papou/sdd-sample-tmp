@@ -69,7 +69,7 @@ Optional<TourBooking> findById(BookingId bookingId)
   creation-time invariant checks (`modelling.definition.md` § Rehydration Rule).
 - The returned aggregate has **no pending domain events**.
 
-Used by: UC02, UC03, UC04, UC06.
+Used by: UC02, UC03, UC04, UC06, UC07.
 
 ### 2.3 update
 
@@ -89,12 +89,18 @@ void update(TourBooking booking)
 - Immutable fields (`id`, `tour_id`, `tour_date`, contact) are set once by `save` and
   must not change.
 
-> **This contract is load-bearing.** The implementation previously wrote only
-> `status`, so UC04's participant-count and capacity changes were silently discarded.
-> Two integration tests now pin it —
+> **This contract is load-bearing — a standing obligation, not a field list.** The
+> implementation previously wrote only `status`, so UC04's participant-count and
+> capacity changes were silently discarded. Two integration tests now pin it —
 > `TourBookingJooqRepositoryIT.update_changesParticipantCount_inDatabase` and
 > `.update_changesAvailableCapacity_inDatabase`. **Any new mutable field on the
-> aggregate must be added here and covered by an IT**, or it will not survive a write.
+> aggregate must be added to the `update` statement *and* to an
+> `IT.update_changes*_inDatabase` assertion in the same increment**, or it will not
+> survive a write. UC07 conformed without extending it: `markCompleted` mutates only
+> `status`, and `completedAt` is event payload, not aggregate state. The guide-side
+> port carries the same obligation
+> (`ports/guide-tour-repository.outport.spec.md` § update) — this port is where the
+> original defect occurred.
 
 **Exceptions:** `IllegalStateException` if the update did not affect exactly one row.
 Updating a booking that no longer exists fails loudly rather than silently no-opping.
@@ -104,7 +110,7 @@ twice produces the same row. It is not a no-op guard: the aggregate decides whet
 transition should happen (e.g. `markActive` returns early when already ACTIVE, so the
 driver never calls `update`).
 
-Used by: UC02, UC03, UC04, UC06.
+Used by: UC02, UC03, UC04, UC06, UC07.
 
 ### 2.4 findConfirmedByTourId
 
@@ -126,7 +132,30 @@ Used by: UC06 (`TourStartedListener`).
 > the aggregate guard would let one ineligible booking roll back the entire batch. Making
 > it a query keeps the adapter free of conditionals without weakening the domain guard.
 
-### ~~2.5 findByTourId~~ — removed
+### 2.5 findActiveByTourId
+
+```
+List<TourBooking> findActiveByTourId(TourId tourId)
+```
+
+**Responsibility:** Return the bookings for a tour that are eligible for completion.
+
+**Postconditions:** an empty list when none qualify, never null; each element fully
+reconstituted with no pending events; no ordering guaranteed.
+
+Used by: UC07 (`TourCompletedListener`).
+
+> Mirrors § 2.4 for the completion side, for the same two reasons: a status filter in
+> `TourCompletedListener` would be business logic in an inbound adapter
+> (`architecture.definition.md` § 4.8), and `markCompleted` throws for REQUESTED,
+> CONFIRMED and CANCELLED, so relying on the aggregate guard alone would let one
+> ineligible booking roll back the entire `REQUIRES_NEW` fan-out. The jOOQ predicate
+> (`tour_id` **and** `status = 'ACTIVE'`) is pinned by
+> `TourBookingJooqRepositoryIT.findActiveByTourId_returnsOnlyActiveBookingsForThatTour`
+> and `.findActiveByTourId_returnsEmpty_whenNoActiveBookingsExist` — the listener's
+> stub cannot catch a wrong column or literal in the generated SQL.
+
+### ~~2.6 findByTourId~~ — removed
 
 `List<TourBooking> findByTourId(TourId tourId)` returned every booking for a tour
 regardless of status. Its only caller was `TourStartedListener`, which moved to
@@ -147,11 +176,12 @@ implementation MUST NOT start its own transaction; it participates in the active
 (`architecture.definition.md` § 4.4, § 4.6).
 
 Owners: `RequestTourBookingDriver`, `ConfirmTourBookingDriver`,
-`CancelTourBookingDriver`, `ChangeParticipantsDriver`, `MarkBookingActiveDriver`.
+`CancelTourBookingDriver`, `ChangeParticipantsDriver`, `MarkBookingActiveDriver`,
+`MarkBookingCompletedDriver`.
 
-`TourStartedListener` is a special case: it runs `AFTER_COMMIT` of the guide
-transaction in a **new** transaction (`REQUIRES_NEW`), per ADR-0002. The drivers it
-calls join that transaction.
+`TourStartedListener` and `TourCompletedListener` are a special case: each runs
+`AFTER_COMMIT` of the guide transaction in a **new** transaction (`REQUIRES_NEW`),
+per ADR-0002. The drivers they call join that transaction.
 
 Event publication is deferred to after commit by the `DomainEventPublisher` adapter,
 so a rollback cannot leak an event for a change that never landed.

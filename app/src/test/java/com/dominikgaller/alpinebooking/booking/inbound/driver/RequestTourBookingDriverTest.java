@@ -123,6 +123,11 @@ class RequestTourBookingDriverTest {
             throw new UnsupportedOperationException("not used in UC01 tests");
         }
 
+        @Override
+        public java.util.List<TourBooking> findActiveByTourId(final com.dominikgaller.alpinebooking.shared.domain.TourId tourId) {
+            throw new UnsupportedOperationException("not used in UC01 tests");
+        }
+
         List<TourBooking> savedBookings() {
             return Collections.unmodifiableList(saved);
         }

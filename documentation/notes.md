@@ -15,7 +15,7 @@ I think we are fine.
 
 Still open as a design musing. Worth noting that ADR 0004 settled the *port* side
 of this (`publish(DomainEvent)` rather than per-type overloads), and that the drain
-pattern `pullDomainEvents().forEach(publisher::publish)` is now identical in all six
+pattern `pullDomainEvents().forEach(publisher::publish)` is now identical in all eight
 drivers — so the weirdness is at least uniform.
 
 ## Missing ReadModel
@@ -31,6 +31,14 @@ use case is a command, so the CQRS half of the package ontology is unused.
 
 *Closed notes*
 
+- ~~UC07 drops the guide-tour correlation id — deliberate?~~ — closed, **not** deliberate.
+  `TourCompleted` carries `guideTourId` and UC06 threaded it all the way through
+  (`MarkBookingActiveCommand` → `BookingActivated`), but the first UC07 implementation
+  discarded it at every hop while UC07 § 2 still listed it as an input. Reported by
+  `spec-documenter`. Resolved by propagating it rather than by amending the spec: half a
+  correlation trail is worse than none, because it looks complete. `BookingCompleted`,
+  `MarkBookingCompletedCommand` and `TourBooking.markCompleted` now all carry it, and
+  each of the three hops has its own test, mutation-verified.
 - ~~Documentation, especially in the domain directory, is missing the definitions for
   the guide bc~~ — closed. `documentation/domain/aggregate-guide-tour.spec.md`,
   `documentation/ports/guide-tour-repository.outport.spec.md` and

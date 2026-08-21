@@ -23,6 +23,9 @@ This use case is **deliberately not exposed via REST**. Only guides can initiate
 the transition, and the architecture enforces that through the event boundary
 rather than through authorization logic — there is no HTTP endpoint to guard.
 
+Its successor is UC07 (MarkBookingCompleted), which mirrors this pattern on the
+completion side: `TourCompleted` → `TourCompletedListener` → ACTIVE → COMPLETED.
+
 
 ## 2. Input Contract
 
@@ -45,10 +48,16 @@ Error types:
 
 | Exception | Condition | Surfaced as |
 |-----------|-----------|-------------|
-| `BookingNotFoundException` | booking disappeared between confirmation and tour start | no-op, logged |
-| `InvalidBookingStateException` | booking is CANCELLED or COMPLETED | domain invariant violation |
+| `BookingNotFoundException` | booking disappeared between confirmation and tour start | **thrown**, propagates to the caller |
+| `InvalidBookingStateException` | booking is CANCELLED or COMPLETED | **thrown**, propagates to the caller |
 
 No HTTP status mapping — this use case has no REST surface.
+
+This table previously said `BookingNotFoundException` was a "no-op, logged". It was
+never true — `MarkBookingActiveDriver` throws it and `TourStartedListener` has neither a
+`catch` nor a logger — and it mattered, because an escaping exception aborts the rest of
+the `REQUIRES_NEW` fan-out instead of being absorbed. Corrected during the UC07
+increment, where the same claim had been copied across.
 
 
 ## 4. Preconditions
@@ -162,7 +171,8 @@ endpoint, therefore no `rest/uc06-*.http` file is required.
       semantics from ADR-0002. Those are Spring wiring rather than listener logic, and
       asserting them in a unit test would be testing the framework
       (`test.definition.md` § 8). They need a Spring integration test, which does not
-      exist — see Known Gaps below
+      exist — a known gap (an earlier revision pointed to a "Known Gaps" section this
+      spec never had). The same gap applies to UC07's `TourCompletedListener`
 
 ### Contracts
 - [x] No `rest/` file required — § 9 is not applicable

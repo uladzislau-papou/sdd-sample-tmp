@@ -1,4 +1,4 @@
-| UC06 MarkBookingActive | **13/13** | — || UC05 StartTour | **16/16** | — || UC04 ChangeParticipants | **15/15** | — || UC03 CancelTourBooking | **11/11** | — || UC02 ConfirmTourBooking | **10/10** | — || UC01 RequestTourBooking | **15/15** | — |# Tasks – Clean Baseline
+# Tasks – Clean Baseline
 
 Derived from `plan.md`. Replaces the previous `tasks.md`, which was the completed
 ADR-0003 extraction checklist (51/51 ticked, four stale paths).
@@ -37,6 +37,13 @@ a witnessed green run, not on predicted ones.
 | UC04 ChangeParticipants | **15/15** | — |
 | UC05 StartTour | **16/16** | — |
 | UC06 MarkBookingActive | **13/13** | — |
+| UC07 MarkBookingCompleted | **21/21** | — |
+
+UC07 (Phase 6 feature work) was added after the baseline paragraph above was written and
+is now closed at 21/21. Its two agent-reported contradictions were both real and were
+resolved in opposite directions — one by correcting the spec, one by correcting the code
+(UC07 § 10 Governance records which was which). Its `ddd-hex-reviewer: PASS` came on the
+second pass; the first returned `DRIFT`.
 
 **80/80.** Closed across the effort: UC01 AC-03/AC-04 REST boundary (3.2) · UC04 400 and
 502 (3.3), persistence (3.4) · UC05 driver test (3.1), domain spec (1.1), port specs
@@ -289,21 +296,37 @@ Only now genuinely `/loop-uc`-drivable: the DoDs are honest and the reviewer is 
 Each use case is one `/loop-uc UC<nn>` run, not a hand-written task block.
 
 ### 6.1 - UC11 CompleteTour
-- [ ] **Task 6.1.1**: `/loop-uc UC11`. Unblocks UC07 by publishing `TourCompleted` — nothing publishes it today and `GuideTour` exposes only `start(...)`.
-- [ ] **Task 6.1.2**: Confirm the loop exits `DONE`, not `BLOCKED` or `HALTED`.
+- [x] **Task 6.1.1**: UC11 implemented — `GuideTour.complete(Instant)`, `CompleteTourDriver`, `V3__DDL_add_guide_tour_completed_at.sql`, `rest/uc11-complete-tour.http`. Commit `b075c73`.
+- [x] **Task 6.1.2**: Ran as the documented loop rather than via `/loop-uc`. `ddd-hex-reviewer` returned six findings; finding 6 was a real latent bug — invariant I-06 was relied on by `complete` but unenforced anywhere — fixed with its own RED test.
 
 ### 6.2 - UC07 MarkBookingCompleted
-- [ ] **Task 6.2.1**: `/loop-uc UC07`, after 6.1.
-- [ ] **Task 6.2.2**: Confirm the loop exits `DONE`.
+- [x] **Task 6.2.1**: UC07 implemented — `TourBooking.markCompleted(Instant, String)`, `BookingCompleted`, the `MarkBookingCompleted*` inport triple, `MarkBookingCompletedDriver`, `TourCompletedListener`, and `TourBookingRepository.findActiveByTourId` with its jOOQ IT.
+- [x] **Task 6.2.2**: Behaviour and contracts complete — 32 UC07 test methods on disk:
+  `TourBookingTest.markCompleted_*` (8), `MarkBookingCompletedDriverTest` (12),
+  `TourCompletedListenerTest` (9), `TourBookingJooqRepositoryIT` (3). An earlier
+  revision claimed 21. Three more landed with task 6.2.3, for 35.
+- [x] **Task 6.2.3**: Both `spec-documenter` contradictions resolved, in opposite directions.
+  (a) § 3/§ 8 claimed not-found was "no-op, logged" — no catch or logger exists in either
+  listener, so the **spec** was wrong; corrected, along with the same false claim in UC06 § 3,
+  where it had been wrong since UC06 shipped. (b) § 2 listed `guideTourId` as an input that
+  nothing propagated, while UC06 threads the same id into `BookingActivated` — the **code**
+  was wrong. Propagated rather than de-scoped: half a correlation trail is worse than none,
+  because it looks complete. Widened `BookingCompleted`, `MarkBookingCompletedCommand` and
+  `markCompleted`, driven by a compile-failure RED. Each of the three hops has its own test
+  and was mutation-verified (aggregate → 3 failures, driver → 1, listener → 1).
+- [x] **Task 6.2.4**: `ddd-hex-reviewer` `DRIFT` on pass 1 — `MarkBookingCompletedUseCase`
+  carried `@throws` on the type rather than the method, reintroducing the very defect UC11
+  fixed in `CompleteTourUseCase` earlier in this same increment. Fixed; `PASS` on pass 2.
+- [x] **Task 6.2.5**: `./gradlew clean test build` green, 262 tests, 0 failures.
 
 ### 6.3 - UC08 CancelBookingByUser
-- [ ] **Task 6.3.1**: Resolve H1 — replacing `TourBooking.cancel(Instant)` with `cancel(Instant, CancelledBy, String)` changes a method five call sites and UC03 depend on. Decide whether it needs an ADR.
+- [x] **Task 6.3.1**: H1 resolved — **no ADR**. The change is confined to one aggregate's method signature and its callers, which is not an architectural decision under `sdd.playbook.md` § 6.
 - [ ] **Task 6.3.2**: `/loop-uc UC08`. Note UC08 **modifies UC03's endpoint**, so UC03's spec and `rest/uc03-cancel-tour-booking.http` change in the same increment.
 - [ ] **Task 6.3.3**: Confirm UC03's DoD is still fully ticked afterwards.
 
 ### 6.4 - UC12 + UC09 cancellation by guide
-- [ ] **Task 6.4.1**: Resolve H2 — a synchronous cross-context call inside the caller's transaction is ADR trigger 5 and 10. Write one ADR covering both use cases.
-- [ ] **Task 6.4.2**: `/loop-uc UC12` (guide side, owns `BookingCancellationPort`).
+- [x] **Task 6.4.1**: H2 resolved — ADR-0008 was written and then **Rejected** by the owner. The driver orchestrates and calls the booking inport synchronously; a `BookingCancellationPort` would only relocate the coupling behind an outport whose single implementation delegates to that very inport. `architecture.definition.md` § 11 rule 3 amended to permit driver-to-inport calls, and `ContextRegistryTest` enforces that only drivers may make them.
+- [ ] **Task 6.4.2**: `/loop-uc UC12` (guide side; the driver orchestrates, no new outport).
 - [ ] **Task 6.4.3**: `/loop-uc UC09` (booking side implementation).
 - [ ] **Task 6.4.4**: Verify the transaction-rollback acceptance criterion (UC12 AC-07) has a real integration test, not just a unit test.
 

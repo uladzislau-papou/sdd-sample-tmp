@@ -51,4 +51,16 @@ public interface TourBookingRepository {
      * @return possibly empty list, never null
      */
     List<TourBooking> findConfirmedByTourId(TourId tourId);
+
+    /**
+     * Returns the bookings for a tour that are eligible for completion, i.e. ACTIVE.
+     *
+     * <p>Mirrors {@link #findConfirmedByTourId} for UC07: the status criterion lives in the
+     * query so the {@code TourCompletedListener} holds no business logic
+     * ({@code architecture.definition.md} section 4.8, section 4.6 "Selection criteria in
+     * write-side queries"). The aggregate still enforces the transition guard.
+     *
+     * @return possibly empty list, never null
+     */
+    List<TourBooking> findActiveByTourId(TourId tourId);
 }

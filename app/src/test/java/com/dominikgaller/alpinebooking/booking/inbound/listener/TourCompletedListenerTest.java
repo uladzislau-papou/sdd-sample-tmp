@@ -7,12 +7,12 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.Participa
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBooking;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourBookingStatus;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.TourDate;
-import com.dominikgaller.alpinebooking.booking.core.inport.command.MarkBookingActiveCommand;
-import com.dominikgaller.alpinebooking.booking.core.inport.result.MarkBookingActiveResult;
-import com.dominikgaller.alpinebooking.booking.core.inport.usecase.MarkBookingActiveUseCase;
+import com.dominikgaller.alpinebooking.booking.core.inport.command.MarkBookingCompletedCommand;
+import com.dominikgaller.alpinebooking.booking.core.inport.result.MarkBookingCompletedResult;
+import com.dominikgaller.alpinebooking.booking.core.inport.usecase.MarkBookingCompletedUseCase;
 import com.dominikgaller.alpinebooking.booking.core.outport.TourBookingRepository;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
-import com.dominikgaller.alpinebooking.shared.domain.event.TourStarted;
+import com.dominikgaller.alpinebooking.shared.domain.event.TourCompleted;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -27,10 +27,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Spring-free unit tests for {@link TourStartedListener}.
+ * Spring-free unit tests for {@link TourCompletedListener}.
  *
- * <p>Covers the UC06 fan-out: a single {@code TourStarted} event must activate every
- * CONFIRMED booking for that tour and leave every other booking alone. Outport and
+ * <p>Covers the UC07 fan-out: a single {@code TourCompleted} event must complete every
+ * ACTIVE booking for that tour and leave every other booking alone. Outport and
  * inport dependencies are in-line stubs ({@code test.definition.md} section 2.2).
  *
  * <p>What these tests deliberately do <em>not</em> cover: the
@@ -39,21 +39,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * would test the framework ({@code test.definition.md} section 8). They need a Spring
  * integration test, which does not exist yet.
  *
- * <p>SDD: See {@code documentation/use-cases/uc06-mark-booking-active.spec.md} section 5.
+ * <p>SDD: See {@code documentation/use-cases/uc07-mark-booking-completed.spec.md} section 5.
  */
-class TourStartedListenerTest {
+class TourCompletedListenerTest {
 
     private static final TourId TOUR_ID = new TourId("TOUR-42");
     private static final TourId OTHER_TOUR_ID = new TourId("TOUR-99");
-    private static final Instant STARTED_AT = Instant.parse("2026-06-15T09:00:00Z");
+    private static final Instant COMPLETED_AT = Instant.parse("2026-06-15T09:00:00Z");
     private static final String GUIDE_TOUR_ID = "guide-tour-7";
     private static final LocalDate FUTURE_DATE = LocalDate.of(2026, 6, 15);
 
     private final BookingStubRepository repository = new BookingStubRepository();
-    private final RecordingMarkBookingActive useCase = new RecordingMarkBookingActive();
+    private final RecordingMarkBookingCompleted useCase = new RecordingMarkBookingCompleted();
 
-    private final TourStartedListener listener =
-            new TourStartedListener(repository, useCase);
+    private final TourCompletedListener listener =
+            new TourCompletedListener(repository, useCase);
 
     private static TourBooking bookingWith(final TourId tourId, final TourBookingStatus status) {
         return TourBooking.reconstitute(
@@ -66,102 +66,107 @@ class TourStartedListenerTest {
                 status);
     }
 
-    private static TourStarted event() {
-        return new TourStarted(GUIDE_TOUR_ID, TOUR_ID, STARTED_AT);
+    private static TourCompleted event() {
+        return new TourCompleted(GUIDE_TOUR_ID, TOUR_ID, COMPLETED_AT);
     }
 
     @Test
-    void onTourStarted_activatesEveryConfirmedBookingForTheTour() {
-        final TourBooking first = bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED);
-        final TourBooking second = bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED);
+    void onTourCompleted_completesEveryActiveBookingForTheTour() {
+        final TourBooking first = bookingWith(TOUR_ID, TourBookingStatus.ACTIVE);
+        final TourBooking second = bookingWith(TOUR_ID, TourBookingStatus.ACTIVE);
         repository.preload(first);
         repository.preload(second);
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
-        assertThat(useCase.activatedBookingIds())
+        assertThat(useCase.completedBookingIds())
                 .containsExactlyInAnyOrder(
                         first.bookingId().value().toString(),
                         second.bookingId().value().toString());
     }
 
     @Test
-    void onTourStarted_propagatesStartedAtAndGuideTourIdFromEvent() {
-        final TourBooking booking = bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED);
+    void onTourCompleted_propagatesCompletedAtAndGuideTourIdFromEvent() {
+        final TourBooking booking = bookingWith(TOUR_ID, TourBookingStatus.ACTIVE);
         repository.preload(booking);
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
         assertThat(useCase.receivedCommands()).singleElement().satisfies(command -> {
-            assertThat(command.startedAt()).isEqualTo(STARTED_AT);
+            assertThat(command.completedAt()).isEqualTo(COMPLETED_AT);
             assertThat(command.guideTourId()).isEqualTo(GUIDE_TOUR_ID);
         });
     }
 
     @Test
-    void onTourStarted_doesNotActivateRequestedBooking() {
+    void onTourCompleted_doesNotCompleteRequestedBooking() {
         repository.preload(bookingWith(TOUR_ID, TourBookingStatus.REQUESTED));
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
         assertThat(useCase.receivedCommands()).isEmpty();
     }
 
     @Test
-    void onTourStarted_doesNotActivateCancelledBooking() {
+    void onTourCompleted_doesNotCompleteCancelledBooking() {
         repository.preload(bookingWith(TOUR_ID, TourBookingStatus.CANCELLED));
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
         assertThat(useCase.receivedCommands()).isEmpty();
     }
 
     @Test
-    void onTourStarted_doesNotActivateAlreadyActiveBooking() {
-        repository.preload(bookingWith(TOUR_ID, TourBookingStatus.ACTIVE));
+    void onTourCompleted_doesNotCompleteConfirmedBooking() {
+        repository.preload(bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED));
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
         assertThat(useCase.receivedCommands()).isEmpty();
     }
 
+    /**
+     * Already-COMPLETED bookings are filtered out by the query, so the idempotent no-op on
+     * the aggregate is never even reached. Both layers hold: this asserts the query's half.
+     */
     @Test
-    void onTourStarted_doesNotActivateCompletedBooking() {
+    void onTourCompleted_doesNotCompleteAlreadyCompletedBooking() {
         repository.preload(bookingWith(TOUR_ID, TourBookingStatus.COMPLETED));
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
         assertThat(useCase.receivedCommands()).isEmpty();
     }
 
     @Test
-    void onTourStarted_activatesOnlyConfirmed_whenStatusesAreMixed() {
-        final TourBooking confirmed = bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED);
-        repository.preload(confirmed);
+    void onTourCompleted_completesOnlyActive_whenStatusesAreMixed() {
+        final TourBooking active = bookingWith(TOUR_ID, TourBookingStatus.ACTIVE);
+        repository.preload(active);
         repository.preload(bookingWith(TOUR_ID, TourBookingStatus.CANCELLED));
-        repository.preload(bookingWith(TOUR_ID, TourBookingStatus.ACTIVE));
+        repository.preload(bookingWith(TOUR_ID, TourBookingStatus.COMPLETED));
+        repository.preload(bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED));
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
-        assertThat(useCase.activatedBookingIds())
-                .containsExactly(confirmed.bookingId().value().toString());
+        assertThat(useCase.completedBookingIds())
+                .containsExactly(active.bookingId().value().toString());
     }
 
     @Test
-    void onTourStarted_ignoresBookingsForOtherTours() {
-        final TourBooking sameTour = bookingWith(TOUR_ID, TourBookingStatus.CONFIRMED);
+    void onTourCompleted_ignoresBookingsForOtherTours() {
+        final TourBooking sameTour = bookingWith(TOUR_ID, TourBookingStatus.ACTIVE);
         repository.preload(sameTour);
-        repository.preload(bookingWith(OTHER_TOUR_ID, TourBookingStatus.CONFIRMED));
+        repository.preload(bookingWith(OTHER_TOUR_ID, TourBookingStatus.ACTIVE));
 
-        listener.onTourStarted(event());
+        listener.onTourCompleted(event());
 
-        assertThat(useCase.activatedBookingIds())
+        assertThat(useCase.completedBookingIds())
                 .containsExactly(sameTour.bookingId().value().toString());
     }
 
     @Test
-    void onTourStarted_noBookingsForTour_doesNothing() {
-        listener.onTourStarted(event());
+    void onTourCompleted_noBookingsForTour_doesNothing() {
+        listener.onTourCompleted(event());
 
         assertThat(useCase.receivedCommands()).isEmpty();
     }
@@ -192,10 +197,7 @@ class TourStartedListenerTest {
 
         @Override
         public List<TourBooking> findConfirmedByTourId(final TourId tourId) {
-            return store.values().stream()
-                    .filter(b -> b.tourId().equals(tourId))
-                    .filter(b -> b.status() == TourBookingStatus.CONFIRMED)
-                    .toList();
+            throw new UnsupportedOperationException("not used in UC07 listener tests");
         }
 
         @Override
@@ -207,21 +209,21 @@ class TourStartedListenerTest {
         }
     }
 
-    private static class RecordingMarkBookingActive implements MarkBookingActiveUseCase {
-        private final List<MarkBookingActiveCommand> commands = new ArrayList<>();
+    private static class RecordingMarkBookingCompleted implements MarkBookingCompletedUseCase {
+        private final List<MarkBookingCompletedCommand> commands = new ArrayList<>();
 
         @Override
-        public MarkBookingActiveResult markActive(final MarkBookingActiveCommand command) {
+        public MarkBookingCompletedResult markCompleted(final MarkBookingCompletedCommand command) {
             commands.add(command);
-            return new MarkBookingActiveResult("ACTIVE");
+            return new MarkBookingCompletedResult("COMPLETED");
         }
 
-        List<MarkBookingActiveCommand> receivedCommands() {
+        List<MarkBookingCompletedCommand> receivedCommands() {
             return Collections.unmodifiableList(commands);
         }
 
-        List<String> activatedBookingIds() {
-            return commands.stream().map(MarkBookingActiveCommand::bookingId).toList();
+        List<String> completedBookingIds() {
+            return commands.stream().map(MarkBookingCompletedCommand::bookingId).toList();
         }
     }
 }

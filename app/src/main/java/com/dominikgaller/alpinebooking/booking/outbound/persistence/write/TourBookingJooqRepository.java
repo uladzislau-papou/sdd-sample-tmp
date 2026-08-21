@@ -58,6 +58,16 @@ public class TourBookingJooqRepository implements TourBookingRepository {
     }
 
     @Override
+    public List<TourBooking> findActiveByTourId(final TourId tourId) {
+        return dsl
+                .selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.TOUR_ID.eq(tourId.value()))
+                .and(TOUR_BOOKING.STATUS.eq(TourBookingStatus.ACTIVE.name()))
+                .fetch()
+                .map(mapper::toDomain);
+    }
+
+    @Override
     public void update(final TourBooking booking) {
         // Every mutable field of the aggregate must be written here. Immutable fields
         // (id, tour_id, tour_date, contact) are set once by save() and never change.

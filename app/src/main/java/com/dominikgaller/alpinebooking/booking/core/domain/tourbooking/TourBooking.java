@@ -3,6 +3,7 @@ package com.dominikgaller.alpinebooking.booking.core.domain.tourbooking;
 import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingActivated;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingCompleted;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.ParticipantsChanged;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingConfirmed;
@@ -20,8 +21,9 @@ import java.util.List;
  * Aggregate root representing a reservation for a guided alpine tour.
  *
  * <p>State changes are performed via named methods ({@link #request}, {@link #confirm},
- * {@link #cancel}). Each method records the resulting domain event internally and exposes
- * events via {@link #pullDomainEvents()}.
+ * {@link #cancel}, {@link #changeParticipants}, {@link #markActive}, {@link #markCompleted}).
+ * Each records the resulting domain event internally and exposes events via
+ * {@link #pullDomainEvents()}.
  *
  * <p>Reconstitution from persistence uses {@link #reconstitute} — no invariants are
  * re-checked when loading an already-valid past fact.
@@ -173,6 +175,37 @@ public class TourBooking {
         }
         status = TourBookingStatus.ACTIVE;
         domainEvents.add(new BookingActivated(bookingId, startedAt, guideTourId));
+    }
+
+    /**
+     * Transitions the booking from {@code ACTIVE} to {@code COMPLETED} (UC07).
+     *
+     * <p>If the booking is already {@code COMPLETED} this method is a no-op (idempotent) and
+     * no domain event is emitted — the same shape as {@link #markActive}, because the same
+     * {@code AFTER_COMMIT} listener may see a redelivered event.
+     *
+     * <p>{@code CONFIRMED → COMPLETED} is deliberately rejected: tolerating it would paper
+     * over a missing {@code TourStarted} and let a booking complete a tour it never started.
+     *
+     * @param completedAt the moment the tour finished; carried on the event, not stored —
+     *                    no invariant needs it, and neither does {@code markActive} store
+     *                    {@code startedAt}
+     * @param guideTourId optional correlation id linking to the guide tour execution; may be
+     *                    null. Same contract and same rationale as {@link #markActive}'s
+     *                    parameter of the same name — an opaque identity owned by the
+     *                    {@code guide} context (ADR-0005)
+     * @throws InvalidBookingStateException if the current state is neither {@code ACTIVE}
+     *                                      nor {@code COMPLETED}
+     */
+    public void markCompleted(final Instant completedAt, final String guideTourId) {
+        if (status == TourBookingStatus.COMPLETED) {
+            return;
+        }
+        if (status != TourBookingStatus.ACTIVE) {
+            throw new InvalidBookingStateException(status);
+        }
+        status = TourBookingStatus.COMPLETED;
+        domainEvents.add(new BookingCompleted(bookingId, completedAt, guideTourId));
     }
 
     /**

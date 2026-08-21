@@ -227,6 +227,74 @@ class TourBookingJooqRepositoryIT {
         assertThat(repository.findConfirmedByTourId(booking.tourId())).isEmpty();
     }
 
+    /**
+     * UC07 — the COMPLETED transition round-trip.
+     *
+     * <p>Asserts {@code status} only, for the same reason as the ACTIVE case above:
+     * {@code TourBooking} holds no {@code completedAt} field. {@code markCompleted(Instant, String)}
+     * takes the timestamp purely as {@code BookingCompleted} payload, so {@code tour_booking}
+     * correctly has no such column — see
+     * {@code documentation/use-cases/uc07-mark-booking-completed.spec.md} section 6.
+     */
+    @Test
+    void update_changesStatus_toCompleted_afterMarkCompleted() {
+        final TourBooking booking = activeBooking();
+
+        booking.markCompleted(NOW, null);
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.COMPLETED);
+    }
+
+    /**
+     * UC07 — the completion fan-out queries ACTIVE bookings, mirroring UC06's CONFIRMED
+     * query. Without this test the {@code STATUS.eq(ACTIVE)} predicate is only exercised
+     * by the listener's in-memory stub, which cannot catch a wrong column or a wrong
+     * literal in the generated SQL.
+     */
+    @Test
+    void findActiveByTourId_returnsOnlyActiveBookingsForThatTour() {
+        final TourBooking active = activeBooking();
+
+        final TourBooking confirmed = sampleBooking();
+        repository.save(confirmed);
+        confirmed.confirm(NOW);
+        repository.update(confirmed);
+
+        final TourBooking completed = activeBooking();
+        completed.markCompleted(NOW, null);
+        repository.update(completed);
+
+        final var found = repository.findActiveByTourId(active.tourId());
+
+        assertThat(found).extracting(b -> b.bookingId().value().toString())
+                .containsExactly(active.bookingId().value().toString());
+    }
+
+    @Test
+    void findActiveByTourId_returnsEmpty_whenNoActiveBookingsExist() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+
+        assertThat(repository.findActiveByTourId(booking.tourId())).isEmpty();
+    }
+
+    /**
+     * A persisted booking in ACTIVE state — the precondition for UC07. Reaches it through
+     * the real transitions ({@code confirm} → {@code markActive}) rather than
+     * {@code reconstitute}, so the row is one a running system could actually produce.
+     */
+    private TourBooking activeBooking() {
+        final TourBooking booking = sampleBooking();
+        repository.save(booking);
+        booking.confirm(NOW);
+        booking.markActive(NOW, "guide-tour-1");
+        repository.update(booking);
+        return booking;
+    }
+
     private TourBooking sampleBooking() {
         return TourBooking.request(
                 BookingId.generate(),

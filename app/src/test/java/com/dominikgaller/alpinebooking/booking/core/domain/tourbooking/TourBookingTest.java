@@ -3,6 +3,7 @@ package com.dominikgaller.alpinebooking.booking.core.domain.tourbooking;
 import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingActivated;
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.BookingCompleted;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.ParticipantsChanged;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingCancelled;
 import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.event.TourBookingConfirmed;
@@ -282,6 +283,133 @@ class TourBookingTest {
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
                 .isThrownBy(() -> booking.markActive(NOW, null));
+    }
+
+    // ── UC07: markCompleted ───────────────────────────────────────────────────
+
+    private TourBooking activeBooking() {
+        return TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.ACTIVE);
+    }
+
+    @Test
+    void markCompleted_happyPath_transitionsToCompleted() {
+        final TourBooking booking = activeBooking();
+
+        booking.markCompleted(NOW, null);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.COMPLETED);
+    }
+
+    @Test
+    void markCompleted_happyPath_recordsBookingCompletedEvent() {
+        final TourBooking booking = activeBooking();
+
+        booking.markCompleted(NOW, "GT-001");
+
+        final List<DomainEvent> events = booking.pullDomainEvents();
+        assertThat(events).singleElement().isInstanceOf(BookingCompleted.class);
+        final BookingCompleted event = (BookingCompleted) events.get(0);
+        assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(event.completedAt()).isEqualTo(NOW);
+        assertThat(event.guideTourId()).isEqualTo("GT-001");
+    }
+
+    /**
+     * The correlation id must survive the transition, exactly as `markActive` carries it
+     * into {@code BookingActivated}. Without it the booking lifecycle is traceable back to
+     * its guide-side cause on activation but not on completion — half a trail is not one.
+     */
+    @Test
+    void markCompleted_happyPath_carriesGuideTourIdOntoEvent() {
+        final TourBooking booking = activeBooking();
+
+        booking.markCompleted(NOW, "GT-042");
+
+        final BookingCompleted event = (BookingCompleted) booking.pullDomainEvents().get(0);
+        assertThat(event.guideTourId()).isEqualTo("GT-042");
+    }
+
+    /**
+     * {@code guideTourId} is a correlation id, not an invariant: a caller that has none
+     * must still be able to complete a booking. Mirrors {@code markActive}, which accepts
+     * null for the same reason.
+     */
+    @Test
+    void markCompleted_acceptsNullGuideTourId() {
+        final TourBooking booking = activeBooking();
+
+        booking.markCompleted(NOW, null);
+
+        final BookingCompleted event = (BookingCompleted) booking.pullDomainEvents().get(0);
+        assertThat(event.guideTourId()).isNull();
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.COMPLETED);
+    }
+
+    @Test
+    void markCompleted_idempotent_whenAlreadyCompleted_noEventEmitted() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.COMPLETED);
+
+        booking.markCompleted(NOW, null);
+
+        assertThat(booking.pullDomainEvents()).isEmpty();
+    }
+
+    @Test
+    void markCompleted_idempotent_whenAlreadyCompleted_statusRemainsCompleted() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.COMPLETED);
+
+        booking.markCompleted(NOW, null);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.COMPLETED);
+    }
+
+    @Test
+    void markCompleted_throwsInvalidBookingStateException_whenRequested() {
+        final TourBooking booking = validBooking();
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.markCompleted(NOW, null));
+    }
+
+    @Test
+    void markCompleted_throwsInvalidBookingStateException_whenConfirmed() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.CONFIRMED);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.markCompleted(NOW, null));
+    }
+
+    @Test
+    void markCompleted_throwsInvalidBookingStateException_whenCancelled() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.CANCELLED);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.markCompleted(NOW, null));
+    }
+
+    @Test
+    void markCompleted_doesNotChangeStatus_whenStateInvalid() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.CONFIRMED);
+
+        try {
+            booking.markCompleted(NOW, null);
+        } catch (InvalidBookingStateException ignored) {
+        }
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CONFIRMED);
+        assertThat(booking.pullDomainEvents()).isEmpty();
     }
 
     // ── UC04: changeParticipants ──────────────────────────────────────────────

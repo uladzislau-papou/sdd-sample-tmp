@@ -82,9 +82,9 @@ A2 is A1's root cause: the exception is part of the inport contract but lives in
 ### Governance decisions blocking feature work
 | # | Item |
 |---|------|
-| H1 | UC08 replaces `TourBooking.cancel(Instant)` with `cancel(Instant, CancelledBy, String)`, changing a method five call sites and UC03 depend on — ADR needed? |
-| H2 | UC09 + UC12 make a synchronous cross-context call inside the caller's transaction — ADR required (`sdd.playbook.md` § 6 items 5 and 10). One ADR should cover both |
-| H3 | UC07 has no trigger until UC11 publishes `TourCompleted` |
+| H1 | **Resolved — no ADR.** UC08 replaces `TourBooking.cancel(Instant)` with `cancel(Instant, CancelledBy, String)`. Ruled a within-aggregate signature change, not an architectural one |
+| H2 | **Resolved — ADR-0008 written, then Rejected.** The use case, implemented in the inbound driver, orchestrates: cancel the guide tour, then call the booking inport synchronously inside the same transaction. No new outport, so no ADR. `architecture.definition.md` § 11 rule 3 amended to permit driver-to-inport calls |
+| H3 | **Closed.** UC11 is implemented; `CompleteTourDriver` publishes `TourCompleted` post-commit |
 
 ---
 
@@ -191,10 +191,10 @@ This is what stops the baseline decaying again. Do it *after* Phases 2–4 so it
 
 Now genuinely `/loop-uc`-drivable, since the DoDs are honest and the reviewer is clean.
 
-- [ ] **UC11** CompleteTour — unblocks UC07 by publishing `TourCompleted` (H3)
-- [ ] **UC07** MarkBookingCompleted
-- [ ] **UC08** CancelBookingByUser — resolve **H1** first; modifies UC03's endpoint and spec
-- [ ] **H2** ADR for the synchronous cross-context call, then **UC12** + **UC09** together
+- [x] **UC11** CompleteTour — unblocks UC07 by publishing `TourCompleted` (H3)
+- [x] **UC07** MarkBookingCompleted
+- [ ] **UC08** CancelBookingByUser — H1 resolved (no ADR); modifies UC03's endpoint and spec
+- [ ] **UC12** + **UC09** together — H2 resolved; driver-orchestrated, no ADR
 
 ## Carried forward — DONE
 
