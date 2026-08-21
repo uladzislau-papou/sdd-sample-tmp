@@ -4,9 +4,15 @@
 SPECIFIED
 
 ## Bounded Context
-`guide` — triggered via REST by the guide. Calls `booking` synchronously through
-`BookingCancellationPort` to cancel the affected bookings (UC09).
-Integration pattern: synchronous outport call, inside the guide's transaction.
+`guide` — triggered via REST by the guide. `CancelTourByGuideDriver` orchestrates: it
+cancels the guide tour, then calls `booking`'s inport
+(`MarkBookingCancelledByGuideUseCase`, UC09) synchronously **inside its own transaction**.
+
+Integration pattern: synchronous call to another context's published API, made by the
+orchestrating driver. Permitted by `architecture.definition.md` § 11 rule 3, which allows a
+driver to depend on another context's `core.inport` and nothing else of it. No outport is
+introduced — see `adr/0008-synchronous-cross-context-cancellation.adr.md` (Rejected) for why
+one was considered and dropped.
 
 > Split out of the former `uc10-guide-actions.spec.md`. This is the **guide-side**
 > action; UC09 is the booking-side reaction it drives.
@@ -68,8 +74,9 @@ All errors return `{ "error": "<message>" }`.
 4. Call `guideTour.cancel(cancelledAt, reason)` → throws `InvalidGuideTourStateException`
    if status ∉ {SCHEDULED, RUNNING}
 5. Persist via `GuideTourRepository.update(guideTour)`
-6. Call `BookingCancellationPort.cancelForTour(tourId, cancelledAt, guideTourId, reason)`
-   **within the same transaction** — a failure here rolls back step 5
+6. For each affected booking, call
+   `MarkBookingCancelledByGuideUseCase.cancelByGuide(...)` — `booking`'s inport —
+   **within the same transaction**, so a failure here rolls back step 5
 7. Publish `TourCancelledByGuide` via `DomainEventPublisher` (post-commit, ADR-0002)
 8. Return `{ "status": "CANCELLED" }`
 
@@ -77,7 +84,7 @@ All errors return `{ "error": "<message>" }`.
 ## 6. Side Effects
 
 - Persistence: `status`, `cancelled_at`, `cancellation_reason` columns updated on `guide_tour`
-- Synchronous cross-context call: bookings cancelled via `BookingCancellationPort` (UC09)
+- Synchronous cross-context call: bookings cancelled via `booking`'s inport (UC09)
 - Event publication: `TourCancelledByGuide` published after transaction commit (ADR-0002)
 
 Transaction boundary: steps 5 and 6 share one transaction. If the booking side
@@ -192,10 +199,12 @@ Nothing is implemented yet; every item is open. Test names are the **planned** n
 ### Contracts
 - [ ] `GuideTour.cancel(Instant, String)` exists on the aggregate
 - [ ] `CancelTourByGuideCommand` / `Result` / `UseCase` exist in `guide.core.inport`
-- [ ] `BookingCancellationPort` exists in `guide.core.outport`, framework-free, and
-      `guide` does not import any `booking` type (`architecture.definition.md` § 11 rule 3)
-- [ ] `documentation/ports/booking-cancellation.outport.spec.md` written, covering the
-      shared transaction boundary in § 6 (`execution.playbook.md` § 3.2.3)
+- [ ] `CancelTourByGuideDriver` imports **only** `booking.core.inport` from the other
+      context — enforced by `ContextRegistryTest.guide_doesNotImportBookingInternals` and
+      `.guideReachesBookingInport_onlyFromADriver`. **No outport is introduced**
+      (`adr/0008-…` Rejected)
+- [ ] `documentation/ports/mark-booking-cancelled-by-guide.inport.spec.md` (owned by UC09)
+      records the shared transaction boundary from § 6 (`execution.playbook.md` § 3.2.3)
 - [ ] `shared.domain.event.TourCancelledByGuide` exists
 - [ ] `rest/uc12-cancel-tour-by-guide.http` covers 200, 400, 404, 409 and 502
 - [ ] Flyway migration adds `cancelled_at` and `cancellation_reason` to `guide_tour`

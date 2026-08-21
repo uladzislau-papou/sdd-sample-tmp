@@ -1,139 +1,92 @@
 # ADR 0008 – Synchronous Cross-Context Cancellation
 
 ## Status
-Proposed
+Rejected
 
-Awaiting confirmation. `sdd.playbook.md` § 6 items 5 (modifying transaction boundaries)
-and 10 (changing the cross-context interaction model) both fire. Implementation of UC09
-and UC12 waits, per `execution.playbook.md` § 3.2.4.
+Rejected by the maintainer, on the grounds that it recorded a decision that did not need
+making. Kept because the *rejection* is the useful part: it documents why the outport
+approach was considered and why plain orchestration is preferred.
+
+The rule this ADR would have established now lives in `architecture.definition.md` § 11
+rule 3, as doctrine rather than as a decision record.
 
 ## Context
 
-Two contexts already communicate, and they do it one way: `guide` publishes a domain event
-and `booking` reacts after the guide transaction commits (ADR-0002). UC05 → UC06 is exactly
-that shape — `TourStarted` fires, `TourStartedListener` activates the bookings in a new
-transaction, and if that fails the guide tour is already started and unaffected.
+UC12 (CancelTourByGuide) must cancel the bookings attached to a tour, and UC12 § 6 requires
+that a failure on the booking side roll back the tour cancellation — the guide must not be
+told "cancelled" while participants still hold live bookings.
 
-UC12 (CancelTourByGuide) and UC09 (MarkBookingCancelledByGuide) do not fit that shape. When
-a guide calls off a tour, the bookings attached to it must be cancelled too, and a guide who
-is told "tour cancelled" while participants still hold live bookings has been told something
-false. The two facts have to agree.
-
-Concretely, UC12 § 6 requires the port to be called **inside** the guide's transaction so
-that a failure on the booking side rolls back the tour cancellation, and UC12 AC-07 makes
-that a testable criterion: booking side fails → tour status unchanged, no event published,
-HTTP 502.
-
-That is a different interaction model from ADR-0002, and it modifies a transaction boundary
-to span two bounded contexts. Both need recording.
+This ADR proposed reaching that outcome through a **new outport**:
+`guide.core.outport.BookingCancellationPort`, declared by `guide` and implemented by an
+adapter in `booking` which would in turn delegate to `booking`'s inport. It framed the
+result as a new cross-context interaction model, and therefore as an ADR-level decision
+under `sdd.playbook.md` § 6 items 5 and 10.
 
 ## Decision
 
-`guide` cancels bookings through a **synchronous outbound port, called inside its own
-transaction**.
+**Rejected.** The use case implementation — the driver — orchestrates directly:
+`CancelTourByGuideDriver` cancels the guide tour, then calls `booking`'s inport
+synchronously within the same transaction.
 
-- **`guide` owns the abstraction.** `guide.core.outport.BookingCancellationPort` — the core
-  declaring what it needs from outside (`architecture.definition.md` § 4.3). Framework-free,
-  domain types only.
-- **`booking` provides the implementation**, as an adapter satisfying that port, reached
-  through `booking`'s own inport (`MarkBookingCancelledByGuideUseCase`, UC09). Neither
-  context imports the other; the port is the seam.
-- **One transaction spans both.** `CancelTourByGuideDriver` is `@Transactional`; the port
-  call joins that transaction. A failure anywhere rolls the whole thing back.
-- **`TourCancelledByGuide` is still published post-commit**, per ADR-0002. The synchronous
-  call is about *consistency*; the event is about *notification*, and those stay separate.
-- **Foreign identities cross as `String`**, per ADR-0005: the port carries `tourId` and
-  `guideTourId` as opaque values, not as `booking`'s or `guide`'s value objects.
+No ADR is required for that, because it is not a new mechanism. It is what
+`architecture.definition.md` § 4.4 already says a driver does: coordinate a use case,
+own the transaction boundary, and call the ports and APIs the coordination needs.
 
-Event-driven cancellation is explicitly **rejected** — see below.
+## Rationale for the rejection
 
-## Rationale
+### The outport added indirection without reducing coupling
 
-### Why not event-driven, like UC06?
+The proposed `BookingCancellationPort` would have had exactly one implementation, in
+`booking`, delegating to `booking`'s own inport. `guide` would still depend on `booking`'s
+behaviour, contract, availability and failure modes — the dependency would simply have been
+routed through an extra interface so that it did not appear in the import graph.
 
-Because the two cases differ in what a failure means.
+That is coupling relocated, not coupling removed, and the appearance of decoupling is worse
+than the honest version: a reader of the import graph would conclude the contexts are
+independent when the runtime says otherwise.
 
-For activation, a failure is recoverable and invisible: the tour is running, the booking is
-still CONFIRMED, and a retry or a later reconciliation fixes it. Nobody was told anything
-untrue.
+### A context's inport *is* its published API
 
-For cancellation, a failure is a **lie already delivered**. The guide gets 200, the tour
-reads CANCELLED, and participants hold bookings for a tour that is not happening. The
-system has published two contradictory facts and there is no actor whose job it is to
-notice. Eventual consistency is a fine default; it is the wrong default when the window of
-inconsistency is a window of misinformation.
+`architecture.definition.md` § 4.2 calls `core.inport` "the application boundary" and
+requires it to be framework-free and stable — "small and intention-revealing", a contract.
+That is the description of a published API. Depending on another module's published API is
+ordinary composition; reaching into its domain, its outports or its adapters is not. Rule 3
+now draws the line there instead of at the context edge.
 
-### Why not an outbox, or a saga?
+### So the only real question was the rule, not the mechanism
 
-Both would preserve the one-transaction-per-context rule and both are more machinery than
-this earns.
+The original rule 3 forbade any `guide` → `booking` import, so the design failed
+`ContextRegistryTest` — verified empirically before this ADR was rejected. That made it look
+like an architectural decision. It was not: it was a rule stated more broadly than it needed
+to be, of the same kind as several others corrected on this branch
+(`coding-style.definition.md` § 3.2's dead layering, § 5.1's `private final`, § 4.2's query
+prefixes). The fix is to state the rule correctly, not to design around it.
 
-An outbox makes delivery reliable, not *atomic* — the tour is still cancelled before the
-bookings are, so the inconsistency window shrinks rather than closing. A saga with a
-compensating "un-cancel" is worse: reversing a cancellation participants may already have
-been notified about is not a compensation, it is a second wrong.
+### What is preserved from the proposal
 
-The synchronous call is the only option where the two facts are never in disagreement, and
-both contexts share one database, so a shared transaction costs nothing infrastructurally
-today.
+The reasoning about *why* this case is synchronous while UC06 is event-driven was sound and
+has been kept — it now lives in § 11 rule 3's table and in UC12 § 6:
 
-### What this costs, stated plainly
+- A failed activation is recoverable and invisible; nobody was told anything untrue.
+- A failed cancellation is a lie already delivered — the guide sees success while
+  participants hold bookings for a tour that is not happening.
+- An outbox makes delivery reliable but not atomic, so the inconsistency window shrinks
+  rather than closing; a saga with a compensating un-cancel is worse, since reversing a
+  cancellation people may already have been notified about is a second wrong.
 
-`guide` becomes **temporally coupled** to `booking` for this one operation: if the booking
-side is slow, `CancelTourByGuide` is slow; if it is down, `CancelTourByGuide` fails. That is
-a real reduction in `guide`'s autonomy and it is the price of the guarantee above.
-
-It is bounded, though. Exactly one operation is affected. Everything else stays
-event-driven, and the port is the seam where a future split — different databases, a
-network hop, an outbox with compensation — would be made.
-
-### Why the guide side owns the port
-
-Because the core owns the abstraction it depends on (§ 4.3). `guide` needs "cancel the
-bookings for this tour" and should state that need in its own vocabulary. Putting the
-interface in `booking` would make `guide` depend on `booking`'s naming, and § 11 rule 3
-forbids the import that implies.
-
-### Why 502 rather than 500 for a booking-side failure
-
-The failure is in a collaborator the caller cannot influence — the same reasoning that maps
-`AvailabilityUnavailableException` to 502 in UC01. A 500 would suggest the guide context
-itself is broken.
+The accepted costs are likewise unchanged and recorded in UC12 § 6: temporal coupling for
+this one operation, a transaction spanning two contexts, and longer lock duration while
+there is still no optimistic locking.
 
 ## Consequences
 
-Positive:
-
-- The two facts cannot disagree. UC12 AC-07 is testable rather than aspirational.
-- One clearly marked exception to the event-driven default, rather than a general licence.
-- The port is the natural seam if the contexts are ever separated.
-
-Negative / accepted trade-offs:
-
-- **Temporal coupling** for this one operation, as above.
-- **The transaction spans two contexts**, which the one-aggregate-per-transaction guideline
-  (`architecture.definition.md` § 10) discourages. Accepted for the same reason the UC06
-  fan-out is: no invariant spans the aggregates, so this is scoping, not a modelling error.
-- **Two interaction models now coexist.** A reader has to know why UC06 is event-driven and
-  UC09 is not. This ADR is that explanation, and both use case specs point at it.
-- `ddd-hex-reviewer` will see a synchronous cross-context call and should not flag it. The
-  reviewer checklist and § 11 need a sentence permitting a port-mediated synchronous call,
-  so the rule is written down rather than living in this ADR alone.
-- **Lock duration grows.** The guide transaction now holds locks on the guide tour *and*
-  every affected booking. With no optimistic locking anywhere
-  (`tour-booking-repository.outport.spec.md` § 6), this raises the contention surface.
-
-## Future Considerations
-
-- **Optimistic locking is now more attractive.** A wider transaction touching more rows makes
-  the absence of a version column matter more. Its own ADR (persistence strategy, § 6 item 4).
-- **If the contexts are ever split** across databases or a network, this decision is the
-  first thing to revisit: the port survives, the shared transaction does not, and the
-  replacement is an outbox plus an explicit reconciliation process — not a saga with a
-  compensating un-cancel.
-- **`architecture.definition.md` § 11 rule 3** currently says contexts communicate "through
-  `shared.domain.event` or an explicit outport". That already permits this, but it does not
-  say a synchronous port call may share a transaction. Worth one sentence once this is
-  accepted.
-- UC09 depends on UC08's `CancelledBy` value object and the extended `cancel(...)` signature,
-  so UC08 lands first. The maintainer has ruled that UC08 itself needs no ADR.
+- `architecture.definition.md` § 11 rule 3 is narrowed: a context may depend on another
+  context's `core.inport`, and on nothing else of it. Three `ContextRegistryTest` rules
+  enforce this, including that only a **driver** may make the cross-context call — a
+  controller or listener doing it would scatter the coupling across the delivery surface.
+- This narrows a claim in ADR-0003 ("both contexts depend on `shared.domain` only"). ADR-0003
+  is immutable and stands as the record of the extraction; § 11 is the current rule.
+- No `BookingCancellationPort` is introduced. UC09's and UC12's specs are updated to describe
+  driver-to-inport orchestration.
+- Rejected ADRs are kept, not deleted. The alternative considered and the reason it lost are
+  more useful to a future reader than a clean numbering sequence.

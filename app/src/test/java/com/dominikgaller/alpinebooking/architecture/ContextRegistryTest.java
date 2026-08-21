@@ -77,25 +77,77 @@ class ContextRegistryTest {
                 .isEqualTo(REGISTERED_TOP_LEVEL_PACKAGES);
     }
 
+    /**
+     * Section 11 rule 3 permits a context to depend on another's {@code core.inport} — its
+     * published API — and nothing else. These two tests therefore forbid the *internals*
+     * rather than the whole context.
+     *
+     * <p>The permitted form is a synchronous call from the orchestrating driver to the other
+     * context's {@code *UseCase}, which is ordinary orchestration (§ 4.4). An outport
+     * declared for the same purpose would only add an interface whose one implementation
+     * delegates to that same inport.
+     */
     @Test
-    @DisplayName("Section 11 rule 3: booking does not import guide")
-    void booking_doesNotImportGuide() {
+    @DisplayName("Section 11 rule 3: booking does not import guide internals")
+    void booking_doesNotImportGuideInternals() {
         noClasses()
                 .that().resideInAPackage(ROOT + ".booking..")
-                .should().dependOnClassesThat().resideInAPackage(ROOT + ".guide..")
-                .because("contexts communicate through shared.domain.event or an explicit "
-                        + "outport, never by importing each other (ADR 0002, ADR 0003).")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        ROOT + ".guide.core.domain..",
+                        ROOT + ".guide.core.outport..",
+                        ROOT + ".guide.inbound..",
+                        ROOT + ".guide.outbound..")
+                .because("a context's core.inport is its published API and may be depended "
+                        + "on; everything else is closed (section 11 rule 3).")
                 .check(production);
     }
 
     @Test
-    @DisplayName("Section 11 rule 3: guide does not import booking")
-    void guide_doesNotImportBooking() {
+    @DisplayName("Section 11 rule 3: guide does not import booking internals")
+    void guide_doesNotImportBookingInternals() {
         noClasses()
                 .that().resideInAPackage(ROOT + ".guide..")
-                .should().dependOnClassesThat().resideInAPackage(ROOT + ".booking..")
-                .because("contexts communicate through shared.domain.event or an explicit "
-                        + "outport, never by importing each other (ADR 0002, ADR 0003).")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        ROOT + ".booking.core.domain..",
+                        ROOT + ".booking.core.outport..",
+                        ROOT + ".booking.inbound..",
+                        ROOT + ".booking.outbound..")
+                .because("a context's core.inport is its published API and may be depended "
+                        + "on; everything else is closed (section 11 rule 3).")
+                .check(production);
+    }
+
+    /**
+     * The permission is for the inport only, and only from a driver. A cross-context call
+     * belongs in the layer whose job is orchestration — not in a controller, a listener or
+     * an adapter, which would scatter the coupling across the delivery surface.
+     */
+    @Test
+    @DisplayName("Section 11 rule 3: only a booking driver may reach guide's inport")
+    void bookingReachesGuideInport_onlyFromADriver() {
+        noClasses()
+                .that().resideInAPackage(ROOT + ".booking..")
+                .and().resideOutsideOfPackage(ROOT + ".booking.inbound.driver..")
+                .should().dependOnClassesThat().resideInAPackage(ROOT + ".guide.core.inport..")
+                .allowEmptyShould(true)
+                .because("only inbound.driver orchestrates (section 4.4). A controller, "
+                        + "listener or adapter reaching into another context spreads the "
+                        + "coupling across the delivery surface. Depending on this context's "
+                        + "own inport is of course fine and is not what this checks.")
+                .check(production);
+    }
+
+    @Test
+    @DisplayName("Section 11 rule 3: only a guide driver may reach booking's inport")
+    void guideReachesBookingInport_onlyFromADriver() {
+        noClasses()
+                .that().resideInAPackage(ROOT + ".guide..")
+                .and().resideOutsideOfPackage(ROOT + ".guide.inbound.driver..")
+                .should().dependOnClassesThat().resideInAPackage(ROOT + ".booking.core.inport..")
+                .allowEmptyShould(true)
+                .because("only inbound.driver orchestrates (section 4.4). This is the rule "
+                        + "UC12 relies on: CancelTourByGuideDriver may call booking's inport, "
+                        + "GuideTourController may not.")
                 .check(production);
     }
 

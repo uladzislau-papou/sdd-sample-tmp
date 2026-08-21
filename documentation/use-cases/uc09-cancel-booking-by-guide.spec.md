@@ -6,8 +6,15 @@ SPECIFIED
 ## Bounded Context
 Owner: `booking` — holds and transitions the `TourBooking` aggregate.
 Trigger/Caller: `guide` — invokes `booking` when a guide cancels a tour (UC12).
-Integration pattern: synchronous outport call; `guide` defines a `BookingCancellationPort`
-outport, `booking` provides the implementation.
+Integration pattern: **synchronous call to this context's inport**, made by
+`guide.inbound.driver.CancelTourByGuideDriver` inside its own transaction.
+`architecture.definition.md` § 11 rule 3 permits a driver to depend on another context's
+`core.inport` — its published API — and this use case *is* that inport.
+
+No outport is involved. An earlier revision proposed a `BookingCancellationPort` owned by
+`guide`; it was rejected because its one implementation would have delegated to this very
+inport, relocating the coupling rather than removing it. See
+`adr/0008-synchronous-cross-context-cancellation.adr.md`.
 
 > **Integration pattern differs from UC06/UC07 deliberately.** Activation and
 > completion are *notifications* — `booking` may react whenever it likes, so they are
@@ -34,7 +41,7 @@ without either context reaching into the other's aggregate.
 
 ## 2. Input Contract
 
-Fields (via `BookingCancellationPort`, not via REST):
+Fields (via `MarkBookingCancelledByGuideCommand`, not via REST):
 - `bookingId` — required
 - `cancelledAt` (Instant) — optional; defaults to `ClockPort.now()`
 - `guideTourId` — optional correlation id
@@ -74,9 +81,10 @@ UC08 forbids the participant from doing the same.
 
 ## 5. Flow
 
-1. `guide` calls `BookingCancellationPort.cancelForTour(...)`
-2. `booking`'s adapter loads the aggregate via `TourBookingRepository.findById(bookingId)`
-   → throw `BookingNotFoundException` if empty
+1. `guide`'s `CancelTourByGuideDriver` calls
+   `MarkBookingCancelledByGuideUseCase.cancelByGuide(command)`
+2. `MarkBookingCancelledByGuideDriver` loads the aggregate via
+   `TourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
 3. Call `booking.cancel(cancelledAt, CancelledBy.GUIDE, reason)` → throws
    `InvalidBookingStateException` if status is COMPLETED
 4. Persist via `TourBookingRepository.update(booking)`
@@ -140,10 +148,10 @@ Then `BookingNotFoundException` propagates to the caller and nothing is persiste
 
 ## 9. REST Contract
 
-`Not applicable — synchronous outport call.`
+`Not applicable — reached through this context's inport, not over HTTP.`
 
-Reached through `BookingCancellationPort`, owned by `guide`. No endpoint,
-therefore no `rest/uc09-*.http` file is required.
+`guide`'s driver calls `MarkBookingCancelledByGuideUseCase` directly. No endpoint, so no
+`rest/uc09-*.http` file is required.
 
 
 ## 10. Definition of Done
@@ -165,14 +173,16 @@ Nothing is implemented yet; every item is open. Test names are the **planned** n
       booking cancellation and asserts the guide tour cancellation did not commit
 
 ### Contracts
-- [ ] `BookingCancellationPort` exists in `guide.core.outport` — **owned by `guide`**,
-      per `architecture.definition.md` § 4.3 ("the core owns the abstraction")
-- [ ] `booking` provides the implementation without importing `guide` types, and
-      `guide` does not import `booking` types (`architecture.definition.md` § 11 rule 3)
 - [ ] `MarkBookingCancelledByGuideCommand` / `Result` / `UseCase` exist in the
-      `booking.core.inport` triple
-- [ ] `documentation/ports/booking-cancellation.outport.spec.md` written, covering the
-      transaction and idempotency expectations in § 6
+      `booking.core.inport` triple — this is the whole cross-context contract; **no outport
+      is introduced** (`adr/0008-…` Rejected)
+- [ ] `MarkBookingCancelledByGuideDriver` exists in `booking.inbound.driver`
+- [ ] `documentation/ports/mark-booking-cancelled-by-guide.inport.spec.md` written, covering
+      the transaction and idempotency expectations in § 6, and stating that `guide` is a
+      caller
+- [ ] `guide` imports only `booking.core.inport`, and only from `CancelTourByGuideDriver` —
+      enforced by `ContextRegistryTest.guideReachesBookingInport_onlyFromADriver` and
+      `.guide_doesNotImportBookingInternals`
       (`execution.playbook.md` § 3.2.3)
 - [ ] `BookingCancelledByGuide` event exists in `booking.core.domain.tourbooking.event`
 - [ ] Persistence roundtrip covered by
