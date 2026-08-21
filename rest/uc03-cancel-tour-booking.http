@@ -14,13 +14,16 @@ Content-Type: application/json
   "reason": "Travel plans changed"
 }
 
-### UC03/UC08 – Cancel with an explicit cancellation time
-# cancelledAt is optional; when omitted ClockPort supplies it.
+### UC03/UC08 – A client-supplied cancellation time is ignored (200)
+# There is no cancelledAt field on the request. The driver always reads the time from
+# ClockPort (architecture.definition.md section 8.1) — the time an action happened is the
+# system's observation, not the caller's claim. Jackson has nowhere to bind the field, so
+# this cancels normally and the 1999 date has no effect.
 POST http://localhost:8080/api/v1/bookings/{{bookingId}}/cancel
 Content-Type: application/json
 
 {
-  "cancelledAt": "2026-07-15T09:00:00Z",
+  "cancelledAt": "1999-01-01T00:00:00Z",
   "reason": "Weather forecast looks bad"
 }
 

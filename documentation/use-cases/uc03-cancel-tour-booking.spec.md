@@ -29,8 +29,14 @@ Transition a booking from `REQUESTED` or `CONFIRMED` to `CANCELLED`.
 
 Fields:
 - `bookingId` — path variable (UUID format, required)
-- `cancelledAt` (Instant) — optional, request body; defaults to `ClockPort.now()`
 - `reason` (String) — optional, request body; non-blank and at most 400 characters
+
+The cancellation time is **not** an input. The driver reads it from `ClockPort`
+(`architecture.definition.md` § 8.1): the time an action happened is the system's
+observation, not the caller's claim, and no business case here needs a client to assert it.
+An earlier revision accepted `cancelledAt` from the request body, which let a caller date a
+cancellation before the booking existed or years into the future — unbounded and
+unvalidated. The fix is to accept nothing rather than to validate a range.
 
 Validation rules:
 - `bookingId` required, must be a valid UUID string, provided as a path variable
@@ -73,7 +79,7 @@ All errors return `{ "error": "<message>" }`.
 2. Build `CancellationReason` when `reason` is present → throws
    `InvalidBookingRequestException` if blank or over 400 characters. Before loading, so a
    400 costs no database round trip
-3. Resolve `cancelledAt` — from the body, else `ClockPort.now()`
+3. Read `cancelledAt` from `ClockPort.now()` — never from the request (§ 8.1)
 4. Load aggregate via `TourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
 5. Call `booking.cancel(cancelledAt, CancelledBy.USER, reason)` → throws
    `InvalidBookingStateException` if state ∉ {REQUESTED, CONFIRMED}
@@ -137,10 +143,12 @@ POST /api/v1/bookings/{bookingId}/cancel
 - Request body **optional** (UC08):
 
 ```json
-{ "cancelledAt": "2026-07-15T09:00:00Z", "reason": "Travel plans changed" }
+{ "reason": "Travel plans changed" }
 ```
 
-Both fields are optional, and the body may be omitted entirely.
+`reason` is optional and the body may be omitted entirely. There is no `cancelledAt`
+field; one sent by a client is ignored rather than honoured, pinned by
+`TourBookingControllerTest.cancelBooking_ignoresAClientSuppliedCancelledAt`.
 
 Response body (200 OK):
 ```json

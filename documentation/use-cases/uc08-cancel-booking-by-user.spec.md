@@ -44,8 +44,14 @@ cancellations indistinguishable downstream.
 
 Fields:
 - `bookingId` — path variable (UUID format, required)
-- `cancelledAt` (Instant) — optional; defaults to `ClockPort.now()`
 - `reason` (String) — optional, free text
+
+The cancellation time is **not** an input. The driver reads it from `ClockPort`
+(`architecture.definition.md` § 8.1): the time an action happened is the system's
+observation, not the caller's claim, and no business case here needs a client to assert it.
+An earlier revision accepted `cancelledAt` from the request body, which let a caller date a
+cancellation before the booking existed or years into the future — unbounded and
+unvalidated. The fix is to accept nothing rather than to validate a range.
 
 Validation rules:
 - `bookingId` required, must be a valid UUID string
@@ -97,7 +103,7 @@ backstop), so neither needs a new mapping.
 2. Build `CancellationReason` from the request body when `reason` is present → throws
    `InvalidBookingRequestException` if blank or over 400 characters. Absent reason stays
    absent; the value object is simply not constructed
-3. Resolve `cancelledAt` — from the request, else `ClockPort.now()`
+3. Read `cancelledAt` from `ClockPort.now()` — never from the request (§ 8.1)
 4. Load aggregate via `TourBookingRepository.findById(bookingId)` → throw `BookingNotFoundException` if empty
 5. Call `booking.cancel(cancelledAt, CancelledBy.USER, reason)` → throws
    `InvalidBookingStateException` if state ∉ {REQUESTED, CONFIRMED}
@@ -144,10 +150,11 @@ Given a cancellation with a reason supplied
 When CancelBookingByUser is executed
 Then the reason is persisted and carried on the emitted event
 
-**AC-04 – Explicit vs Clock-Supplied Cancellation Time**
+**AC-04 – Cancellation Time Comes From the Clock**
 Given a booking in a cancellable state
-When CancelBookingByUser is executed without an explicit `cancelledAt`
-Then `ClockPort` supplies the value; when supplied explicitly, that value is used
+When CancelBookingByUser is executed
+Then `ClockPort` supplies `cancelledAt`
+And a `cancelledAt` in the request body has no effect — the DTO has no such field
 
 **AC-05 – Tour Under Way**
 Given a booking in ACTIVE or COMPLETED state
@@ -187,11 +194,11 @@ POST /api/v1/bookings/{bookingId}/cancel
 
 Request body (optional, new in UC08):
 ```json
-{ "cancelledAt": "2026-07-15T09:00:00Z", "reason": "Travel plans changed" }
+{ "reason": "Travel plans changed" }
 ```
 
-Both fields are optional, and the body itself may be omitted entirely — a bare
-`POST .../cancel` is the UC03 behaviour preserved.
+`reason` is optional and the body itself may be omitted entirely — a bare
+`POST .../cancel` is the UC03 behaviour preserved. No `cancelledAt`: see § 2.
 
 Response body (200 OK):
 ```json

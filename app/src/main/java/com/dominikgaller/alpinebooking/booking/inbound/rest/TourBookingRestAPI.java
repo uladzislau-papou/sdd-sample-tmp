@@ -61,8 +61,9 @@ public interface TourBookingRestAPI {
      * {@code documentation/use-cases/uc08-cancel-booking-by-user.spec.md} section 9.
      *
      * @param bookingId the UUID of the booking to cancel
-     * @param request   optional body carrying {@code cancelledAt} and {@code reason};
-     *                  may be absent entirely
+     * @param request   optional body carrying {@code reason}; may be absent entirely. It
+     *                  carries no timestamp — a REST driver takes the cancellation time from
+     *                  {@code ClockPort} ({@code architecture.definition.md} § 8.1)
      * @return HTTP 200 with updated status
      */
     @PostMapping("/{bookingId}/cancel")

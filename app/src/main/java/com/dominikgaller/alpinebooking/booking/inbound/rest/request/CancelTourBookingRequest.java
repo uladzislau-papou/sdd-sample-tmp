@@ -1,12 +1,17 @@
 package com.dominikgaller.alpinebooking.booking.inbound.rest.request;
 
-import java.time.Instant;
-
 /**
  * REST request body for UC03/UC08 – cancelling a tour booking.
  *
- * <p>Both fields are optional, and the body itself may be omitted entirely — a bare
+ * <p>{@code reason} is optional and the body itself may be omitted entirely — a bare
  * {@code POST /bookings/{id}/cancel} is the original UC03 behaviour, preserved.
+ *
+ * <p>Carries <b>no</b> {@code cancelledAt}, deliberately. The cancellation time is the
+ * system's observation, not the caller's claim, so the driver reads it from
+ * {@code ClockPort} ({@code architecture.definition.md} § 8.1). An earlier revision
+ * accepted one from the request, which let a client date a cancellation before the booking
+ * existed or years into the future, unbounded and unvalidated. The fix is to accept
+ * nothing rather than to validate a range.
  *
  * <p>Deliberately carries <b>no</b> Bean Validation constraints, unlike
  * {@link ChangeParticipantsRequest}. The length and blankness rules for {@code reason} are
@@ -18,7 +23,6 @@ import java.time.Instant;
  * <p>SDD: See {@code documentation/use-cases/uc08-cancel-booking-by-user.spec.md}, section 9.
  */
 public record CancelTourBookingRequest(
-        Instant cancelledAt,
         String reason
 ) {
 }

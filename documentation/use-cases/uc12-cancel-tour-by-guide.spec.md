@@ -33,8 +33,11 @@ booking is left believing the tour is still going ahead.
 
 Fields:
 - `guideTourId` — path variable (UUID format, required)
-- `cancelledAt` (Instant) — optional request body field; defaults to `ClockPort.now()`
-- `reason` (String) — optional, free text
+- `reason` (String) — optional, free text; non-blank and at most 400 characters
+
+The cancellation time is **not** an input. It comes from `ClockPort`
+(`architecture.definition.md` § 8.1) — a REST caller does not decide when a cancellation
+happened.
 
 Validation rules:
 - `guideTourId` required, must be a valid UUID string
@@ -69,7 +72,7 @@ All errors return `{ "error": "<message>" }`.
 ## 5. Flow
 
 1. Parse `GuideTourId` from path variable
-2. Resolve `cancelledAt` — from the request body, else `ClockPort.now()`
+2. Read `cancelledAt` from `ClockPort.now()`
 3. Load aggregate via `GuideTourRepository.findById(...)` → throw `GuideTourNotFoundException` if empty
 4. Call `guideTour.cancel(cancelledAt, reason)` → throws `InvalidGuideTourStateException`
    if status ∉ {SCHEDULED, RUNNING}
@@ -111,10 +114,12 @@ Given a cancellation with a reason supplied
 When CancelTourByGuide is executed
 Then the reason is persisted and passed through to the booking side
 
-**AC-04 – Explicit vs Clock-Supplied Cancellation Time**
+**AC-04 – Cancellation Time Comes From the Clock**
 Given a cancellable GuideTour
-When CancelTourByGuide is executed without an explicit `cancelledAt`
-Then `ClockPort` supplies the value; when supplied explicitly, that value is used
+When CancelTourByGuide is executed
+Then `ClockPort` supplies `cancelledAt`, and the same value is passed to the booking side
+so both contexts record one moment rather than two
+And a `cancelledAt` in the request body is rejected as an unknown field rather than honoured
 
 **AC-05 – Finished Tour**
 Given a FINISHED GuideTour
@@ -152,13 +157,24 @@ Then HTTP 404 is returned and nothing is persisted
 
 Endpoint:
 ```
-DELETE /api/v1/guide-tours/{guideTourId}
+POST /api/v1/guide-tours/{guideTourId}/cancel
 ```
+
+`POST`, not `DELETE`. Ruled by the maintainer, the same ruling that changed UC03/UC08:
+cancelling is a state transition that leaves the tour addressable rather than a removal,
+and a `DELETE` body — which is how `reason` would arrive — is dropped by some clients,
+proxies and CDNs, so the reason would vanish intermittently with nothing to catch it. It
+also matches `POST /guide-tours/{id}/complete`, already implemented in this context.
 
 Request body (optional):
 ```json
-{ "cancelledAt": "2026-07-15T08:00:00Z", "reason": "Severe weather warning" }
+{ "reason": "Severe weather warning" }
 ```
+
+**No `cancelledAt`.** The driver reads the cancellation time from `ClockPort`
+(`architecture.definition.md` § 8.1): a REST caller does not get to decide when the
+cancellation happened. UC09, which receives the timestamp from this context across the
+boundary, does take it as input — that is the other half of the same rule.
 
 Response body (200 OK):
 ```json

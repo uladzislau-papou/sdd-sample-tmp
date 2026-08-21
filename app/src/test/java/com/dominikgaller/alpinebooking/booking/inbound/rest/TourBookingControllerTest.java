@@ -18,7 +18,6 @@ import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import java.time.Instant;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -269,7 +268,6 @@ class TourBookingControllerTest {
         final ArgumentCaptor<CancelTourBookingCommand> captor =
                 ArgumentCaptor.forClass(CancelTourBookingCommand.class);
         verify(cancelUseCase).cancel(captor.capture());
-        assertThat(captor.getValue().cancelledAt()).isNull();
         assertThat(captor.getValue().reason()).isNull();
     }
 
@@ -279,23 +277,47 @@ class TourBookingControllerTest {
      * a controller that dropped the body would look identical from the outside.
      */
     @Test
-    void cancelBooking_passesCancelledAtAndReasonToTheUseCase() throws Exception {
+    void cancelBooking_passesReasonToTheUseCase() throws Exception {
         when(cancelUseCase.cancel(any()))
                 .thenReturn(new CancelTourBookingResult("CANCELLED"));
 
         mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"cancelledAt":"2026-03-05T08:30:00Z","reason":"Travel plans changed"}
-                                """))
+                        .content("{\"reason\":\"Travel plans changed\"}"))
                 .andExpect(status().isOk());
 
         final ArgumentCaptor<CancelTourBookingCommand> captor =
                 ArgumentCaptor.forClass(CancelTourBookingCommand.class);
         verify(cancelUseCase).cancel(captor.capture());
         assertThat(captor.getValue().reason()).isEqualTo("Travel plans changed");
-        assertThat(captor.getValue().cancelledAt())
-                .isEqualTo(Instant.parse("2026-03-05T08:30:00Z"));
+    }
+
+    /**
+     * The cancellation time is the system's observation, not the caller's claim
+     * ({@code architecture.definition.md} § 8.1). A client that sends one must not have it
+     * honoured — {@code CancelTourBookingRequest} has no such component, so Jackson has
+     * nowhere to bind it and the driver falls through to {@code ClockPort}.
+     *
+     * <p>Asserted rather than assumed because the failure mode is silent: if the DTO ever
+     * regains a {@code cancelledAt}, every other test here still passes while an HTTP
+     * caller gains the ability to backdate a cancellation.
+     */
+    @Test
+    void cancelBooking_ignoresAClientSuppliedCancelledAt() throws Exception {
+        when(cancelUseCase.cancel(any()))
+                .thenReturn(new CancelTourBookingResult("CANCELLED"));
+
+        mockMvc.perform(post("/api/v1/bookings/{id}/cancel", BOOKING_UUID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cancelledAt\":\"1999-01-01T00:00:00Z\",\"reason\":\"x\"}"))
+                .andExpect(status().isOk());
+
+        final ArgumentCaptor<CancelTourBookingCommand> captor =
+                ArgumentCaptor.forClass(CancelTourBookingCommand.class);
+        verify(cancelUseCase).cancel(captor.capture());
+        assertThat(captor.getValue()).extracting("reason").isEqualTo("x");
+        assertThat(captor.getValue().getClass().getRecordComponents())
+                .noneMatch(rc -> rc.getName().equals("cancelledAt"));
     }
 
     /**

@@ -43,7 +43,6 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 class CancelTourBookingDriverTest {
 
     private static final Instant NOW = Instant.parse("2026-03-03T12:00:00Z");
-    private static final Instant EXPLICIT_CANCELLATION = Instant.parse("2026-03-05T08:30:00Z");
     private static final LocalDate FUTURE_DATE = LocalDate.of(2026, 6, 15);
 
     private final BookingStubRepository repository = new BookingStubRepository();
@@ -80,7 +79,7 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(command(booking, null, null));
+        driver.cancel(command(booking, null));
 
         assertThat(booking.cancelledBy()).contains(CancelledBy.USER);
     }
@@ -90,19 +89,26 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(command(booking, null, null));
+        driver.cancel(command(booking, null));
 
         assertThat(booking.cancelledAt()).contains(NOW);
     }
 
+    /**
+     * There is no longer a way to supply a cancellation time: the command carries no such
+     * component ({@code architecture.definition.md} § 8.1). This asserts the clock is the
+     * only source, including that the driver does not read a time from anywhere else.
+     */
     @Test
-    void cancel_usesProvidedCancelledAt_whenNotNull() {
+    void cancel_alwaysTakesTheCancellationTimeFromTheClock() {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(command(booking, EXPLICIT_CANCELLATION, null));
+        driver.cancel(command(booking, "Travel plans changed"));
 
-        assertThat(booking.cancelledAt()).contains(EXPLICIT_CANCELLATION);
+        assertThat(booking.cancelledAt()).contains(NOW);
+        assertThat(CancelTourBookingCommand.class.getRecordComponents())
+                .noneMatch(rc -> rc.getName().equals("cancelledAt"));
     }
 
     @Test
@@ -110,7 +116,7 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(command(booking, null, "Travel plans changed"));
+        driver.cancel(command(booking, "Travel plans changed"));
 
         assertThat(publisher.publishedEvents()).singleElement()
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories
@@ -124,7 +130,7 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(command(booking, null, null));
+        driver.cancel(command(booking, null));
 
         assertThat(publisher.publishedEvents()).singleElement()
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories
@@ -138,7 +144,7 @@ class CancelTourBookingDriverTest {
         repository.preload(booking);
 
         assertThatExceptionOfType(InvalidBookingRequestException.class)
-                .isThrownBy(() -> driver.cancel(command(booking, null, "   ")));
+                .isThrownBy(() -> driver.cancel(command(booking, "   ")));
     }
 
     @Test
@@ -149,7 +155,7 @@ class CancelTourBookingDriverTest {
         final String tooLong = "x".repeat(CancellationReason.MAX_LENGTH + 1);
 
         assertThatExceptionOfType(InvalidBookingRequestException.class)
-                .isThrownBy(() -> driver.cancel(command(booking, null, tooLong)));
+                .isThrownBy(() -> driver.cancel(command(booking, tooLong)));
     }
 
     /**
@@ -162,7 +168,7 @@ class CancelTourBookingDriverTest {
     void cancel_validatesReasonBeforeLoadingTheAggregate() {
         assertThatExceptionOfType(InvalidBookingRequestException.class)
                 .isThrownBy(() -> driver.cancel(new CancelTourBookingCommand(
-                        BookingId.generate().value().toString(), null, "")));
+                        BookingId.generate().value().toString(), "")));
     }
 
     @Test
@@ -171,7 +177,7 @@ class CancelTourBookingDriverTest {
         repository.preload(booking);
 
         try {
-            driver.cancel(command(booking, null, "  "));
+            driver.cancel(command(booking, "  "));
         } catch (InvalidBookingRequestException ignored) {
         }
 
@@ -180,9 +186,8 @@ class CancelTourBookingDriverTest {
     }
 
     private static CancelTourBookingCommand command(
-            final TourBooking booking, final Instant cancelledAt, final String reason) {
-        return new CancelTourBookingCommand(
-                booking.bookingId().value().toString(), cancelledAt, reason);
+            final TourBooking booking, final String reason) {
+        return new CancelTourBookingCommand(booking.bookingId().value().toString(), reason);
     }
 
     // ── Happy path: cancel from REQUESTED ────────────────────────────────────
@@ -193,7 +198,7 @@ class CancelTourBookingDriverTest {
         repository.preload(booking);
 
         final CancelTourBookingResult result =
-                driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null));
+                driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null));
 
         assertThat(result.status()).isEqualTo("CANCELLED");
     }
@@ -203,7 +208,7 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null));
+        driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null));
 
         assertThat(repository.updatedBookings()).hasSize(1);
         assertThat(repository.updatedBookings().get(0).status()).isEqualTo(TourBookingStatus.CANCELLED);
@@ -214,7 +219,7 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = requestedBooking();
         repository.preload(booking);
 
-        driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null));
+        driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null));
 
         assertThat(publisher.publishedEvents()).hasSize(1);
         assertThat(publisher.publishedEvents().get(0)).isInstanceOf(BookingCancelledByUser.class);
@@ -228,7 +233,7 @@ class CancelTourBookingDriverTest {
         repository.preload(booking);
 
         final CancelTourBookingResult result =
-                driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null));
+                driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null));
 
         assertThat(result.status()).isEqualTo("CANCELLED");
     }
@@ -238,7 +243,7 @@ class CancelTourBookingDriverTest {
         final TourBooking booking = confirmedBooking();
         repository.preload(booking);
 
-        driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null));
+        driver.cancel(new CancelTourBookingCommand(booking.bookingId().value().toString(), null));
 
         assertThat(publisher.publishedEvents()).hasSize(1);
         assertThat(publisher.publishedEvents().get(0)).isInstanceOf(BookingCancelledByUser.class);
@@ -251,7 +256,7 @@ class CancelTourBookingDriverTest {
         final String unknownId = BookingId.generate().value().toString();
 
         assertThatExceptionOfType(BookingNotFoundException.class)
-                .isThrownBy(() -> driver.cancel(new CancelTourBookingCommand(unknownId, null, null)));
+                .isThrownBy(() -> driver.cancel(new CancelTourBookingCommand(unknownId, null)));
     }
 
     // ── Invalid state ────────────────────────────────────────────────────────
@@ -270,7 +275,7 @@ class CancelTourBookingDriverTest {
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
                 .isThrownBy(() -> driver.cancel(
-                        new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null)));
+                        new CancelTourBookingCommand(booking.bookingId().value().toString(), null)));
     }
 
     @Test
@@ -287,7 +292,7 @@ class CancelTourBookingDriverTest {
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
                 .isThrownBy(() -> driver.cancel(
-                        new CancelTourBookingCommand(booking.bookingId().value().toString(), null, null)));
+                        new CancelTourBookingCommand(booking.bookingId().value().toString(), null)));
 
         assertThat(repository.updatedBookings()).isEmpty();
     }

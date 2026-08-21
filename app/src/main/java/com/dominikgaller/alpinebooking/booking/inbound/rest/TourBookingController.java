@@ -65,11 +65,10 @@ public class TourBookingController implements TourBookingRestAPI {
     public CancelTourBookingResponse cancel(
             final String bookingId,
             final CancelTourBookingRequest request) {
-        // A absent body is equivalent to one with both fields null: cancelling without a
+        // An absent body is equivalent to one with a null reason: cancelling without a
         // reason is permitted, so the controller normalises rather than rejects.
         final var result = cancelTourBookingUseCase.cancel(new CancelTourBookingCommand(
                 bookingId,
-                request == null ? null : request.cancelledAt(),
                 request == null ? null : request.reason()));
         return new CancelTourBookingResponse(result.status());
     }

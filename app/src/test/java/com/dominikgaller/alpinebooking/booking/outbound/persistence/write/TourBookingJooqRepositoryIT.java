@@ -286,6 +286,26 @@ class TourBookingJooqRepositoryIT {
     }
 
     /**
+     * UC08 — the schema's column width and the domain's ceiling must not drift apart.
+     *
+     * <p>`CancellationReason.MAX_LENGTH` is 400 and `cancellation_reason` is `VARCHAR(400)`,
+     * and nothing but this test connects the two. Raising the constant alone would produce
+     * either a silent truncation or a driver-level error at write time depending on the
+     * database, long after the change looked correct — and the domain would be the side that
+     * looked right. Comparing them against the generated jOOQ metadata makes the divergence
+     * a build failure instead.
+     *
+     * <p>Deliberately asserts equality rather than "column is at least MAX_LENGTH": a column
+     * wider than the ceiling is also a defect, because it means the schema tolerates values
+     * the domain rejects, and someone will eventually read that as the real limit.
+     */
+    @Test
+    void cancellationReasonColumnWidth_matchesTheDomainCeiling() {
+        assertThat(TOUR_BOOKING.CANCELLATION_REASON.getDataType().length())
+                .isEqualTo(CancellationReason.MAX_LENGTH);
+    }
+
+    /**
      * UC08 — cancellation attribution must survive a round trip. This is the assertion the
      * port spec's standing obligation demands for three newly mutable fields; without it
      * the columns could be absent from the `update` statement and every other test would
