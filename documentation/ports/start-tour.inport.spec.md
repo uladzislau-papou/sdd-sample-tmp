@@ -94,8 +94,8 @@ belong to the aggregate.
 
 - The command carries **primitives and JDK types only** — `String` for the id, not
   `GuideTourId`. Inbound adapters must not have to construct domain value objects.
-  Parsing failures *should* surface as a 400 at the boundary rather than as a domain
-  exception — see the Known Gap below; this is intent, not current behaviour.
+  Parsing failures surface as a 400: `UUID.fromString` raises
+  `IllegalArgumentException`, which `GuideExceptionHandler` maps (§ 7).
 - `Optional<Instant>` in a record component is unusual; it is used here to make
   "caller did not supply a time" explicit rather than overloading `null`.
 - The result carries the status as a `String`, not `GuideTourStatus` — the enum is a
@@ -116,20 +116,20 @@ belong to the aggregate.
   states, the too-early guard, and that no `update` or event occurs on any failure.
 
 
-## 7. Known Gaps
+## 7. Error Mapping Notes
 
-### Malformed id is not a 400
+### Malformed id is a 400
 
-§ 5 states that id parsing failures should surface as a 400. They do not.
+§ 5 says id parsing failures should surface as a 400. They now do.
 `StartTourDriver` calls `UUID.fromString(command.guideTourId())`, which throws
-`IllegalArgumentException` from the driver, and `GuideExceptionHandler` maps only the
-three domain exceptions — so a malformed `guideTourId` becomes an unmapped 500. No test
-covers it.
+`IllegalArgumentException`. Both `GuideExceptionHandler` and `BookingExceptionHandler` now
+map that to 400 as a backstop, so a malformed id is a client error rather than an unmapped
+500.
 
-The same gap exists in all four booking drivers, which call `UUID.fromString` on the
-path variable with no `@ExceptionHandler` for `IllegalArgumentException`. Fixing it is
-cross-cutting: either validate the id format at the `*RestAPI` boundary, or map
-`IllegalArgumentException` → 400 in both exception handlers.
+Found by `ddd-hex-reviewer`. The mapping also covers shared-kernel value objects, which
+cannot throw a domain exception at all — see `coding-style.definition.md` § 6.2, "Shared-
+kernel exemption".
 
-Found by `ddd-hex-reviewer`. Recorded rather than fixed silently, per
-`test.definition.md` § 6.
+Covered by `TourBookingControllerTest.confirmWithIllegalArgument_returns400` (the mapping)
+and `ConfirmTourBookingDriverTest.confirm_throwsIllegalArgumentException_whenBookingIdIsMalformed`
+(the source).

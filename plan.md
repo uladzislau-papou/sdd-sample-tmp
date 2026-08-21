@@ -196,18 +196,27 @@ Now genuinely `/loop-uc`-drivable, since the DoDs are honest and the reviewer is
 - [ ] **UC08** CancelBookingByUser — resolve **H1** first; modifies UC03's endpoint and spec
 - [ ] **H2** ADR for the synchronous cross-context call, then **UC12** + **UC09** together
 
-## Carried forward — one increment, not yet scheduled
+## Carried forward — DONE
 
-Three findings that surfaced during the cleanup, all the same defect, none belonging to
-any phase above. They want one increment together.
+Three findings that surfaced during the cleanup, all the same defect. **Completed** -
+see the increment below.
 
 **Unmapped `IllegalArgumentException` surfaces as 500 where 400 is correct.**
 
-| Site | Trigger | Today | Should be |
-|------|---------|-------|-----------|
-| `UUID.fromString` in all five drivers | malformed id in a path variable | 500, unmapped, untested | 400 |
-| `TourId` constructor | blank `tourId` in a command | 500 | 400 via a domain exception |
-| `ParticipantContact` constructor | blank name/email in a command | 500 | 400 via a domain exception |
+| Site | Trigger | Before | Now |
+|------|---------|--------|-----|
+| `UUID.fromString` in all five drivers | malformed id in a path variable | 500, unmapped, untested | **400**, mapped in both handlers, tested at both layers |
+| `ParticipantContact` constructor | blank name/email in a command | 500 | **400** via `InvalidBookingRequestException` |
+| `TourId` constructor | blank `tourId` in a command | 500 | **400** via the `IllegalArgumentException` mapping — exempt, see below |
+
+**`TourId` could not be fixed the same way, and the architecture tests proved it.**
+`shared.domain` may not depend on a bounded context (§ 9), so `TourId` has no domain
+exception available. Attempting it fails
+`ContextRegistryTest.shared_dependsOnNoBoundedContext` — verified by trying it. The
+alternative, a `shared.domain.exception` package, would grow the shared kernel to serve one
+blank-string check and force every context to map a second exception type. So the boundary
+mapping is the resolution, and `coding-style.definition.md` § 6.2 now carries an explicit
+shared-kernel exemption that is *not* a general licence.
 
 All three have the same shape: a value built from a command throws
 `IllegalArgumentException`, no `@ExceptionHandler` maps it, and no test covers it. Bean
@@ -215,9 +224,11 @@ Validation hides all three today — which is exactly why `coding-style.definiti
 now says boundary validation is not part of the core's contract. Drive these use cases from
 anything other than the REST adapter and they surface as 500s.
 
-Fix shape: domain exceptions in the two value objects, plus `IllegalArgumentException` →
-400 in both `*ExceptionHandler`s as a backstop. Needs a RED per site — behaviour change,
-not reconciliation.
+Driven by a RED per site. One taught me something: the first web test asserted a malformed
+path variable directly, and failed with a `NullPointerException` rather than a 400 — because
+`UUID.fromString` runs in the *driver*, and a slice test mocks the inport, so the malformed
+id never reaches it. The test was at the wrong layer. Split into the mapping (web slice,
+mock throws) and the source (driver test).
 
 Recorded in `ports/start-tour.inport.spec.md` § 7 and `coding-style.definition.md` § 6.2.
 

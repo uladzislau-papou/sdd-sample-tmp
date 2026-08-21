@@ -215,9 +215,30 @@ Applied to the current value objects:
 | Type | Constructed from | Throws | Correct? |
 |------|------------------|--------|----------|
 | `ParticipantCount` | `RequestTourBookingCommand`, `ChangeParticipantsCommand`; also `TourBookingMapper` | `InvalidBookingRequestException` | **Yes** |
-| `TourId` | `RequestTourBookingCommand`; also `TourBookingMapper`, `GuideTourMapper` | `IllegalArgumentException` | **No** — needs a domain exception |
-| `ParticipantContact` | `RequestTourBookingCommand`; also `TourBookingMapper` | `IllegalArgumentException` | **No** — needs a domain exception |
+| `ParticipantContact` | `RequestTourBookingCommand`; also `TourBookingMapper` | `InvalidBookingRequestException` | **Yes** — fixed |
 | `AvailableCapacity` | `AvailabilityChecker` outport, `TourBookingMapper` — never a command | `IllegalArgumentException` | **Yes** |
+| `TourId` | `RequestTourBookingCommand`; also both mappers | `IllegalArgumentException` | **Exempt** — see below |
+
+### Shared-kernel exemption
+
+A value object in `shared.domain` **cannot** satisfy clause A: it has no domain exception
+available to it. `architecture.definition.md` § 9 forbids `shared` from depending on any
+bounded context, so `TourId` cannot reference
+`booking.core.domain.tourbooking.exception.InvalidBookingRequestException` — and this is
+not a matter of taste, it is enforced. Attempting it fails
+`ContextRegistryTest.shared_dependsOnNoBoundedContext`, verified empirically.
+
+The options were:
+
+1. Add a `shared.domain.exception` package with a shared invariant exception. Rejected —
+   it grows the shared kernel to serve one blank-string check, against § 9's "keep `shared`
+   minimal", and every context would then have to map a second exception type.
+2. Leave `IllegalArgumentException` and map it to 400 at the boundary. **Chosen.**
+
+So `IllegalArgumentException` → 400 is mapped in both `*ExceptionHandler`s. That mapping is
+a backstop for exactly two things — shared-kernel value objects, and `UUID.fromString` on a
+path variable — and it is **not** a licence for a context-owned value object to skip clause
+A. Those have a domain exception available; they must use it.
 
 Clause A triggers on **any** command construction site, so a type with mixed sites falls
 under A. `TourDate`, `BookingId` and `GuideTourId` are out of scope: they carry null guards

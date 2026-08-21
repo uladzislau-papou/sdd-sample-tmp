@@ -1,5 +1,6 @@
 package com.dominikgaller.alpinebooking.booking.core.domain.tourbooking;
 
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
 import java.util.Objects;
 
 /**
@@ -16,10 +17,10 @@ public record ParticipantContact(String name, String email) {
         Objects.requireNonNull(name, "Contact name must not be null");
         Objects.requireNonNull(email, "Contact email must not be null");
         if (name.isBlank()) {
-            throw new IllegalArgumentException("Contact name must not be blank");
+            throw new InvalidBookingRequestException("Contact name must not be blank");
         }
         if (email.isBlank()) {
-            throw new IllegalArgumentException("Contact email must not be blank");
+            throw new InvalidBookingRequestException("Contact email must not be blank");
         }
     }
 }

@@ -150,6 +150,29 @@ class TourBookingControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    /**
+     * A malformed path variable, or any value-object guard that throws
+     * {@code IllegalArgumentException}, is a client error rather than a server fault.
+     * Unmapped it surfaces as 500.
+     *
+     * <p>What the web layer owns is the <em>mapping</em>, which is what this asserts. The
+     * throw itself happens in the driver — {@code UUID.fromString(command.bookingId())} —
+     * and is covered by {@code ConfirmTourBookingDriverTest}. A slice test cannot reach it,
+     * because the inport is mocked here.
+     *
+     * <p>SDD: {@code coding-style.definition.md} section 6.2,
+     *          {@code ports/start-tour.inport.spec.md} section 7.
+     */
+    @Test
+    void confirmWithIllegalArgument_returns400() throws Exception {
+        when(confirmUseCase.confirm(any()))
+                .thenThrow(new IllegalArgumentException("Invalid UUID string: not-a-uuid"));
+
+        mockMvc.perform(post("/api/v1/bookings/{bookingId}/confirm", BOOKING_UUID))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
     @Test
     void postWithCapacityExceeded_returns409() throws Exception {
         when(useCase.request(any()))

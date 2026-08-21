@@ -27,6 +27,25 @@ public class BookingExceptionHandler {
         return new ErrorResponse(ex.getMessage());
     }
 
+    /**
+     * Backstop for malformed input that reaches the domain as an
+     * {@code IllegalArgumentException} rather than a domain exception.
+     *
+     * <p>Two sources today: {@code UUID.fromString} on a path variable in every driver,
+     * and value objects whose guards still throw it ({@code TourId}). Both are client
+     * errors, and both surfaced as 500 before this mapping existed.
+     *
+     * <p>This is a backstop, not a licence. A value object built from a command should
+     * throw a domain exception — see {@code coding-style.definition.md} section 6.2. The
+     * mapping exists because {@code TourId} lives in {@code shared.domain} and therefore
+     * cannot reference a bounded context's exception type.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleIllegalArgument(final IllegalArgumentException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
     @ExceptionHandler(CapacityExceededException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleCapacityExceeded(final CapacityExceededException ex) {

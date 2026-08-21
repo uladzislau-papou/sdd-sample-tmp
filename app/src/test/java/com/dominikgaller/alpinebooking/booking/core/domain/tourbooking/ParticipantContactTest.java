@@ -1,9 +1,11 @@
 package com.dominikgaller.alpinebooking.booking.core.domain.tourbooking;
 
+import com.dominikgaller.alpinebooking.booking.core.domain.tourbooking.exception.InvalidBookingRequestException;
+
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class ParticipantContactTest {
@@ -17,19 +19,19 @@ class ParticipantContactTest {
 
     @Test
     void blankNameThrows() {
-        assertThatIllegalArgumentException()
+        assertThatExceptionOfType(InvalidBookingRequestException.class)
                 .isThrownBy(() -> new ParticipantContact("  ", "alice@example.com"));
     }
 
     @Test
     void emptyNameThrows() {
-        assertThatIllegalArgumentException()
+        assertThatExceptionOfType(InvalidBookingRequestException.class)
                 .isThrownBy(() -> new ParticipantContact("", "alice@example.com"));
     }
 
     @Test
     void blankEmailThrows() {
-        assertThatIllegalArgumentException()
+        assertThatExceptionOfType(InvalidBookingRequestException.class)
                 .isThrownBy(() -> new ParticipantContact("Alice", "  "));
     }
 

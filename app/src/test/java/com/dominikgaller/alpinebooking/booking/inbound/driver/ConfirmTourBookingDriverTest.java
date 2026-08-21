@@ -135,6 +135,12 @@ class ConfirmTourBookingDriverTest {
         assertThat(repository.updatedBookings()).isEmpty();
     }
 
+    @Test
+    void confirm_throwsIllegalArgumentException_whenBookingIdIsMalformed() {
+        assertThatExceptionOfType(IllegalArgumentException.class)
+                .isThrownBy(() -> driver.confirm(new ConfirmTourBookingCommand("not-a-uuid")));
+    }
+
     // ── Stub implementations ─────────────────────────────────────────────────
 
     private static class BookingStubRepository implements TourBookingRepository {

@@ -24,6 +24,21 @@ public class GuideExceptionHandler {
         return new ErrorResponse(ex.getMessage());
     }
 
+    /**
+     * Backstop for malformed input reaching the domain as an
+     * {@code IllegalArgumentException} — chiefly {@code UUID.fromString} on the
+     * {@code guideTourId} path variable in {@code StartTourDriver}. A client error, and a
+     * 500 before this mapping existed.
+     *
+     * <p>See {@code ports/start-tour.inport.spec.md} section 7 and
+     * {@code coding-style.definition.md} section 6.2.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleIllegalArgument(final IllegalArgumentException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidGuideTourStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleInvalidGuideTourState(final InvalidGuideTourStateException ex) {

@@ -41,9 +41,15 @@ Error type(s):
 
 | Exception | Condition | HTTP Status |
 |---|---|---|
-| `InvalidBookingRequestException` | tourDate in the past, or participantCount < 1 | 400 |
+| `InvalidBookingRequestException` | tourDate in the past, participantCount < 1, or blank contact name/email | 400 |
+| `IllegalArgumentException` | blank `tourId`, or a malformed UUID path variable | 400 |
 | `CapacityExceededException` | participantCount exceeds available capacity | 409 |
 | `AvailabilityUnavailableException` | AvailabilityChecker infrastructure failure | 502 |
+
+`IllegalArgumentException` is mapped as a backstop for the two cases that cannot raise a
+domain exception: `UUID.fromString` on a path variable, and `TourId`, which lives in
+`shared.domain` and therefore has no domain exception available to it
+(`coding-style.definition.md` § 6.2, "Shared-kernel exemption").
 
 
 ## 4. Preconditions
