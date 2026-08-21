@@ -48,15 +48,6 @@ public class TourBookingJooqRepository implements TourBookingRepository {
     }
 
     @Override
-    public List<TourBooking> findByTourId(final TourId tourId) {
-        return dsl
-                .selectFrom(TOUR_BOOKING)
-                .where(TOUR_BOOKING.TOUR_ID.eq(tourId.value()))
-                .fetch()
-                .map(mapper::toDomain);
-    }
-
-    @Override
     public List<TourBooking> findConfirmedByTourId(final TourId tourId) {
         return dsl
                 .selectFrom(TOUR_BOOKING)

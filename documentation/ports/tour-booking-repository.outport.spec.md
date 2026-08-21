@@ -8,7 +8,7 @@ This outport abstracts the storage mechanism from the domain and application lay
 SDD: See `documentation/domain/aggregate-tour-booking.spec.md`
 
 > This spec was written for UC01 and stated "Only `save` is required". Four more use
-> cases have since been implemented and the interface grew to five methods, but the
+> cases have since been implemented and the interface grew to four methods, but the
 > spec was never updated — so it documented a `save`-only port while five use cases
 > depended on `findById`, `update` and `findByTourId`. Found by `spec-documenter`.
 
@@ -126,29 +126,18 @@ Used by: UC06 (`TourStartedListener`).
 > the aggregate guard would let one ineligible booking roll back the entire batch. Making
 > it a query keeps the adapter free of conditionals without weakening the domain guard.
 
-### 2.5 findByTourId
+### ~~2.5 findByTourId~~ — removed
 
-```
-List<TourBooking> findByTourId(TourId tourId)
-```
+`List<TourBooking> findByTourId(TourId tourId)` returned every booking for a tour
+regardless of status. Its only caller was `TourStartedListener`, which moved to
+`findConfirmedByTourId` so the status criterion would not sit in an inbound adapter
+(§ 2.4). That left it with **no caller and no test**.
 
-**Responsibility:** Load every booking attached to a tour, as full aggregates.
-
-**Preconditions:** `tourId` non-null.
-
-**Postconditions:**
-- An empty list when no booking references the tour — never null.
-- Each element is fully reconstituted with no pending events.
-- No ordering is guaranteed. Callers must not depend on one.
-
-Used by: nothing. `TourStartedListener` moved to `findConfirmedByTourId` so the status
-criterion would not sit in an inbound adapter. Retained for now; see Known Gaps.
-
-> **Write-side query.** This returns aggregates rather than a projection, which
-> `architecture.definition.md` § 4.6 assigns to `outbound.persistence.read`. It sits
-> on the write side because its caller mutates every aggregate it returns, so it must
-> respect invariants. A read-only "bookings for a tour" listing would belong on the
-> read side instead. Worth revisiting if this method acquires a query-only caller.
+Removed rather than kept "in case". An unused method on a port is a liability: it has to
+be implemented by every adapter and every test stub — five stubs in this codebase — and
+it invites a future caller to load aggregates it does not need. `git` preserves it if a
+genuine caller appears, and by then the right shape may well be a read-side projection
+(`architecture.definition.md` § 4.6) rather than a write-side aggregate load.
 
 
 ## 3. Transaction Boundary
@@ -205,5 +194,3 @@ Mapping notes:
   `V1__DDL_create_tour_booking.sql`. Adding one is an ADR (persistence strategy,
   `sdd.playbook.md` § 6 item 4).
 - **No `delete`.** Deliberate — bookings are cancelled, never removed.
-- **`findByTourId` has no direct test and no remaining caller.** `TourStartedListener` now
-  uses `findConfirmedByTourId`. Consider removing it, or add a test if a caller appears.

@@ -232,13 +232,6 @@ class MarkBookingActiveDriverTest {
         }
 
         @Override
-        public List<TourBooking> findByTourId(final TourId tourId) {
-            return store.values().stream()
-                    .filter(b -> b.tourId().equals(tourId))
-                    .toList();
-        }
-
-        @Override
         public List<TourBooking> findConfirmedByTourId(final TourId tourId) {
             return store.values().stream()
                     .filter(b -> b.tourId().equals(tourId))

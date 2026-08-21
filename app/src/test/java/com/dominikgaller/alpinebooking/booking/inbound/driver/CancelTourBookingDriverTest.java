@@ -202,11 +202,6 @@ class CancelTourBookingDriverTest {
         }
 
         @Override
-        public java.util.List<TourBooking> findByTourId(final com.dominikgaller.alpinebooking.shared.domain.TourId tourId) {
-            throw new UnsupportedOperationException("not used in UC03 tests");
-        }
-
-        @Override
         public java.util.List<TourBooking> findConfirmedByTourId(final com.dominikgaller.alpinebooking.shared.domain.TourId tourId) {
             throw new UnsupportedOperationException("not used in UC03 tests");
         }
