@@ -3,6 +3,7 @@ package com.dominikgaller.alpinebooking.guide.core.domain.guidetour;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import com.dominikgaller.alpinebooking.shared.domain.event.TourStarted;
 import com.dominikgaller.alpinebooking.shared.domain.event.TourCompleted;
+import com.dominikgaller.alpinebooking.shared.domain.event.TourCancelledByGuide;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidGuideTourStateException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
@@ -245,6 +246,124 @@ class GuideTourTest {
 
         assertThatExceptionOfType(InvalidGuideTourStateException.class)
                 .isThrownBy(() -> tour.complete(AFTER_SCHEDULED_START));
+    }
+
+    // ── UC12: cancel ──────────────────────────────────────────────────────────
+
+    private static final CancellationReason CANCEL_REASON =
+            new CancellationReason("Severe weather warning");
+
+    @Test
+    void cancel_fromScheduled_transitionsToCancelled() {
+        final GuideTour tour = scheduledTour();
+
+        tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON);
+
+        assertThat(tour.status()).isEqualTo(GuideTourStatus.CANCELLED);
+    }
+
+    /**
+     * AC-02. Aborting a tour mid-execution is the case UC09 AC-02 exists for on the booking
+     * side, so the guide aggregate has to permit it too.
+     */
+    @Test
+    void cancel_fromRunning_transitionsToCancelled() {
+        final GuideTour tour = runningTour();
+
+        tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON);
+
+        assertThat(tour.status()).isEqualTo(GuideTourStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_recordsCancelledAtAndReason() {
+        final GuideTour tour = scheduledTour();
+
+        tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON);
+
+        assertThat(tour.cancelledAt()).contains(AFTER_SCHEDULED_START);
+        assertThat(tour.cancellationReason()).contains(CANCEL_REASON);
+    }
+
+    @Test
+    void cancellationFields_areEmpty_beforeCancellation() {
+        final GuideTour tour = scheduledTour();
+
+        assertThat(tour.cancelledAt()).isEmpty();
+        assertThat(tour.cancellationReason()).isEmpty();
+    }
+
+    @Test
+    void cancel_withoutReason_isPermitted() {
+        final GuideTour tour = scheduledTour();
+
+        tour.cancel(AFTER_SCHEDULED_START, null);
+
+        assertThat(tour.status()).isEqualTo(GuideTourStatus.CANCELLED);
+        assertThat(tour.cancellationReason()).isEmpty();
+    }
+
+    @Test
+    void cancel_emitsTourCancelledByGuideEvent() {
+        final GuideTour tour = scheduledTour();
+
+        tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON);
+
+        final List<DomainEvent> events = tour.pullDomainEvents();
+        assertThat(events).singleElement().isInstanceOf(TourCancelledByGuide.class);
+        final TourCancelledByGuide event = (TourCancelledByGuide) events.get(0);
+        assertThat(event.guideTourId()).isEqualTo(TOUR_ID.value().toString());
+        assertThat(event.tourId()).isEqualTo(TOUR_REF);
+        assertThat(event.cancelledAt()).isEqualTo(AFTER_SCHEDULED_START);
+        assertThat(event.reason()).isEqualTo(CANCEL_REASON.value());
+    }
+
+    @Test
+    void cancel_fromFinished_throwsInvalidGuideTourStateException() {
+        final GuideTour tour = GuideTour.reconstitute(
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.FINISHED,
+                AT_SCHEDULED_START, AFTER_SCHEDULED_START);
+
+        assertThatExceptionOfType(InvalidGuideTourStateException.class)
+                .isThrownBy(() -> tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON));
+    }
+
+    /**
+     * AC-06. Unlike the booking side, a second guide cancellation throws rather than being a
+     * no-op: this is the deliberate act at the top of the chain, reached over REST by a
+     * human, and a 409 tells them the tour was already called off. UC09's no-op exists
+     * because it is the fan-out target, not the initiator.
+     */
+    @Test
+    void cancel_whenAlreadyCancelled_throwsInvalidGuideTourStateException() {
+        final GuideTour tour = GuideTour.reconstitute(
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.CANCELLED, null, null);
+
+        assertThatExceptionOfType(InvalidGuideTourStateException.class)
+                .isThrownBy(() -> tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON));
+    }
+
+    @Test
+    void cancel_throwsNullPointerException_whenCancelledAtIsNull() {
+        final GuideTour tour = scheduledTour();
+
+        assertThatNullPointerException().isThrownBy(() -> tour.cancel(null, CANCEL_REASON));
+    }
+
+    @Test
+    void cancel_whenRejected_doesNotChangeState() {
+        final GuideTour tour = GuideTour.reconstitute(
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.FINISHED,
+                AT_SCHEDULED_START, AFTER_SCHEDULED_START);
+
+        try {
+            tour.cancel(AFTER_SCHEDULED_START, CANCEL_REASON);
+        } catch (InvalidGuideTourStateException ignored) {
+        }
+
+        assertThat(tour.status()).isEqualTo(GuideTourStatus.FINISHED);
+        assertThat(tour.cancelledAt()).isEmpty();
+        assertThat(tour.pullDomainEvents()).isEmpty();
     }
 
     // ── TooEarly ──────────────────────────────────────────────────────────────

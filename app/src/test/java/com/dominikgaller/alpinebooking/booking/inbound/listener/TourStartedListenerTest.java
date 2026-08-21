@@ -205,6 +205,11 @@ class TourStartedListenerTest {
                     .filter(b -> b.status() == TourBookingStatus.ACTIVE)
                     .toList();
         }
+
+        @Override
+        public List<TourBooking> findCancellableByTourId(final TourId tourId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
     }
 
     private static class RecordingMarkBookingActive implements MarkBookingActiveUseCase {

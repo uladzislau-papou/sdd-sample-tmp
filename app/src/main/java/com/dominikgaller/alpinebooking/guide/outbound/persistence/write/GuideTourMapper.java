@@ -1,5 +1,6 @@
 package com.dominikgaller.alpinebooking.guide.outbound.persistence.write;
 
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.CancellationReason;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTour;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTourId;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTourStatus;
@@ -39,6 +40,12 @@ class GuideTourMapper {
                 tour.completedAt()
                         .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
                         .orElse(null));
+        record.setCancelledAt(
+                tour.cancelledAt()
+                        .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
+                        .orElse(null));
+        record.setCancellationReason(
+                tour.cancellationReason().map(CancellationReason::value).orElse(null));
         return record;
     }
 
@@ -55,7 +62,13 @@ class GuideTourMapper {
                 record.getScheduledStart().toInstant(ZoneOffset.UTC),
                 GuideTourStatus.valueOf(record.getStatus()),
                 startedAt,
-                completedAt
+                completedAt,
+                Optional.ofNullable(record.getCancelledAt())
+                        .map(ldt -> ldt.toInstant(ZoneOffset.UTC))
+                        .orElse(null),
+                record.getCancellationReason() == null
+                        ? null
+                        : new CancellationReason(record.getCancellationReason())
         );
     }
 }

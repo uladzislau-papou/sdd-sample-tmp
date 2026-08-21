@@ -1,0 +1,127 @@
+name: Publish showcase
+
+# Mirrors this private repository to the public showcase at
+# github.com/dominikgaller/alpine-booking-reference, minus the files that are
+# private working material.
+#
+# WHY THIS REWRITES HISTORY
+#
+# Deleting a file from the tip does not remove it from the history. `plan.md` and
+# `tasks.md` appear in ~20 commits, so an ordinary mirror push would publish every
+# earlier revision of them while the public tip looked clean — the worst kind of
+# leak, because it looks fine.
+#
+# So the workflow filters the excluded paths out of the whole history with
+# git-filter-repo and force-pushes the rewritten result. That is deterministic:
+# the same input commits always produce the same output, so the public history is
+# stable across runs rather than churning.
+#
+# Commit history is preserved deliberately. For this repository the commit messages
+# are a large part of what is being shown — they carry the reasoning, the rejected
+# alternatives and the recorded mistakes. Squashing to a single "sync" commit would
+# throw away most of the showcase.
+#
+# SETUP REQUIRED (once, by hand)
+#
+#   1. Create the public repository if it does not exist:
+#      github.com/dominikgaller/alpine-booking-reference
+#   2. Create a fine-grained PAT with Contents: read and write on THAT repository
+#      only. Do not use a classic token with org-wide scope.
+#   3. Add it to THIS repository as an Actions secret named
+#      SHOWCASE_PUBLISH_TOKEN.
+#
+# The workflow fails loudly if the secret is missing rather than silently skipping.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Filter and verify, but do not push"
+        type: boolean
+        default: false
+
+# One publish at a time. Two concurrent force-pushes of a rewritten history could
+# interleave and leave the public repository on an unexpected commit.
+concurrency:
+  group: publish-showcase
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail fast if the publish token is missing
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          TOKEN: ${{ secrets.SHOWCASE_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::SHOWCASE_PUBLISH_TOKEN is not set. See the header of this workflow for setup."
+            exit 1
+          fi
+
+      # Full history: filter-repo needs every commit, not a shallow slice.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-filter-repo
+        run: pipx install git-filter-repo
+
+      - name: Strip private paths from the entire history
+        run: |
+          git filter-repo --force \
+            --invert-paths \
+            --path .idea \
+            --path data \
+            --path app/data \
+            --path plan.md \
+            --path tasks.md \
+            --path .github/workflows/publish-showcase.yml
+
+      # The guard that makes this safe to run unattended. It inspects every blob in
+      # every commit of the filtered result, not just the tip.
+      - name: Verify no excluded path survives anywhere in history
+        run: |
+          leaked=$(git log --all --pretty=format: --name-only --diff-filter=A \
+                   | sort -u \
+                   | grep -E '^(\.idea/|data/|app/data/|plan\.md$|tasks\.md$|\.github/workflows/publish-showcase\.yml$)' \
+                   || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::Excluded paths survived the filter. Refusing to publish."
+            echo "$leaked"
+            exit 1
+          fi
+          echo "Clean. Publishing $(git rev-list --count HEAD) commits."
+
+      # A showcase whose build is red is worse than no showcase. Run the same gates
+      # the private repository runs, against the filtered tree, before publishing.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+      - name: Verify the filtered tree still builds
+        run: ./gradlew clean test build --no-daemon
+
+      - name: Push to the public showcase
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          TOKEN: ${{ secrets.SHOWCASE_PUBLISH_TOKEN }}
+        run: |
+          git remote add public \
+            "https://x-access-token:${TOKEN}@github.com/dominikgaller/alpine-booking-reference.git"
+          # --force because the history is rewritten on every run by design.
+          git push --force public HEAD:refs/heads/main
+          echo "Published to github.com/dominikgaller/alpine-booking-reference"
+
+      - name: Report what a dry run would have done
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run. Would publish $(git rev-list --count HEAD) commits to"
+          echo "github.com/dominikgaller/alpine-booking-reference"
+          git log --oneline -10

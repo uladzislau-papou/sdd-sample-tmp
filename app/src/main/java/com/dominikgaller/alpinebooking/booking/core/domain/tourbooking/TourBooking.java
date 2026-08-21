@@ -209,33 +209,72 @@ public class TourBooking {
     }
 
     /**
-     * Transitions the booking from {@code REQUESTED} or {@code CONFIRMED} to
-     * {@code CANCELLED}, recording who cancelled and optionally why (UC08, UC09).
+     * Cancels the booking, recording who cancelled and optionally why (UC08, UC09).
      *
-     * <p>The emitted event is chosen by {@code cancelledBy}: {@link BookingCancelledByUser}
-     * or {@link BookingCancelledByGuide}. Attribution lives in the event type rather than a
-     * payload field so consumers subscribe rather than filter.
+     * <p>Delegates to {@link #cancel(Instant, CancelledBy, CancellationReason, String)} with
+     * no correlation id. Use this form for a participant-initiated cancellation.
      *
-     * <p>Not idempotent, unlike {@link #markActive} and {@link #markCompleted}: a second
-     * cancellation is rejected rather than absorbed. Those two are driven by redeliverable
-     * integration events, where a repeat is expected; this one is a deliberate act, and
-     * silently accepting a second attempt would let a later caller overwrite the original
-     * attribution — which is the one thing UC08 exists to record (AC-06).
-     *
-     * @param cancelledAt the moment of cancellation; must not be null
-     * @param cancelledBy who initiated it; must not be null
-     * @param reason      optional free text, already validated by
-     *                    {@link CancellationReason}; may be null
-     * @throws InvalidBookingStateException if the current state is neither {@code REQUESTED}
-     *                                      nor {@code CONFIRMED}
+     * @see #cancel(Instant, CancelledBy, CancellationReason, String)
      */
     public void cancel(
             final Instant cancelledAt,
             final CancelledBy cancelledBy,
             final CancellationReason reason) {
+        cancel(cancelledAt, cancelledBy, reason, null);
+    }
+
+    /**
+     * Cancels the booking, recording who cancelled, optionally why, and — for a
+     * guide-initiated cancellation — which guide tour caused it (UC08, UC09).
+     *
+     * <p><b>Which states may be cancelled depends on who is cancelling.</b> A participant
+     * (UC08) may cancel from {@code REQUESTED} or {@code CONFIRMED} only; once the tour is
+     * under way it is the guide's call. A guide (UC09) may additionally cancel from
+     * {@code ACTIVE}, because a tour aborted mid-execution must be cancellable. Neither may
+     * cancel a {@code COMPLETED} booking — a finished tour cannot be retroactively undone.
+     *
+     * <p><b>Idempotency also depends on who is cancelling.</b> A second participant
+     * cancellation throws: it is a deliberate act on an already-cancelled booking, so the
+     * client should be told (a 409). A second guide cancellation is an idempotent no-op,
+     * because UC12 calls this for every booking on a tour inside one transaction — throwing
+     * on a booking somebody had already cancelled would roll back the whole tour
+     * cancellation and block the other bookings. Either way the no-op returns
+     * <em>before</em> mutating, so an existing attribution is never overwritten, which is
+     * what {@code modelling.definition.md} § State-Dependent Invariants requires of a
+     * cancelled booking.
+     *
+     * <p>The emitted event is chosen by {@code cancelledBy}: {@link BookingCancelledByUser}
+     * or {@link BookingCancelledByGuide}. Attribution lives in the event type rather than a
+     * payload field so consumers subscribe rather than filter.
+     *
+     * @param cancelledAt the moment of cancellation; must not be null
+     * @param cancelledBy who initiated it; must not be null
+     * @param reason      optional free text, already validated by
+     *                    {@link CancellationReason}; may be null
+     * @param guideTourId optional correlation id for a guide-initiated cancellation; carried
+     *                    on the event and not stored (UC09 § 6). Must be null when
+     *                    {@code cancelledBy} is {@link CancelledBy#USER} — a participant
+     *                    cancellation has no guide tour to correlate with
+     * @throws InvalidBookingStateException if the current state does not permit this caller
+     *                                      to cancel
+     * @throws IllegalArgumentException     if a {@code guideTourId} accompanies a
+     *                                      {@code USER} cancellation
+     */
+    public void cancel(
+            final Instant cancelledAt,
+            final CancelledBy cancelledBy,
+            final CancellationReason reason,
+            final String guideTourId) {
         Objects.requireNonNull(cancelledAt, "cancelledAt must not be null");
         Objects.requireNonNull(cancelledBy, "cancelledBy must not be null");
-        if (status != TourBookingStatus.REQUESTED && status != TourBookingStatus.CONFIRMED) {
+        if (cancelledBy == CancelledBy.USER && guideTourId != null) {
+            throw new IllegalArgumentException(
+                    "A USER cancellation must not carry a guideTourId, but got: " + guideTourId);
+        }
+        if (status == TourBookingStatus.CANCELLED && cancelledBy == CancelledBy.GUIDE) {
+            return;
+        }
+        if (!cancellableBy(cancelledBy)) {
             throw new InvalidBookingStateException(status);
         }
         status = TourBookingStatus.CANCELLED;
@@ -244,8 +283,26 @@ public class TourBooking {
         this.cancellationReason = reason;
         domainEvents.add(switch (cancelledBy) {
             case USER -> new BookingCancelledByUser(bookingId, cancelledAt, reason);
-            case GUIDE -> new BookingCancelledByGuide(bookingId, cancelledAt, reason);
+            case GUIDE -> new BookingCancelledByGuide(
+                    bookingId, cancelledAt, reason, guideTourId);
         });
+    }
+
+    /**
+     * Whether the current state may be cancelled by this party.
+     *
+     * <p>Extracted so the two callers' permissions read as one table rather than as a
+     * compound condition. {@code COMPLETED} and {@code CANCELLED} are absent from both rows:
+     * they are terminal.
+     */
+    private boolean cancellableBy(final CancelledBy cancelledBy) {
+        return switch (cancelledBy) {
+            case USER -> status == TourBookingStatus.REQUESTED
+                    || status == TourBookingStatus.CONFIRMED;
+            case GUIDE -> status == TourBookingStatus.REQUESTED
+                    || status == TourBookingStatus.CONFIRMED
+                    || status == TourBookingStatus.ACTIVE;
+        };
     }
 
     /**

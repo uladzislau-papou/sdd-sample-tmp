@@ -1,6 +1,8 @@
 package com.dominikgaller.alpinebooking.guide.inbound.rest;
 
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.BookingCancellationFailedException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.GuideTourNotFoundException;
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidCancellationReasonException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidGuideTourStateException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
@@ -56,6 +58,32 @@ public class GuideExceptionHandler {
     @ExceptionHandler(TourStartTooEarlyException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleTourStartTooEarly(final TourStartTooEarlyException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    /**
+     * UC12 — the booking side did not complete, so the tour cancellation was rolled back.
+     *
+     * <p>502 rather than 500 deliberately: the guide's request was well-formed and its tour
+     * was cancellable, so this is a downstream failure the caller may reasonably retry.
+     * Collapsing it into a 500 would tell them to give up.
+     */
+    @ExceptionHandler(BookingCancellationFailedException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ErrorResponse handleBookingCancellationFailed(
+            final BookingCancellationFailedException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    /**
+     * UC12 — a blank or over-long cancellation reason. A domain exception rather than the
+     * {@code IllegalArgumentException} backstop, because it is a business rule this context
+     * owns about a value it stores ({@code coding-style.definition.md} § 6.2 clause A).
+     */
+    @ExceptionHandler(InvalidCancellationReasonException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleInvalidCancellationReason(
+            final InvalidCancellationReasonException ex) {
         return new ErrorResponse(ex.getMessage());
     }
 

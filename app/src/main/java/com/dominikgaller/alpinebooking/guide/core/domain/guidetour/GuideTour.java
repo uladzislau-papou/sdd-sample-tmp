@@ -2,6 +2,7 @@ package com.dominikgaller.alpinebooking.guide.core.domain.guidetour;
 
 import com.dominikgaller.alpinebooking.shared.domain.event.TourStarted;
 import com.dominikgaller.alpinebooking.shared.domain.event.TourCompleted;
+import com.dominikgaller.alpinebooking.shared.domain.event.TourCancelledByGuide;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidGuideTourStateException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
@@ -44,6 +45,8 @@ public class GuideTour {
     private GuideTourStatus status;
     private Instant startedAt;
     private Instant completedAt;
+    private Instant cancelledAt;
+    private CancellationReason cancellationReason;
 
     private final List<DomainEvent> domainEvents = new ArrayList<>();
 
@@ -96,8 +99,42 @@ public class GuideTour {
             final Instant scheduledStart,
             final GuideTourStatus status,
             final Instant startedAt,
+            final Instant completedAt,
+            final Instant cancelledAt,
+            final CancellationReason cancellationReason) {
+        final GuideTour tour = new GuideTour(
+                id, tourId, scheduledStart, status, startedAt, completedAt);
+        tour.cancelledAt = cancelledAt;
+        tour.cancellationReason = cancellationReason;
+        return tour;
+    }
+
+    /**
+     * Convenience overload for a tour that was never cancelled.
+     *
+     * <p>Exists for the tests, which build non-cancelled aggregates constantly. Note this
+     * does <b>not</b> call the full-arity {@code reconstitute}: doing so would breach
+     * {@code ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers}, which forbids
+     * any class outside {@code ..outbound.persistence..} — the aggregate included — from
+     * calling it. The booking side hit the same rule and solved it the same way.
+     *
+     * <p>That production reconstitution uses the full-arity form is convention, not
+     * enforcement; what catches a mapper dropping the cancellation fields is
+     * {@code GuideTourJooqRepositoryIT.update_changesStatus_toCancelled} and
+     * {@code .cancellationFields_areEmpty_forATourThatWasNeverCancelled}.
+     */
+    public static GuideTour reconstitute(
+            final GuideTourId id,
+            final TourId tourId,
+            final Instant scheduledStart,
+            final GuideTourStatus status,
+            final Instant startedAt,
             final Instant completedAt) {
-        return new GuideTour(id, tourId, scheduledStart, status, startedAt, completedAt);
+        final GuideTour tour = new GuideTour(
+                id, tourId, scheduledStart, status, startedAt, completedAt);
+        tour.cancelledAt = null;
+        tour.cancellationReason = null;
+        return tour;
     }
 
     /**
@@ -152,6 +189,40 @@ public class GuideTour {
     }
 
     /**
+     * Transitions the guide tour to {@code CANCELLED} (UC12).
+     *
+     * <p>Permitted from {@code SCHEDULED} and from {@code RUNNING} — aborting a tour
+     * mid-execution is the whole point, and it is the case UC09 AC-02 exists for on the
+     * booking side. {@code FINISHED} is rejected: a completed tour cannot be retroactively
+     * called off.
+     *
+     * <p>Unlike {@code TourBooking.cancel} for a guide, a second cancellation here
+     * <b>throws</b> rather than being an idempotent no-op. This is the deliberate act at the
+     * top of the chain, reached over REST by a person, so a 409 telling them the tour was
+     * already called off is the useful answer. The booking-side no-op exists because that
+     * side is the fan-out target and must not abort a batch.
+     *
+     * @param cancelledAt the moment of cancellation; must not be null
+     * @param reason      optional; may be null. Already validated by
+     *                    {@link CancellationReason}, so this method has no length rule of
+     *                    its own — the type carries it
+     * @throws InvalidGuideTourStateException if the current state is neither
+     *                                        {@code SCHEDULED} nor {@code RUNNING}
+     */
+    public void cancel(final Instant cancelledAt, final CancellationReason reason) {
+        Objects.requireNonNull(cancelledAt, "cancelledAt must not be null");
+        if (status != GuideTourStatus.SCHEDULED && status != GuideTourStatus.RUNNING) {
+            throw new InvalidGuideTourStateException(status);
+        }
+        this.status = GuideTourStatus.CANCELLED;
+        this.cancelledAt = cancelledAt;
+        this.cancellationReason = reason;
+        domainEvents.add(new TourCancelledByGuide(
+                id.value().toString(), tourId, cancelledAt,
+                reason == null ? null : reason.value()));
+    }
+
+    /**
      * Returns and clears all recorded domain events.
      *
      * <p>Calling this method twice returns an empty list on the second call.
@@ -196,5 +267,18 @@ public class GuideTour {
      */
     public Optional<Instant> completedAt() {
         return Optional.ofNullable(completedAt);
+    }
+
+    /** The moment the tour was cancelled, empty unless it was (UC12). */
+    public Optional<Instant> cancelledAt() {
+        return Optional.ofNullable(cancelledAt);
+    }
+
+    /**
+     * Why the tour was cancelled. Empty both for a live tour and for one cancelled without a
+     * reason — giving one is optional (UC12 section 2).
+     */
+    public Optional<CancellationReason> cancellationReason() {
+        return Optional.ofNullable(cancellationReason);
     }
 }

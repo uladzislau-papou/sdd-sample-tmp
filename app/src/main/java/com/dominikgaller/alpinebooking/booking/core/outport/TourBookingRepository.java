@@ -63,4 +63,24 @@ public interface TourBookingRepository {
      * @return possibly empty list, never null
      */
     List<TourBooking> findActiveByTourId(TourId tourId);
+
+    /**
+     * All bookings for a tour that a guide may still cancel — every non-terminal state
+     * ({@code REQUESTED}, {@code CONFIRMED}, {@code ACTIVE}).
+     *
+     * <p>The "which bookings are affected" criterion lives here rather than in the caller,
+     * for the same reason {@link #findActiveByTourId} does: it is business knowledge that
+     * belongs to this context ({@code architecture.definition.md} § 4.6). It matters more
+     * here than anywhere else, because the caller is the {@code guide} context — if the
+     * criterion lived there, {@code guide} would have to know {@code TourBooking}'s state
+     * model, and the boundary would be gone.
+     *
+     * <p>Already-{@code CANCELLED} and {@code COMPLETED} bookings are excluded by the query,
+     * so the fan-out never asks the aggregate to do something it would reject. The
+     * aggregate's guard still holds independently.
+     *
+     * @param tourId the tour whose bookings should be cancelled; must not be null
+     * @return the matching aggregates, empty if none
+     */
+    List<TourBooking> findCancellableByTourId(TourId tourId);
 }

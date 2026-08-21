@@ -70,7 +70,10 @@ All errors return `{ "error": "<message>" }`.
 
 - Booking must exist
 - State must be `REQUESTED` or `CONFIRMED`
-  - `ACTIVE`, `COMPLETED`, and `CANCELLED` bookings cannot be cancelled
+  - `ACTIVE`, `COMPLETED`, and `CANCELLED` bookings cannot be cancelled **by the
+    participant**. Since UC09 the aggregate's guard is caller-dependent: a guide may
+    additionally cancel from `ACTIVE`, and a second guide cancellation is a no-op
+    (aggregate spec § 4). This endpoint's behaviour is unchanged
 
 
 ## 5. Flow

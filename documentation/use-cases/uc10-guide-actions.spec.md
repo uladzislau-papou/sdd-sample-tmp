@@ -23,7 +23,7 @@ Kept for provenance only. **Not a `/loop-uc` target** — the loop refuses
 |----------------|-----------|--------|
 | StartTour (Guide) | [`uc05-start-tour.spec.md`](uc05-start-tour.spec.md) | IMPLEMENTED |
 | CompleteTour (Guide) | [`uc11-complete-tour.spec.md`](uc11-complete-tour.spec.md) | IMPLEMENTED |
-| CancelTourByGuide (Guide) | [`uc12-cancel-tour-by-guide.spec.md`](uc12-cancel-tour-by-guide.spec.md) | SPECIFIED |
+| CancelTourByGuide (Guide) | [`uc12-cancel-tour-by-guide.spec.md`](uc12-cancel-tour-by-guide.spec.md) | IMPLEMENTED |
 
 The original note asked whether these were "still necessary after implementing
 uc05 to uc09". The answer, recorded here so it is not lost again:
@@ -33,8 +33,8 @@ uc05 to uc09". The answer, recorded here so it is not lost again:
   by UC07/UC09. Those two are the *booking-side* reactions
   (`MarkBookingCompleted`, `MarkBookingCancelledByGuide`); UC11 and UC12 are the
   *guide-side* actions that trigger them. Without UC11 there is no publisher for
-  `TourCompleted`, so UC07 has no trigger at all — `GuideTour` currently exposes
-  only `start(...)`.
+  `TourCompleted`, so UC07 has no trigger at all — at the time this was written,
+  `GuideTour` exposed only `start(...)`. (All three successors are implemented now.)
 
 ## 1.–10.
 

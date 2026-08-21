@@ -4,8 +4,12 @@ import com.dominikgaller.alpinebooking.guide.core.inport.command.CompleteTourCom
 import com.dominikgaller.alpinebooking.guide.core.inport.command.StartTourCommand;
 import com.dominikgaller.alpinebooking.guide.core.inport.usecase.CompleteTourUseCase;
 import com.dominikgaller.alpinebooking.guide.core.inport.usecase.StartTourUseCase;
+import com.dominikgaller.alpinebooking.guide.core.inport.command.CancelTourByGuideCommand;
+import com.dominikgaller.alpinebooking.guide.core.inport.usecase.CancelTourByGuideUseCase;
+import com.dominikgaller.alpinebooking.guide.inbound.rest.request.CancelTourByGuideRequest;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.request.CompleteTourRequest;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.request.StartTourRequest;
+import com.dominikgaller.alpinebooking.guide.inbound.rest.response.CancelTourByGuideResponse;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.response.CompleteTourResponse;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.response.StartTourResponse;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,12 +29,15 @@ public class GuideTourController implements GuideTourRestAPI {
 
     private final StartTourUseCase startTourUseCase;
     private final CompleteTourUseCase completeTourUseCase;
+    private final CancelTourByGuideUseCase cancelTourByGuideUseCase;
 
     public GuideTourController(
             final StartTourUseCase startTourUseCase,
-            final CompleteTourUseCase completeTourUseCase) {
+            final CompleteTourUseCase completeTourUseCase,
+            final CancelTourByGuideUseCase cancelTourByGuideUseCase) {
         this.startTourUseCase = startTourUseCase;
         this.completeTourUseCase = completeTourUseCase;
+        this.cancelTourByGuideUseCase = cancelTourByGuideUseCase;
     }
 
     @Override
@@ -49,5 +56,17 @@ public class GuideTourController implements GuideTourRestAPI {
         final var result = completeTourUseCase.complete(
                 new CompleteTourCommand(guideTourId, completedAt));
         return new CompleteTourResponse(result.status());
+    }
+
+    @Override
+    public CancelTourByGuideResponse cancel(
+            final String guideTourId,
+            final CancelTourByGuideRequest request) {
+        // An absent body is equivalent to one with a null reason: cancelling without giving
+        // one is permitted, so the controller normalises rather than rejects.
+        final var result = cancelTourByGuideUseCase.cancel(new CancelTourByGuideCommand(
+                guideTourId,
+                request == null ? null : request.reason()));
+        return new CancelTourByGuideResponse(result.status(), result.cancelledBookings());
     }
 }

@@ -159,6 +159,11 @@ class ChangeParticipantsDriverTest {
     // ── Stub implementations ─────────────────────────────────────────────────
 
     private static class BookingStubRepository implements TourBookingRepository {
+
+        @Override
+        public List<TourBooking> findCancellableByTourId(final TourId tourId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
         private final Map<String, TourBooking> store = new LinkedHashMap<>();
         private final List<TourBooking> updated = new ArrayList<>();
 

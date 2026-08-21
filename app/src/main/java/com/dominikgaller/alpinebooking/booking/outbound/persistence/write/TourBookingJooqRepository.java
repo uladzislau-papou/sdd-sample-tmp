@@ -71,6 +71,23 @@ public class TourBookingJooqRepository implements TourBookingRepository {
     }
 
     @Override
+    public List<TourBooking> findCancellableByTourId(final TourId tourId) {
+        // Non-terminal states only. Expressed as NOT IN the terminal ones rather than IN the
+        // cancellable ones deliberately: a new non-terminal status added to
+        // TourBookingStatus is then cancellable by default, which is the safer direction to
+        // fail. Listing the cancellable states would silently exclude it, and a guide
+        // cancelling a tour would leave those bookings live.
+        return dsl
+                .selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.TOUR_ID.eq(tourId.value()))
+                .and(TOUR_BOOKING.STATUS.notIn(
+                        TourBookingStatus.CANCELLED.name(),
+                        TourBookingStatus.COMPLETED.name()))
+                .fetch()
+                .map(mapper::toDomain);
+    }
+
+    @Override
     public void update(final TourBooking booking) {
         // Every mutable field of the aggregate must be written here. Immutable fields
         // (id, tour_id, tour_date, contact) are set once by save() and never change.

@@ -17,15 +17,23 @@ import java.time.Instant;
  * in the event <em>type</em> rather than as a {@code CancelledBy} field, so a consumer
  * subscribes to the fact it cares about instead of filtering.
  *
- * <p>{@code reason} may be null: cancelling without giving one is permitted. A record
- * component is a field, not a query, so {@code Optional} would be the wrong choice here
- * ({@code coding-style.definition.md} § 1.4 exception).
+ * <p>{@code reason} may be null: cancelling without giving one is permitted.
+ * {@code guideTourId} may be null too — it is a correlation id, and a caller without one
+ * may still cancel. Both are plain nullable types rather than {@code Optional} because a
+ * record component is a field, not a query ({@code coding-style.definition.md} § 1.4
+ * exception).
+ *
+ * <p>{@code guideTourId} is carried here and <b>not stored</b> on the aggregate: no
+ * invariant needs it, and UC06/UC07 treat the same id the same way, so a column would make
+ * cancellation the lone exception (UC09 § 6). It is a plain {@link String} because the
+ * identity is owned by the {@code guide} context (ADR-0005 category 2).
  *
  * <p>SDD: See {@code documentation/use-cases/uc09-cancel-booking-by-guide.spec.md}.
  */
 public record BookingCancelledByGuide(
         BookingId bookingId,
         Instant cancelledAt,
-        CancellationReason reason
+        CancellationReason reason,
+        String guideTourId
 ) implements DomainEvent {
 }

@@ -1,5 +1,6 @@
 package com.dominikgaller.alpinebooking.guide.outbound.persistence.write;
 
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.CancellationReason;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTour;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.GuideTourId;
 import com.dominikgaller.alpinebooking.guide.core.outport.GuideTourRepository;
@@ -58,11 +59,17 @@ public class GuideTourJooqRepository implements GuideTourRepository {
         final LocalDateTime completedAt = guideTour.completedAt()
                 .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
                 .orElse(null);
+        final LocalDateTime cancelledAt = guideTour.cancelledAt()
+                .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
+                .orElse(null);
         final int rowsUpdated = dsl
                 .update(GUIDE_TOUR)
                 .set(GUIDE_TOUR.STATUS, guideTour.status().name())
                 .set(GUIDE_TOUR.STARTED_AT, startedAt)
                 .set(GUIDE_TOUR.COMPLETED_AT, completedAt)
+                .set(GUIDE_TOUR.CANCELLED_AT, cancelledAt)
+                .set(GUIDE_TOUR.CANCELLATION_REASON,
+                        guideTour.cancellationReason().map(CancellationReason::value).orElse(null))
                 .where(GUIDE_TOUR.ID.eq(guideTour.id().value().toString()))
                 .execute();
         if (rowsUpdated != 1) {

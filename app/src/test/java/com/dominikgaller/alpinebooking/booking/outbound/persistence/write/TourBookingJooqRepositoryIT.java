@@ -329,6 +329,51 @@ class TourBookingJooqRepositoryIT {
     }
 
     /**
+     * UC09 — guide attribution round-trips, including from ACTIVE, which is a state UC08
+     * forbids the participant from cancelling. Reaches ACTIVE through the real transitions
+     * so the row is one a running system could produce.
+     *
+     * <p>`guideTourId` is deliberately absent from the assertions: it is event payload, not
+     * aggregate state, and `tour_booking` has no such column (UC09 § 6).
+     */
+    @Test
+    void update_persistsGuideCancellationAttribution() {
+        final TourBooking booking = activeBooking();
+
+        booking.cancel(NOW, CancelledBy.GUIDE, new CancellationReason("Severe weather"), "GT-7");
+        repository.update(booking);
+
+        final var reloaded = repository.findById(booking.bookingId());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(TourBookingStatus.CANCELLED);
+        assertThat(reloaded.get().cancelledBy()).contains(CancelledBy.GUIDE);
+        assertThat(reloaded.get().cancelledAt()).contains(NOW);
+        assertThat(reloaded.get().cancellationReason())
+                .contains(new CancellationReason("Severe weather"));
+    }
+
+    /**
+     * UC09 — `cancelled_by` must round-trip as the enum it is, so a GUIDE cancellation does
+     * not come back looking like a USER one. `CancelledBy.valueOf` on a wrong literal would
+     * throw rather than silently mis-attribute, but the column holds a plain VARCHAR, so
+     * the mapping deserves its own assertion at the SQL level.
+     */
+    @Test
+    void update_persistsCancelledBy_asTheEnumName() {
+        final TourBooking booking = activeBooking();
+
+        booking.cancel(NOW, CancelledBy.GUIDE, null, "GT-7");
+        repository.update(booking);
+
+        final var record = dsl.selectFrom(TOUR_BOOKING)
+                .where(TOUR_BOOKING.ID.eq(booking.bookingId().value().toString()))
+                .fetchOne();
+
+        assertThat(record).isNotNull();
+        assertThat(record.getCancelledBy()).isEqualTo("GUIDE");
+    }
+
+    /**
      * UC08 — cancelling without a reason is permitted, so the column stays null rather than
      * holding an empty string. Asserted separately because a mapper that coerced null to ""
      * would satisfy the test above and silently invent a reason nobody gave.
@@ -386,6 +431,55 @@ class TourBookingJooqRepositoryIT {
         assertThat(record).isNotNull();
         assertThat(record.getCancelledAt())
                 .isEqualTo(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    }
+
+    /**
+     * UC09 — pins the `findCancellableByTourId` predicate at the SQL level.
+     *
+     * <p>`findConfirmedByTourId` and `findActiveByTourId` each have this; this one did not,
+     * and was covered only end to end by `CancelTourByGuideIT`. `spec-documenter` reported the
+     * deviation from the pattern. It matters more here than for the other two: the predicate
+     * is expressed as `NOT IN (CANCELLED, COMPLETED)` rather than `IN (...)`, so a mistake
+     * would over-select rather than under-select — a guide cancelling a tour would cancel
+     * bookings that were already finished.
+     */
+    @Test
+    void findCancellableByTourId_returnsEveryNonTerminalBookingForThatTour() {
+        final TourBooking requested = sampleBooking();
+        repository.save(requested);
+
+        final TourBooking confirmed = sampleBooking();
+        repository.save(confirmed);
+        confirmed.confirm(NOW);
+        repository.update(confirmed);
+
+        final TourBooking active = activeBooking();
+
+        final TourBooking cancelled = sampleBooking();
+        repository.save(cancelled);
+        cancelled.cancel(NOW, CancelledBy.USER, null);
+        repository.update(cancelled);
+
+        final TourBooking completed = activeBooking();
+        completed.markCompleted(NOW, null);
+        repository.update(completed);
+
+        final var found = repository.findCancellableByTourId(requested.tourId());
+
+        assertThat(found).extracting(b -> b.bookingId().value().toString())
+                .containsExactlyInAnyOrder(
+                        requested.bookingId().value().toString(),
+                        confirmed.bookingId().value().toString(),
+                        active.bookingId().value().toString());
+    }
+
+    @Test
+    void findCancellableByTourId_returnsEmpty_whenEveryBookingIsTerminal() {
+        final TourBooking completed = activeBooking();
+        completed.markCompleted(NOW, null);
+        repository.update(completed);
+
+        assertThat(repository.findCancellableByTourId(completed.tourId())).isEmpty();
     }
 
     /**

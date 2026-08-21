@@ -71,7 +71,8 @@ Optional<TourBooking> findById(BookingId bookingId)
   creation-time invariant checks (`modelling.definition.md` § Rehydration Rule).
 - The returned aggregate has **no pending domain events**.
 
-Used by: UC02, UC03/UC08, UC04, UC06, UC07.
+Used by: UC02, UC03/UC08, UC04, UC06, UC07. (UC09 used it while the inport was
+per-booking; the per-tour rework moved it to `findCancellableByTourId`, § 2.7.)
 
 ### 2.3 update
 
@@ -106,7 +107,11 @@ void update(TourBooking booking)
 > increment to extend it — three new mutable fields, three new columns in the `update`
 > statement, pinned by `TourBookingJooqRepositoryIT.update_persistsCancellationAttribution`,
 > `.update_persistsCancellation_withoutReason` and
-> `.update_persistsCancelledAt_asUtcLocalDateTime`. The guide-side
+> `.update_persistsCancelledAt_asUtcLocalDateTime`. UC09 conformed without extending
+> it: guide cancellation reuses the three UC08 columns, and `guideTourId` is
+> `BookingCancelledByGuide` payload, not aggregate state — pinned by
+> `TourBookingJooqRepositoryIT.update_persistsGuideCancellationAttribution` and
+> `.update_persistsCancelledBy_asTheEnumName`. The guide-side
 > port carries the same obligation
 > (`ports/guide-tour-repository.outport.spec.md` § update) — this port is where the
 > original defect occurred.
@@ -117,9 +122,10 @@ Updating a booking that no longer exists fails loudly rather than silently no-op
 **Idempotency:** Idempotent for identical aggregate state — the same `update` applied
 twice produces the same row. It is not a no-op guard: the aggregate decides whether a
 transition should happen (e.g. `markActive` returns early when already ACTIVE, so the
-driver never calls `update`).
+driver never calls `update`). UC09's driver relies on exactly that: it skips `update`
+altogether when the aggregate's guide-cancel no-op produced no event.
 
-Used by: UC02, UC03/UC08, UC04, UC06, UC07.
+Used by: UC02, UC03/UC08, UC04, UC06, UC07, UC09.
 
 ### 2.4 findConfirmedByTourId
 
@@ -177,6 +183,40 @@ it invites a future caller to load aggregates it does not need. `git` preserves 
 genuine caller appears, and by then the right shape may well be a read-side projection
 (`architecture.definition.md` § 4.6) rather than a write-side aggregate load.
 
+### 2.7 findCancellableByTourId
+
+```
+List<TourBooking> findCancellableByTourId(TourId tourId)
+```
+
+**Responsibility:** Return the bookings for a tour that a guide may still cancel —
+every **non-terminal** state (`REQUESTED`, `CONFIRMED`, `ACTIVE`).
+
+**Preconditions:** `tourId` non-null.
+
+**Postconditions:** an empty list when none qualify, never null; each element fully
+reconstituted with no pending events; no ordering guaranteed. `CANCELLED` and
+`COMPLETED` bookings are excluded by the query, so UC09's fan-out never asks the
+aggregate to do something it would reject or no-op.
+
+Used by: UC09 (`MarkBookingCancelledByGuideDriver`).
+
+> Mirrors § 2.4/§ 2.5 for the guide-cancellation side, and the criterion matters *more*
+> here than anywhere else: the ultimate caller is the `guide` context (via `booking`'s
+> inport). If "which bookings are affected" lived in the caller, `guide` would have to
+> know `TourBooking`'s state model and the context boundary would be gone
+> (`architecture.definition.md` § 4.6). The jOOQ predicate is pinned like § 2.4's and
+> § 2.5's, by
+> `TourBookingJooqRepositoryIT.findCancellableByTourId_returnsEveryNonTerminalBookingForThatTour`
+> and `.findCancellableByTourId_returnsEmpty_whenEveryBookingIsTerminal`, plus end to end by
+> `CancelTourByGuideIT.cancel_skipsTerminalBookings_andStillCancelsTheTour`.
+>
+> The criterion is written as `NOT IN (CANCELLED, COMPLETED)` rather than `IN (...)` on
+> purpose: a new non-terminal status added to `TourBookingStatus` is then cancellable by
+> default, which is the safer direction to be wrong in. Listing the cancellable states would
+> silently exclude it and leave those bookings live after their tour was called off. It also
+> makes the pinning test matter more than for § 2.4/§ 2.5 — a mistake here over-selects.
+
 
 ## 3. Transaction Boundary
 
@@ -186,7 +226,10 @@ implementation MUST NOT start its own transaction; it participates in the active
 
 Owners: `RequestTourBookingDriver`, `ConfirmTourBookingDriver`,
 `CancelTourBookingDriver`, `ChangeParticipantsDriver`, `MarkBookingActiveDriver`,
-`MarkBookingCompletedDriver`.
+`MarkBookingCompletedDriver`, `MarkBookingCancelledByGuideDriver` (UC09 — a special
+case in the other direction: `@Transactional` with default `REQUIRED`, so it *joins*
+the guide caller's transaction rather than owning one; see
+`ports/mark-booking-cancelled-by-guide.inport.spec.md` § 4).
 
 `TourStartedListener` and `TourCompletedListener` are a special case: each runs
 `AFTER_COMMIT` of the guide transaction in a **new** transaction (`REQUIRES_NEW`),

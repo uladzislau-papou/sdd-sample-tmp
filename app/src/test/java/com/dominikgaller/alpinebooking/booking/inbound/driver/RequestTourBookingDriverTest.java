@@ -101,6 +101,11 @@ class RequestTourBookingDriverTest {
     // ── Stub implementations ─────────────────────────────────────────────────
 
     private static class SaveCapturingRepository implements TourBookingRepository {
+
+        @Override
+        public List<TourBooking> findCancellableByTourId(final TourId tourId) {
+            throw new UnsupportedOperationException("not used in this test");
+        }
         private final List<TourBooking> saved = new ArrayList<>();
 
         @Override

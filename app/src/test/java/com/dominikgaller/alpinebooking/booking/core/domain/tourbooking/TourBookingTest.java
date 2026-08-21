@@ -28,6 +28,7 @@ class TourBookingTest {
     private static final Instant LATER = Instant.parse("2026-03-04T12:00:00Z");
     private static final CancellationReason REASON =
             new CancellationReason("Travel plans changed");
+    private static final String GUIDE_TOUR_ID = "GT-77";
     private static final CancellationReason OTHER_REASON =
             new CancellationReason("Guide fell ill");
     private static final LocalDate FUTURE_DATE = LocalDate.of(2026, 6, 15);
@@ -223,22 +224,6 @@ class TourBookingTest {
         assertThat(event.reason()).isEqualTo(REASON);
     }
 
-    /**
-     * The aggregate's contract is complete before UC09's inport exists: the event a
-     * cancellation emits is determined by who cancelled, which is aggregate behaviour, not
-     * use-case orchestration. UC09 adds the driver that supplies {@code GUIDE}.
-     */
-    @Test
-    void cancel_byGuide_publishesBookingCancelledByGuideEvent() {
-        final TourBooking booking = validBooking();
-        booking.pullDomainEvents();
-
-        booking.cancel(NOW, CancelledBy.GUIDE, REASON);
-
-        assertThat(booking.pullDomainEvents()).singleElement()
-                .isInstanceOf(BookingCancelledByGuide.class);
-    }
-
     @Test
     void cancel_byUser_fromRequested_recordsUserAttribution() {
         final TourBooking booking = validBooking();
@@ -288,9 +273,11 @@ class TourBookingTest {
     }
 
     /**
-     * AC-06. The 409 is what protects the original attribution, so this asserts the
-     * consequence rather than trusting the guard: a second cancellation attempt by a
-     * different party must leave the first party's record intact.
+     * UC08 AC-06. A participant cancelling an already-cancelled booking gets a 409, and the
+     * original record survives. The second attempt is deliberately also a {@code USER}: a
+     * second <em>guide</em> cancellation is an idempotent no-op instead of a throw
+     * (UC09 AC-04), so using {@code GUIDE} here would assert the wrong contract — as an
+     * earlier revision of this test did, and it started failing the moment UC09 landed.
      */
     @Test
     void cancel_whenAlreadyCancelled_doesNotOverwriteAttribution() {
@@ -299,12 +286,160 @@ class TourBookingTest {
         booking.pullDomainEvents();
 
         assertThatExceptionOfType(InvalidBookingStateException.class)
-                .isThrownBy(() -> booking.cancel(LATER, CancelledBy.GUIDE, OTHER_REASON));
+                .isThrownBy(() -> booking.cancel(LATER, CancelledBy.USER, OTHER_REASON));
 
         assertThat(booking.cancelledBy()).contains(CancelledBy.USER);
         assertThat(booking.cancelledAt()).contains(NOW);
         assertThat(booking.cancellationReason()).contains(REASON);
         assertThat(booking.pullDomainEvents()).isEmpty();
+    }
+
+    // ── UC09: guide-initiated cancellation ───────────────────────────────────
+
+    private TourBooking activeBookingForCancel() {
+        return TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.ACTIVE);
+    }
+
+    /**
+     * AC-02. A tour aborted mid-execution must be cancellable, and this is the one
+     * transition where the guide may override a running tour — which is exactly why UC08
+     * forbids the participant from doing the same.
+     */
+    @Test
+    void cancel_byGuide_fromActive_transitionsToCancelled() {
+        final TourBooking booking = activeBookingForCancel();
+
+        booking.cancel(NOW, CancelledBy.GUIDE, REASON);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
+        assertThat(booking.cancelledBy()).contains(CancelledBy.GUIDE);
+    }
+
+    /**
+     * The same state the guide may cancel from is still closed to the participant. Asserted
+     * alongside the GUIDE case so the asymmetry is pinned from both sides — widening the
+     * guard for one caller must not widen it for the other.
+     */
+    @Test
+    void cancel_byUser_fromActive_stillThrowsInvalidBookingStateException() {
+        final TourBooking booking = activeBookingForCancel();
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.cancel(NOW, CancelledBy.USER, REASON));
+    }
+
+    @Test
+    void cancel_byGuide_fromConfirmed_recordsGuideAttribution() {
+        final TourBooking booking = validBooking();
+        booking.confirm(NOW);
+
+        booking.cancel(NOW, CancelledBy.GUIDE, REASON);
+
+        assertThat(booking.cancelledBy()).contains(CancelledBy.GUIDE);
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
+    }
+
+    /**
+     * A guide cancelling a tour must also cancel bookings nobody confirmed yet, or they sit
+     * in REQUESTED forever waiting on a tour that will never run.
+     */
+    @Test
+    void cancel_byGuide_fromRequested_transitionsToCancelled() {
+        final TourBooking booking = validBooking();
+
+        booking.cancel(NOW, CancelledBy.GUIDE, REASON);
+
+        assertThat(booking.status()).isEqualTo(TourBookingStatus.CANCELLED);
+        assertThat(booking.cancelledBy()).contains(CancelledBy.GUIDE);
+    }
+
+    @Test
+    void cancel_byGuide_fromCompleted_throwsInvalidBookingStateException() {
+        final TourBooking booking = TourBooking.reconstitute(
+                BOOKING_ID, TOUR_ID, TOUR_DATE, COUNT_2, CAPACITY_10, CONTACT,
+                TourBookingStatus.COMPLETED);
+
+        assertThatExceptionOfType(InvalidBookingStateException.class)
+                .isThrownBy(() -> booking.cancel(NOW, CancelledBy.GUIDE, REASON));
+    }
+
+    /**
+     * AC-04, and the asymmetry with UC08 that matters most. UC12 calls this inside the
+     * guide's transaction for every booking on the tour; if one already-cancelled booking
+     * threw, the whole tour cancellation would roll back. A participant double-cancelling
+     * still gets a 409 — see {@code cancel_whenAlreadyCancelled_doesNotOverwriteAttribution}.
+     */
+    @Test
+    void cancel_byGuide_whenAlreadyCancelled_isIdempotentNoOp() {
+        final TourBooking booking = validBooking();
+        booking.cancel(NOW, CancelledBy.USER, REASON);
+        booking.pullDomainEvents();
+
+        booking.cancel(LATER, CancelledBy.GUIDE, OTHER_REASON);
+
+        assertThat(booking.pullDomainEvents()).isEmpty();
+    }
+
+    /**
+     * The no-op must return <em>before</em> mutating, so a guide's bulk cancellation cannot
+     * silently rewrite who originally cancelled a booking or why.
+     */
+    @Test
+    void cancel_byGuide_whenAlreadyCancelled_doesNotOverwriteAttribution() {
+        final TourBooking booking = validBooking();
+        booking.cancel(NOW, CancelledBy.USER, REASON);
+        booking.pullDomainEvents();
+
+        booking.cancel(LATER, CancelledBy.GUIDE, OTHER_REASON);
+
+        assertThat(booking.cancelledBy()).contains(CancelledBy.USER);
+        assertThat(booking.cancelledAt()).contains(NOW);
+        assertThat(booking.cancellationReason()).contains(REASON);
+    }
+
+    @Test
+    void cancel_byGuide_publishesBookingCancelledByGuideEvent() {
+        final TourBooking booking = validBooking();
+        booking.confirm(NOW);
+        booking.pullDomainEvents();
+
+        booking.cancel(NOW, CancelledBy.GUIDE, REASON, GUIDE_TOUR_ID);
+
+        final List<DomainEvent> events = booking.pullDomainEvents();
+        assertThat(events).singleElement().isInstanceOf(BookingCancelledByGuide.class);
+        final BookingCancelledByGuide event = (BookingCancelledByGuide) events.get(0);
+        assertThat(event.bookingId()).isEqualTo(BOOKING_ID);
+        assertThat(event.cancelledAt()).isEqualTo(NOW);
+        assertThat(event.reason()).isEqualTo(REASON);
+        assertThat(event.guideTourId()).isEqualTo(GUIDE_TOUR_ID);
+    }
+
+    /**
+     * AC-05. The correlation id is event payload, not aggregate state (UC09 § 6), so it is
+     * asserted on the event and deliberately nowhere else.
+     */
+    @Test
+    void cancel_byGuide_carriesGuideTourIdOntoEvent_andDoesNotStoreIt() {
+        final TourBooking booking = validBooking();
+        booking.pullDomainEvents(); // drain TourBookingRequested
+
+        booking.cancel(NOW, CancelledBy.GUIDE, REASON, "GT-999");
+
+        final BookingCancelledByGuide event =
+                (BookingCancelledByGuide) booking.pullDomainEvents().get(0);
+        assertThat(event.guideTourId()).isEqualTo("GT-999");
+        assertThat(TourBooking.class.getDeclaredFields())
+                .noneMatch(f -> f.getName().equals("guideTourId"));
+    }
+
+    @Test
+    void cancel_byUser_viaFourArgOverload_rejectsAGuideTourId() {
+        final TourBooking booking = validBooking();
+
+        assertThatExceptionOfType(IllegalArgumentException.class)
+                .isThrownBy(() -> booking.cancel(NOW, CancelledBy.USER, REASON, GUIDE_TOUR_ID));
     }
 
     @Test

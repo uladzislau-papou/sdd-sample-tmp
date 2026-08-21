@@ -181,6 +181,12 @@ Then HTTP 404 is returned and nothing is persisted
 | Booking in COMPLETED state | `InvalidBookingStateException` | 409 |
 | Booking already CANCELLED | `InvalidBookingStateException` | 409 |
 
+Both the ACTIVE 409 and the already-CANCELLED 409 are **specific to the participant
+path**. UC09 made the aggregate's guard caller-dependent: a guide may cancel from
+ACTIVE, and a second *guide* cancellation is an idempotent no-op rather than an error
+(aggregate spec § 4). Nothing here changes — a user double-cancel is still a 409 —
+but this table must not be read as the uniform contract of `cancel(...)`.
+
 
 ## 9. REST Contract
 
@@ -232,7 +238,10 @@ behaviour they extend. The names below are the ones on disk.
       the no-reason side by `TourBookingTest.cancel_withoutReason_leavesReasonEmpty`
       and `CancelTourBookingDriverTest.cancel_withoutReason_publishesEventWithNullReason`
 - [x] AC-04 covered by `CancelTourBookingDriverTest.cancel_usesClockPort_whenCancelledAtIsNull`
-      and `.cancel_usesProvidedCancelledAt_whenNotNull`
+      and `.cancel_alwaysTakesTheCancellationTimeFromTheClock`, which also asserts the
+      command has no `cancelledAt` record component. (An earlier revision named
+      `.cancel_usesProvidedCancelledAt_whenNotNull`, which never existed on disk — it
+      described the rejected design in which the client could supply the time)
 - [x] AC-05 covered by `TourBookingTest.cancel_fromActive_throwsInvalidBookingStateException`
       and `.cancel_fromCompleted_throwsInvalidBookingStateException`,
       plus `TourBookingControllerTest.cancelBooking_returns409_whenInvalidState`
@@ -256,8 +265,10 @@ behaviour they extend. The names below are the ones on disk.
       rejecting blank and over-400-character text with `InvalidBookingRequestException`
       (`CancellationReasonTest`, 7 tests)
 - [x] `TourBooking.cancel(Instant, CancelledBy, CancellationReason)` replaces
-      `cancel(Instant)`, and every existing caller and test is migrated — no other
-      signature remains on the aggregate.
+      `cancel(Instant)`, and every existing caller and test is migrated. ("No other
+      signature remains" was true when this box closed; UC09 has since added a 4-arg
+      overload carrying a `guideTourId`, and this 3-arg form now delegates to it with
+      null — the participant path is behaviourally unchanged.)
       **Deviation from an earlier revision of this spec**, which specified a `String`
       third parameter: a validated domain concept passed as a primitive is the
       "primitives for domain concepts" anti-pattern `architecture.definition.md` § 10
