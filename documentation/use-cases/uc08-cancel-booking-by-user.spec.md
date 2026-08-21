@@ -194,9 +194,12 @@ names, following the existing `cancel_*` convention in `TourBookingTest`.
       `CancelledBy` and the new `cancel` signature
 
 ### Governance
-- [ ] Replacing `cancel(Instant)` changes a published domain method used by UC03 —
-      confirm with the user whether this needs an ADR before implementing
-      (`sdd.playbook.md` § 6)
+- [x] **No ADR required.** Ruled by the maintainer. Replacing `cancel(Instant)` with
+      `cancel(Instant, CancelledBy, String)` touches five call sites and UC03's endpoint,
+      but it changes neither the architectural layering, the persistence strategy, nor a
+      transaction boundary — it widens one aggregate method's signature. None of
+      `sdd.playbook.md` § 6's thirteen triggers fires. Recorded here so the *absence* of
+      an ADR is a decision rather than an omission
 - [ ] This spec reconciled against the code by `spec-documenter`
 - [ ] `ddd-hex-reviewer` returns `PASS`
 - [ ] Quality gates green (`test.definition.md` § 7)

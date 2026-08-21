@@ -184,7 +184,9 @@ Nothing is implemented yet; every item is open. Test names are the **planned** n
 - [ ] UC08 implemented first — `CancelledBy` and the extended `cancel(...)` come from there
 - [ ] UC12 (CancelTourByGuide, guide side) exists as the caller
 - [ ] A synchronous cross-context call inside the caller's transaction is a
-      cross-context interaction model decision — **ADR required** before implementing
+      cross-context interaction model decision — see
+      `adr/0008-synchronous-cross-context-cancellation.adr.md` (Proposed; implementation
+      waits for its acceptance)
       (`sdd.playbook.md` § 6, items 5 and 10)
 - [ ] This spec reconciled against the code by `spec-documenter`
 - [ ] `ddd-hex-reviewer` returns `PASS`
