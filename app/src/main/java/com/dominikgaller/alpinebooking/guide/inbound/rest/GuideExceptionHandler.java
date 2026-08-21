@@ -2,6 +2,7 @@ package com.dominikgaller.alpinebooking.guide.inbound.rest;
 
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.GuideTourNotFoundException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidGuideTourStateException;
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,6 +22,13 @@ public class GuideExceptionHandler {
     @ExceptionHandler(GuideTourNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ErrorResponse handleGuideTourNotFound(final GuideTourNotFoundException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(TourCompletedBeforeStartException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleTourCompletedBeforeStart(
+            final TourCompletedBeforeStartException ex) {
         return new ErrorResponse(ex.getMessage());
     }
 

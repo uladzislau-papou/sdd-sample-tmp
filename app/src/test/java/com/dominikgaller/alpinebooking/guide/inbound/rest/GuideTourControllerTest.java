@@ -7,6 +7,9 @@ import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.Inv
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
 import com.dominikgaller.alpinebooking.guide.core.inport.result.StartTourResult;
 import com.dominikgaller.alpinebooking.guide.core.inport.usecase.StartTourUseCase;
+import com.dominikgaller.alpinebooking.guide.core.inport.usecase.CompleteTourUseCase;
+import com.dominikgaller.alpinebooking.guide.core.inport.result.CompleteTourResult;
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -46,6 +49,65 @@ class GuideTourControllerTest {
 
     @MockitoBean
     private StartTourUseCase startTourUseCase;
+
+    @MockitoBean
+    private CompleteTourUseCase completeTourUseCase;
+
+    // ── UC11: POST /api/v1/guide-tours/{guideTourId}/complete ─────────────────
+
+    @Test
+    void complete_returns200_withFinishedStatus_whenNoBody() throws Exception {
+        when(completeTourUseCase.complete(any()))
+                .thenReturn(new CompleteTourResult("FINISHED"));
+
+        mockMvc.perform(post("/api/v1/guide-tours/{id}/complete", GUIDE_TOUR_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FINISHED"));
+    }
+
+    @Test
+    void complete_returns200_withFinishedStatus_whenCompletedAtProvided() throws Exception {
+        when(completeTourUseCase.complete(any()))
+                .thenReturn(new CompleteTourResult("FINISHED"));
+
+        mockMvc.perform(post("/api/v1/guide-tours/{id}/complete", GUIDE_TOUR_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"completedAt\": \"2026-06-15T17:30:00Z\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FINISHED"));
+    }
+
+    @Test
+    void complete_returns404_whenGuideTourNotFound() throws Exception {
+        when(completeTourUseCase.complete(any()))
+                .thenThrow(new GuideTourNotFoundException(GUIDE_TOUR_ID));
+
+        mockMvc.perform(post("/api/v1/guide-tours/{id}/complete", GUIDE_TOUR_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    @Test
+    void complete_returns409_whenInvalidState() throws Exception {
+        when(completeTourUseCase.complete(any()))
+                .thenThrow(new InvalidGuideTourStateException(GuideTourStatus.SCHEDULED));
+
+        mockMvc.perform(post("/api/v1/guide-tours/{id}/complete", GUIDE_TOUR_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    @Test
+    void complete_returns409_whenCompletedBeforeStart() throws Exception {
+        when(completeTourUseCase.complete(any()))
+                .thenThrow(new TourCompletedBeforeStartException(
+                        Instant.parse("2026-06-15T09:05:00Z"),
+                        Instant.parse("2026-06-15T09:00:00Z")));
+
+        mockMvc.perform(post("/api/v1/guide-tours/{id}/complete", GUIDE_TOUR_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").isNotEmpty());
+    }
 
     // ── UC05: POST /api/v1/guide-tours/{guideTourId}/start ────────────────────
 

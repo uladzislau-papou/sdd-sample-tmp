@@ -1,6 +1,8 @@
 package com.dominikgaller.alpinebooking.guide.inbound.rest;
 
+import com.dominikgaller.alpinebooking.guide.inbound.rest.request.CompleteTourRequest;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.request.StartTourRequest;
+import com.dominikgaller.alpinebooking.guide.inbound.rest.response.CompleteTourResponse;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.response.StartTourResponse;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,4 +32,9 @@ public interface GuideTourRestAPI {
     StartTourResponse start(
             @PathVariable String guideTourId,
             @RequestBody(required = false) StartTourRequest request);
+
+    @PostMapping("/{guideTourId}/complete")
+    CompleteTourResponse complete(
+            @PathVariable String guideTourId,
+            @RequestBody(required = false) CompleteTourRequest request);
 }

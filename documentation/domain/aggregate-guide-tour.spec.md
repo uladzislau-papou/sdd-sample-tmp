@@ -10,8 +10,9 @@ customer-side reservations owned by the `booking` context; a guide tour is the
 execution owned by the `guide` context. The two never reference each other's
 aggregates — they communicate through `shared.domain.event` (ADR-0002, ADR-0003).
 
-SDD: `documentation/use-cases/uc05-start-tour.spec.md` (implemented),
-`uc11-complete-tour.spec.md` and `uc12-cancel-tour-by-guide.spec.md` (specified).
+SDD: `documentation/use-cases/uc05-start-tour.spec.md` and
+`uc11-complete-tour.spec.md` (implemented), `uc12-cancel-tour-by-guide.spec.md`
+(specified).
 
 
 ## 1. Aggregate Root
@@ -35,6 +36,7 @@ State:
 | `scheduledStart` | `Instant` | no | |
 | `status` | `GuideTourStatus` | yes | via transition methods only |
 | `startedAt` | `Instant` | yes | exposed as `Optional<Instant>` — empty until started (G-04) |
+| `completedAt` | `Instant` | yes | exposed as `Optional<Instant>` — empty until completed (UC11) |
 
 Consistency boundary: the aggregate itself. No cross-aggregate invariant — a guide
 tour knows nothing about how many bookings reference it.
@@ -52,8 +54,12 @@ Enforced today:
   Enforced in `start(Instant)`; violation → `TourStartTooEarlyException`.
 - **I-04** — A tour MUST NOT start unless it is `SCHEDULED`.
   Enforced in `start(Instant)`; violation → `InvalidGuideTourStateException`.
-- **I-05** — `status` and `startedAt` MUST only change through transition methods.
-  Enforced structurally: both fields are private with no setters.
+- **I-05** — `status`, `startedAt` and `completedAt` MUST only change through transition
+  methods. Enforced structurally: all three are private with no setters.
+- **I-07** — A tour MUST NOT complete before it started.
+  Enforced in `complete(Instant)`; violation → `TourCompletedBeforeStartException`.
+- **I-08** — A tour MUST NOT complete unless it is `RUNNING`.
+  Enforced in `complete(Instant)`; violation → `InvalidGuideTourStateException`.
 - **I-06** — `startedAt` is non-null if and only if the tour has left `SCHEDULED`
   via `start(...)`. Currently an emergent property of `start(...)` rather than a
   checked invariant.
@@ -102,7 +108,7 @@ Possible states (`GuideTourStatus`):
 
 Allowed transitions:
 - `SCHEDULED → RUNNING` — implemented (`start`, UC05)
-- `RUNNING → FINISHED` — **specified only** (`complete`, UC11 — not implemented)
+- `RUNNING → FINISHED` — implemented (`complete`, UC11)
 - `SCHEDULED → CANCELLED` — **specified only** (`cancel`, UC12 — not implemented)
 - `RUNNING → CANCELLED` — **specified only** (`cancel`, UC12 — not implemented)
 
@@ -112,11 +118,10 @@ Illegal transitions:
 - `FINISHED → CANCELLED` — a completed tour cannot be retroactively cancelled (UC12 § 4)
 - Anything out of `FINISHED` or `CANCELLED` — both are terminal
 
-> **Implementation status.** `GuideTourStatus` declares all four states and its
-> Javadoc lists all four transitions, but `GuideTour` implements only `start(...)`.
-> `FINISHED` and `CANCELLED` are currently unreachable at runtime — they exist so
-> `start` can reject them and so the persistence mapper can round-trip them. UC11
-> and UC12 make them reachable.
+> **Implementation status.** `start(...)` and `complete(...)` are implemented, so
+> `SCHEDULED`, `RUNNING` and `FINISHED` are all reachable. `CANCELLED` is not yet — UC12
+> (`cancel`) makes it so. It exists today so `start` and `complete` can reject it and so
+> the mapper can round-trip it.
 
 
 ## 4. Behavior
@@ -128,11 +133,12 @@ Postconditions: status `SCHEDULED`, `startedAt()` empty, no pending events.
 Emitted events: none. Creation is not an event in this context — contrast
 `TourBooking.request`, which emits `TourBookingRequested`.
 
-### `reconstitute(GuideTourId, TourId, Instant, GuideTourStatus, Instant)` — static factory
+### `reconstitute(GuideTourId, TourId, Instant, GuideTourStatus, Instant startedAt, Instant completedAt)` — static factory
 
-Preconditions: none by design (rehydration rule).
+Preconditions: none by design (rehydration rule). Both timestamps may be null.
 Postconditions: the aggregate reflects stored state exactly; no pending events.
-Emitted events: none. **Must only be called by the persistence mapper.**
+Emitted events: none. **Must only be called by the persistence mapper** — enforced by
+`ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers` (G-03).
 
 ### `start(Instant startedAt)`
 
@@ -148,6 +154,24 @@ Postconditions:
 
 Emitted events: `TourStarted`.
 
+### `complete(Instant completedAt)` — UC11
+
+Preconditions:
+- `status == RUNNING` (else `InvalidGuideTourStateException`)
+- `completedAt >= startedAt` (else `TourCompletedBeforeStartException`)
+- `completedAt` non-null (explicit `requireNonNull`)
+
+Postconditions:
+- `status == FINISHED`
+- `completedAt` set to the supplied value
+- On failure, **no state change** — both guards run before any mutation
+
+Emitted events: `TourCompleted`.
+
+Note the asymmetry with `start`: `start` compares against `scheduledStart` (the *plan*),
+`complete` against `startedAt` (what actually happened). A tour may legitimately start late,
+but it can never finish before it began.
+
 ### `pullDomainEvents()`
 
 Returns an unmodifiable snapshot of recorded events and clears the internal list.
@@ -156,9 +180,9 @@ use: `guideTour.pullDomainEvents().forEach(domainEventPublisher::publish)`.
 
 ### Accessors
 
-`id()`, `tourId()`, `scheduledStart()`, `status()`, `startedAt()`. Read-only; no
-setters exist. The aggregate is not anemic — `start` owns the transition logic and
-the drivers contain none.
+`id()`, `tourId()`, `scheduledStart()`, `status()`, `startedAt()`, `completedAt()`.
+Read-only; no setters exist. The aggregate is not anemic — `start` and `complete` own the
+transition logic and the drivers contain none.
 
 
 ## 5. Domain Events
@@ -185,8 +209,20 @@ Context-internal events would stay in the context's own `event` package — as
 
 Delivery: published post-commit via `DomainEventPublisher` (ADR-0002).
 
-`TourCompleted` (UC11) and `TourCancelledByGuide` (UC12) will follow the same
-pattern. Neither exists yet.
+### `TourCompleted` — UC11
+
+Package: `shared.domain.event`, same reasoning as `TourStarted`: `booking` subscribes to it
+(UC07) and must not depend on `guide`.
+
+Trigger: successful `complete(...)`.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `guideTourId` | `String` | Plain string — ADR-0005 category 2 |
+| `tourId` | `TourId` | ADR-0005 category 3 |
+| `completedAt` | `Instant` | |
+
+`TourCancelledByGuide` (UC12) will follow the same pattern and does not exist yet.
 
 
 ## 6. Failure Scenarios
@@ -232,5 +268,7 @@ Expressed as checkable items, naming the test that satisfies each.
 - [x] Orchestration: `StartTourDriverTest` — 14 tests covering happy path, clock
       resolution, not-found, all three illegal states and the too-early guard.
       Verified non-vacuous by mutation testing
-- [ ] `complete(...)` transitions and `TourCompleted` emission — UC11, not implemented
+- [x] `complete(...)` transitions and `TourCompleted` emission — UC11. Ten
+      `GuideTourTest.complete_*` / `completedAt_*` tests, eleven in `CompleteTourDriverTest`,
+      five in `GuideTourControllerTest`, and two persistence ITs
 - [ ] `cancel(...)` transitions and `TourCancelledByGuide` emission — UC12, not implemented

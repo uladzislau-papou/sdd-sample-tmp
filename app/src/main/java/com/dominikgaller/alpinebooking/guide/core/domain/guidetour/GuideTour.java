@@ -1,6 +1,8 @@
 package com.dominikgaller.alpinebooking.guide.core.domain.guidetour;
 
 import com.dominikgaller.alpinebooking.shared.domain.event.TourStarted;
+import com.dominikgaller.alpinebooking.shared.domain.event.TourCompleted;
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidGuideTourStateException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
@@ -36,6 +38,7 @@ public class GuideTour {
     private final Instant scheduledStart;
     private GuideTourStatus status;
     private Instant startedAt;
+    private Instant completedAt;
 
     private final List<DomainEvent> domainEvents = new ArrayList<>();
 
@@ -44,12 +47,14 @@ public class GuideTour {
             final TourId tourId,
             final Instant scheduledStart,
             final GuideTourStatus status,
-            final Instant startedAt) {
+            final Instant startedAt,
+            final Instant completedAt) {
         this.id = id;
         this.tourId = tourId;
         this.scheduledStart = scheduledStart;
         this.status = status;
         this.startedAt = startedAt;
+        this.completedAt = completedAt;
     }
 
     /**
@@ -67,7 +72,7 @@ public class GuideTour {
         Objects.requireNonNull(id, "GuideTourId must not be null");
         Objects.requireNonNull(tourId, "TourId must not be null");
         Objects.requireNonNull(scheduledStart, "scheduledStart must not be null");
-        return new GuideTour(id, tourId, scheduledStart, GuideTourStatus.SCHEDULED, null);
+        return new GuideTour(id, tourId, scheduledStart, GuideTourStatus.SCHEDULED, null, null);
     }
 
     /**
@@ -76,7 +81,8 @@ public class GuideTour {
      * <p>No creation-time invariants are enforced — the data is assumed to have been
      * valid when first written. Called exclusively by the persistence mapper.
      *
-     * @param startedAt may be {@code null} if the tour has not been started yet
+     * @param startedAt   may be {@code null} if the tour has not been started yet
+     * @param completedAt may be {@code null} if the tour has not been completed yet
      * @return a {@link GuideTour} reflecting the stored state, with no pending events
      */
     public static GuideTour reconstitute(
@@ -84,8 +90,9 @@ public class GuideTour {
             final TourId tourId,
             final Instant scheduledStart,
             final GuideTourStatus status,
-            final Instant startedAt) {
-        return new GuideTour(id, tourId, scheduledStart, status, startedAt);
+            final Instant startedAt,
+            final Instant completedAt) {
+        return new GuideTour(id, tourId, scheduledStart, status, startedAt, completedAt);
     }
 
     /**
@@ -106,6 +113,26 @@ public class GuideTour {
         this.status = GuideTourStatus.RUNNING;
         this.startedAt = startedAt;
         domainEvents.add(new TourStarted(id.value().toString(), tourId, startedAt));
+    }
+
+    /**
+     * Transitions the guide tour from {@code RUNNING} to {@code FINISHED} (UC11).
+     *
+     * @param completedAt the actual completion time; must not be null
+     * @throws InvalidGuideTourStateException     if the current state is not {@code RUNNING}
+     * @throws TourCompletedBeforeStartException  if {@code completedAt} is before {@code startedAt}
+     */
+    public void complete(final Instant completedAt) {
+        Objects.requireNonNull(completedAt, "completedAt must not be null");
+        if (status != GuideTourStatus.RUNNING) {
+            throw new InvalidGuideTourStateException(status);
+        }
+        if (completedAt.isBefore(startedAt)) {
+            throw new TourCompletedBeforeStartException(startedAt, completedAt);
+        }
+        this.status = GuideTourStatus.FINISHED;
+        this.completedAt = completedAt;
+        domainEvents.add(new TourCompleted(id.value().toString(), tourId, completedAt));
     }
 
     /**
@@ -146,5 +173,12 @@ public class GuideTour {
      */
     public Optional<Instant> startedAt() {
         return Optional.ofNullable(startedAt);
+    }
+
+    /**
+     * The moment the tour was completed, empty until it has been (UC11).
+     */
+    public Optional<Instant> completedAt() {
+        return Optional.ofNullable(completedAt);
     }
 }

@@ -51,10 +51,16 @@ public class GuideTourJooqRepository implements GuideTourRepository {
         final LocalDateTime startedAt = guideTour.startedAt()
                 .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
                 .orElse(null);
+        // Every mutable field of the aggregate must be written here — see
+        // ports/tour-booking-repository.outport.spec.md 2.3 for what happens otherwise.
+        final LocalDateTime completedAt = guideTour.completedAt()
+                .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
+                .orElse(null);
         final int rowsUpdated = dsl
                 .update(GUIDE_TOUR)
                 .set(GUIDE_TOUR.STATUS, guideTour.status().name())
                 .set(GUIDE_TOUR.STARTED_AT, startedAt)
+                .set(GUIDE_TOUR.COMPLETED_AT, completedAt)
                 .where(GUIDE_TOUR.ID.eq(guideTour.id().value().toString()))
                 .execute();
         if (rowsUpdated != 1) {

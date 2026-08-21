@@ -33,6 +33,10 @@ class GuideTourMapper {
                 tour.startedAt()
                         .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
                         .orElse(null));
+        record.setCompletedAt(
+                tour.completedAt()
+                        .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
+                        .orElse(null));
         return record;
     }
 
@@ -40,12 +44,16 @@ class GuideTourMapper {
         final Instant startedAt = Optional.ofNullable(record.getStartedAt())
                 .map(ldt -> ldt.toInstant(ZoneOffset.UTC))
                 .orElse(null);
+        final Instant completedAt = Optional.ofNullable(record.getCompletedAt())
+                .map(ldt -> ldt.toInstant(ZoneOffset.UTC))
+                .orElse(null);
         return GuideTour.reconstitute(
                 new GuideTourId(UUID.fromString(record.getId())),
                 new TourId(record.getTourId()),
                 record.getScheduledStart().toInstant(ZoneOffset.UTC),
                 GuideTourStatus.valueOf(record.getStatus()),
-                startedAt
+                startedAt,
+                completedAt
         );
     }
 }

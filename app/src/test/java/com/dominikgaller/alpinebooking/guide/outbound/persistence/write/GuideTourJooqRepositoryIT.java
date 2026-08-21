@@ -111,6 +111,39 @@ class GuideTourJooqRepositoryIT {
         assertThat(reloaded.get().startedAt()).contains(STARTED_AT);
     }
 
+    /**
+     * UC11 — {@code completedAt} is mutable aggregate state, so it must survive an update.
+     * The equivalent gap on {@code TourBooking} silently discarded a whole use case's
+     * effect; see {@code ports/tour-booking-repository.outport.spec.md} section 2.3.
+     */
+    @Test
+    void update_changesStatus_andCompletedAt_afterComplete() {
+        final GuideTour tour = sampleTour();
+        repository.save(tour);
+        tour.start(STARTED_AT);
+        repository.update(tour);
+
+        final Instant completedAt = STARTED_AT.plusSeconds(3600);
+        tour.complete(completedAt);
+        repository.update(tour);
+
+        final var reloaded = repository.findById(tour.id());
+        assertThat(reloaded).isPresent();
+        assertThat(reloaded.get().status()).isEqualTo(GuideTourStatus.FINISHED);
+        assertThat(reloaded.get().completedAt()).contains(completedAt);
+        assertThat(reloaded.get().startedAt()).contains(STARTED_AT);
+    }
+
+    @Test
+    void completedAt_isEmpty_forATourThatWasNeverCompleted() {
+        final GuideTour tour = sampleTour();
+        repository.save(tour);
+
+        final var loaded = repository.findById(tour.id()).orElseThrow();
+
+        assertThat(loaded.completedAt()).isEmpty();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private GuideTour sampleTour() {

@@ -1,8 +1,12 @@
 package com.dominikgaller.alpinebooking.guide.inbound.rest;
 
+import com.dominikgaller.alpinebooking.guide.core.inport.command.CompleteTourCommand;
 import com.dominikgaller.alpinebooking.guide.core.inport.command.StartTourCommand;
+import com.dominikgaller.alpinebooking.guide.core.inport.usecase.CompleteTourUseCase;
 import com.dominikgaller.alpinebooking.guide.core.inport.usecase.StartTourUseCase;
+import com.dominikgaller.alpinebooking.guide.inbound.rest.request.CompleteTourRequest;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.request.StartTourRequest;
+import com.dominikgaller.alpinebooking.guide.inbound.rest.response.CompleteTourResponse;
 import com.dominikgaller.alpinebooking.guide.inbound.rest.response.StartTourResponse;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,9 +24,13 @@ import java.util.Optional;
 public class GuideTourController implements GuideTourRestAPI {
 
     private final StartTourUseCase startTourUseCase;
+    private final CompleteTourUseCase completeTourUseCase;
 
-    public GuideTourController(final StartTourUseCase startTourUseCase) {
+    public GuideTourController(
+            final StartTourUseCase startTourUseCase,
+            final CompleteTourUseCase completeTourUseCase) {
         this.startTourUseCase = startTourUseCase;
+        this.completeTourUseCase = completeTourUseCase;
     }
 
     @Override
@@ -31,5 +39,15 @@ public class GuideTourController implements GuideTourRestAPI {
                 .map(StartTourRequest::startedAt);
         final var result = startTourUseCase.start(new StartTourCommand(guideTourId, startedAt));
         return new StartTourResponse(result.status());
+    }
+
+    @Override
+    public CompleteTourResponse complete(
+            final String guideTourId, final CompleteTourRequest request) {
+        final var completedAt = Optional.ofNullable(request)
+                .map(CompleteTourRequest::completedAt);
+        final var result = completeTourUseCase.complete(
+                new CompleteTourCommand(guideTourId, completedAt));
+        return new CompleteTourResponse(result.status());
     }
 }

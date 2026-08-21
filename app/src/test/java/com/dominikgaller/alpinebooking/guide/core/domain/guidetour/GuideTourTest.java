@@ -2,6 +2,8 @@ package com.dominikgaller.alpinebooking.guide.core.domain.guidetour;
 
 import com.dominikgaller.alpinebooking.shared.domain.TourId;
 import com.dominikgaller.alpinebooking.shared.domain.event.TourStarted;
+import com.dominikgaller.alpinebooking.shared.domain.event.TourCompleted;
+import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourCompletedBeforeStartException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.InvalidGuideTourStateException;
 import com.dominikgaller.alpinebooking.guide.core.domain.guidetour.exception.TourStartTooEarlyException;
 import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
@@ -126,6 +128,107 @@ class GuideTourTest {
         assertThat(tour.pullDomainEvents()).isEmpty();
     }
 
+    // ── UC11: complete ────────────────────────────────────────────────────────
+
+    private GuideTour runningTour() {
+        final GuideTour tour = scheduledTour();
+        tour.start(AT_SCHEDULED_START);
+        tour.pullDomainEvents();
+        return tour;
+    }
+
+    @Test
+    void complete_transitionsToFinished() {
+        final GuideTour tour = runningTour();
+
+        tour.complete(AFTER_SCHEDULED_START);
+
+        assertThat(tour.status()).isEqualTo(GuideTourStatus.FINISHED);
+    }
+
+    @Test
+    void complete_setsCompletedAt() {
+        final GuideTour tour = runningTour();
+
+        tour.complete(AFTER_SCHEDULED_START);
+
+        assertThat(tour.completedAt()).contains(AFTER_SCHEDULED_START);
+    }
+
+    @Test
+    void completedAt_isEmpty_beforeCompletion() {
+        assertThat(runningTour().completedAt()).isEmpty();
+    }
+
+    @Test
+    void complete_emitsTourCompletedEvent() {
+        final GuideTour tour = runningTour();
+
+        tour.complete(AFTER_SCHEDULED_START);
+
+        final List<DomainEvent> events = tour.pullDomainEvents();
+        assertThat(events).singleElement().isInstanceOf(TourCompleted.class);
+        final TourCompleted event = (TourCompleted) events.get(0);
+        assertThat(event.guideTourId()).isEqualTo(TOUR_ID.value().toString());
+        assertThat(event.tourId()).isEqualTo(TOUR_REF);
+        assertThat(event.completedAt()).isEqualTo(AFTER_SCHEDULED_START);
+    }
+
+    @Test
+    void complete_throwsNullPointerException_whenCompletedAtIsNull() {
+        final GuideTour tour = runningTour();
+
+        assertThatNullPointerException().isThrownBy(() -> tour.complete(null));
+    }
+
+    @Test
+    void complete_throwsTourCompletedBeforeStartException_whenBeforeStartedAt() {
+        final GuideTour tour = runningTour();
+
+        assertThatExceptionOfType(TourCompletedBeforeStartException.class)
+                .isThrownBy(() -> tour.complete(BEFORE_SCHEDULED_START));
+    }
+
+    @Test
+    void complete_beforeStart_doesNotChangeStatus() {
+        final GuideTour tour = runningTour();
+
+        try {
+            tour.complete(BEFORE_SCHEDULED_START);
+        } catch (TourCompletedBeforeStartException ignored) {
+        }
+
+        assertThat(tour.status()).isEqualTo(GuideTourStatus.RUNNING);
+        assertThat(tour.completedAt()).isEmpty();
+    }
+
+    @Test
+    void complete_throwsInvalidGuideTourStateException_whenScheduled() {
+        final GuideTour tour = scheduledTour();
+
+        assertThatExceptionOfType(InvalidGuideTourStateException.class)
+                .isThrownBy(() -> tour.complete(AFTER_SCHEDULED_START));
+    }
+
+    @Test
+    void complete_throwsInvalidGuideTourStateException_whenAlreadyFinished() {
+        final GuideTour tour = GuideTour.reconstitute(
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.FINISHED,
+                AT_SCHEDULED_START, AFTER_SCHEDULED_START);
+
+        assertThatExceptionOfType(InvalidGuideTourStateException.class)
+                .isThrownBy(() -> tour.complete(AFTER_SCHEDULED_START));
+    }
+
+    @Test
+    void complete_throwsInvalidGuideTourStateException_whenCancelled() {
+        final GuideTour tour = GuideTour.reconstitute(
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.CANCELLED, null, null);
+
+        assertThatExceptionOfType(InvalidGuideTourStateException.class)
+                .isThrownBy(() -> tour.complete(AFTER_SCHEDULED_START));
+    }
+
     // ── TooEarly ──────────────────────────────────────────────────────────────
 
     @Test
@@ -153,7 +256,7 @@ class GuideTourTest {
     @Test
     void start_throwsInvalidGuideTourStateException_whenAlreadyRunning() {
         final GuideTour tour = GuideTour.reconstitute(
-                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.RUNNING, AFTER_SCHEDULED_START);
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.RUNNING, AFTER_SCHEDULED_START, null);
 
         assertThatExceptionOfType(InvalidGuideTourStateException.class)
                 .isThrownBy(() -> tour.start(AFTER_SCHEDULED_START));
@@ -162,7 +265,7 @@ class GuideTourTest {
     @Test
     void start_throwsInvalidGuideTourStateException_whenFinished() {
         final GuideTour tour = GuideTour.reconstitute(
-                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.FINISHED, AFTER_SCHEDULED_START);
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.FINISHED, AFTER_SCHEDULED_START, null);
 
         assertThatExceptionOfType(InvalidGuideTourStateException.class)
                 .isThrownBy(() -> tour.start(AFTER_SCHEDULED_START));
@@ -171,7 +274,7 @@ class GuideTourTest {
     @Test
     void start_throwsInvalidGuideTourStateException_whenCancelled() {
         final GuideTour tour = GuideTour.reconstitute(
-                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.CANCELLED, null);
+                TOUR_ID, TOUR_REF, SCHEDULED_START, GuideTourStatus.CANCELLED, null, null);
 
         assertThatExceptionOfType(InvalidGuideTourStateException.class)
                 .isThrownBy(() -> tour.start(AFTER_SCHEDULED_START));

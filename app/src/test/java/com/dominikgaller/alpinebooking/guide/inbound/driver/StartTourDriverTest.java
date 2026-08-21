@@ -56,7 +56,7 @@ class StartTourDriverTest {
 
     private GuideTour tourInStatus(final GuideTourStatus status) {
         return GuideTour.reconstitute(
-                GuideTourId.generate(), TOUR_ID, SCHEDULED_START, status, null);
+                GuideTourId.generate(), TOUR_ID, SCHEDULED_START, status, null, null);
     }
 
     private static StartTourCommand command(final GuideTour tour) {

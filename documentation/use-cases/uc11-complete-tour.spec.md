@@ -1,16 +1,15 @@
 # Use Case Specification – CompleteTour (Guide)
 
 ## Status
-SPECIFIED
+IMPLEMENTED
 
 ## Bounded Context
 `guide` — triggered via REST by the guide. Publishes `TourCompleted` to
 `shared.domain.event` as a cross-context integration event consumed by `booking`
 (UC07). Integration pattern: event-driven, post-commit (ADR-0002).
 
-> Split out of the former `uc10-guide-actions.spec.md`. **UC07 has no trigger until
-> this exists** — nothing publishes `TourCompleted` today, and `GuideTour` exposes
-> only `start(...)`.
+> Split out of the former `uc10-guide-actions.spec.md`. Implemented; `TourCompleted` is now
+> published, which unblocks UC07.
 
 ## Purpose
 
@@ -142,43 +141,51 @@ HTTP status mapping:
 
 ## 10. Definition of Done
 
-Nothing is implemented yet; every item is open. Test names are the **planned**
-names, following the existing `start_*` convention in `GuideTourTest`.
+Implemented. Every test named below exists and passes.
 
 ### Behaviour
-- [ ] AC-01 covered by `GuideTourTest.complete_transitionsToFinished`,
-      `GuideTourTest.complete_setsCompletedAt`,
-      `StartTourDriverTest`'s counterpart `CompleteTourDriverTest.complete_usesClockPort_whenCompletedAtIsNull`,
+- [x] AC-01 covered by `GuideTourTest.complete_transitionsToFinished`,
+      `.complete_setsCompletedAt`,
+      `CompleteTourDriverTest.complete_usesClockPort_whenCompletedAtIsEmpty`,
+      `.complete_happyPath_returnsFinishedStatus`, `.complete_happyPath_callsUpdateOnRepository`,
       and `GuideTourControllerTest.complete_returns200_withFinishedStatus_whenNoBody`
-- [ ] AC-02 covered by `CompleteTourDriverTest.complete_usesProvidedCompletedAt_whenNotNull`
+- [x] AC-02 covered by `CompleteTourDriverTest.complete_usesProvidedCompletedAt_whenPresent`
       and `GuideTourControllerTest.complete_returns200_withFinishedStatus_whenCompletedAtProvided`
-- [ ] AC-03 covered by `GuideTourTest.complete_throwsTourCompletedBeforeStartException_whenBeforeStartedAt`,
-      `GuideTourTest.complete_beforeStart_doesNotChangeStatus`,
+- [x] AC-03 covered by `GuideTourTest.complete_throwsTourCompletedBeforeStartException_whenBeforeStartedAt`,
+      `.complete_beforeStart_doesNotChangeStatus`,
+      `CompleteTourDriverTest.complete_propagatesTourCompletedBeforeStartException`,
       and `GuideTourControllerTest.complete_returns409_whenCompletedBeforeStart`
-- [ ] AC-04 covered by `GuideTourTest.complete_throwsInvalidGuideTourStateException_whenScheduled`,
+- [x] AC-04 covered by `GuideTourTest.complete_throwsInvalidGuideTourStateException_whenScheduled`,
       `.complete_throwsInvalidGuideTourStateException_whenAlreadyFinished`,
       `.complete_throwsInvalidGuideTourStateException_whenCancelled`,
       and `GuideTourControllerTest.complete_returns409_whenInvalidState`
-- [ ] AC-05 covered by `GuideTourControllerTest.complete_returns404_whenGuideTourNotFound`
-- [ ] `TourCompleted` emission covered by `GuideTourTest.complete_emitsTourCompletedEvent`
+- [x] AC-05 covered by `GuideTourControllerTest.complete_returns404_whenGuideTourNotFound`
+- [x] `TourCompleted` emission covered by `GuideTourTest.complete_emitsTourCompletedEvent`
 
 ### Contracts
-- [ ] `GuideTour.complete(Instant)` exists on the aggregate
-- [ ] `CompleteTourCommand` / `CompleteTourResult` / `CompleteTourUseCase` exist in
+- [x] `GuideTour.complete(Instant)` exists on the aggregate
+- [x] `CompleteTourCommand` / `CompleteTourResult` / `CompleteTourUseCase` exist in
       `guide.core.inport`
-- [ ] `CompleteTourDriver` exists in `guide.inbound.driver`
-- [ ] `shared.domain.event.TourCompleted` exists, mirroring `TourStarted`
-- [ ] `GuideTourRestAPI` gains the `@PostMapping("/{guideTourId}/complete")` contract;
+- [x] `CompleteTourDriver` exists in `guide.inbound.driver`
+- [x] `shared.domain.event.TourCompleted` exists, mirroring `TourStarted`
+- [x] `GuideTourRestAPI` gains the `@PostMapping("/{guideTourId}/complete")` contract;
       `GuideTourController` carries no HTTP annotations
       (`architecture.definition.md` § 4.5)
-- [ ] `rest/uc11-complete-tour.http` covers 200 (both variants), 404 and both 409 cases
-- [ ] Flyway migration adds `completed_at` to `guide_tour`
-- [ ] Persistence roundtrip covered by
+- [x] `rest/uc11-complete-tour.http` covers 200 (both variants), 404 and both 409 cases
+- [x] Flyway migration adds `completed_at` to `guide_tour`
+- [x] Persistence roundtrip covered by
       `GuideTourJooqRepositoryIT.update_changesStatus_andCompletedAt_afterComplete`
-- [ ] `documentation/domain/aggregate-guide-tour.spec.md` written — it does not exist
-      yet for any guide use case (recorded in `notes.md`)
+- [x] `documentation/domain/aggregate-guide-tour.spec.md` updated with the
+      `RUNNING → FINISHED` transition, `complete(...)`'s contract, `completedAt`, and the
+      `TourCompleted` payload
+- [x] `TourCompletedBeforeStartException` → 409 mapped in `GuideExceptionHandler`, covered by
+      `GuideTourControllerTest.complete_returns409_whenCompletedBeforeStart`
+- [x] Malformed id → 400, covered by
+      `CompleteTourDriverTest.complete_throwsIllegalArgumentException_whenIdIsMalformed`
+      and the existing `IllegalArgumentException` mapping
 
 ### Governance
-- [ ] This spec reconciled against the code by `spec-documenter`
-- [ ] `ddd-hex-reviewer` returns `PASS`
-- [ ] Quality gates green (`test.definition.md` § 7)
+- [ ] This spec reconciled against the code by `spec-documenter` (not yet run on this increment)
+- [ ] `ddd-hex-reviewer` returns `PASS` (not yet run on this increment)
+- [ ] Quality gates green (`test.definition.md` § 7) — 226 tests pass, but gate 11 is the
+      reviewer verdict, so this closes with the two items above
