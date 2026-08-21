@@ -252,8 +252,27 @@ carve-out would have been written to excuse.
   clarification above: the ambiguity was real, and the honest resolution is that build
   config counts, not that this commit was fine.
 
-Neither is corrected by rewriting history. A doctrine commit is not amended (see above),
-and that applies to the record of its own breaches too.
+- **The § 1.4 nullable-record-component commit** (UC08 increment) — bundled the § 1.4
+  doctrine change with a production deletion (`TourBookingCancelled.java`) and two Javadoc
+  edits. The deletion was UC08 work with no connection to § 1.4; it arrived because an
+  earlier `git rm` had staged it and committing with explicit paths still commits the whole
+  index. The result was worse than a § 5.1 breach: `TourBooking` at that commit still
+  imported and instantiated the deleted class, so **the commit did not compile** and gates
+  1–2 failed at it. Found by `ddd-hex-reviewer`. Nothing had been pushed, so the commit was
+  rebuilt as doctrine-only and the deletion moved to the UC08 commit that follows.
+
+The first two are not corrected by rewriting history: both were settled, and slicing them
+retroactively would have fabricated an ordering that did not happen. The third is
+different, and the distinction is worth stating so it is not read as a licence. What was
+rewritten there was not the *ordering* — the doctrine genuinely preceded the code either
+way — but an unpublished commit that failed to build. Leaving a non-compiling commit in the
+history of a reference project is a defect in its own right, separate from § 5.1.
+
+So the rule is: **never rewrite to improve how the ordering looks; you may rewrite to
+repair a commit that does not build, and when you do, the breach still gets an entry here.**
+A doctrine commit is not amended to accommodate later code, and that applies to the record
+of its own breaches too — which is why this entry exists even though the commit it
+describes no longer does.
 
 
 # 6. Anti-Patterns

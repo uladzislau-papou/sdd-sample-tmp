@@ -34,8 +34,43 @@ Tests (naming and structure)
 ### 1.4 Null Policy
 
 -   Domain and application layer MUST NOT return null.
--   Use Optional`<T>`{=html} for absence, not null.
+-   Use `Optional<T>` for absence, not null.
 -   At boundaries (e.g., REST), nulls MUST be normalized immediately.
+
+**Exception — record components of events and commands MAY be null.** The rule above
+governs *return values*. A record component is a field that happens to have an accessor,
+and Java's own guidance is against `Optional` fields: it adds a wrapper allocation per
+event, breaks serialisation for anything that inspects components reflectively, and makes
+pattern-matching deconstruction awkward. So an optional correlation id or an optional
+free-text field is declared as a plain nullable type.
+
+Three constraints, which are the whole of the exception:
+
+1.  **Scope.** It applies only to record components of **domain events and commands**. A
+    method — including an aggregate accessor over the same underlying field — still
+    returns `Optional`. `TourBooking.cancellationReason()` returns
+    `Optional<CancellationReason>` while `BookingCancelledByUser.reason()` is nullable,
+    and that asymmetry is the rule working as intended, not an inconsistency.
+2.  **Absence must be a real business case.** The component is nullable because *not
+    having one* is a legitimate state — a caller with no correlation id, a cancellation
+    with no reason given. "Not filled in yet" is not a business case; that is a missing
+    invariant wearing a null.
+3.  **The nullability MUST be documented**, either as an `@param` tag on the record or in
+    prose in the class Javadoc, and it MUST say what absence means. An undocumented
+    nullable component is a violation of this section, not an instance of its exception.
+
+**This list of constraints is the rule. There is deliberately no list of permitted types**
+— an earlier revision of this section carried a table of the four records that relied on
+the exception, which would have needed an edit every time a fifth appeared and left the
+status of anything absent from it undefined. That is the same failure mode as enumerating
+the fields a repository's `update` must write (see
+`ports/tour-booking-repository.outport.spec.md` § 2.3): a list of instances goes stale, a
+stated criterion does not. `ddd-hex-reviewer` spotted the table one level down from the
+unenforceability it was written to fix.
+
+Recorded because four production records already relied on this and the carve-out existed
+only in their own Javadoc — leaving § 1.4 reading as a prohibition on shipped, reviewed
+code. Found by `ddd-hex-reviewer` during the UC08 review, listed under `Undocumented`.
 
 ------------------------------------------------------------------------
 
