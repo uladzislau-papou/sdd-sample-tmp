@@ -350,6 +350,42 @@ Guiding rule:
 - Never call Instant.now() in the domain.
 - Use an outbound port ClockPort or provide time from application service.
 
+### 8.1 Who may supply a domain timestamp
+
+The rule above says where `now()` may be read. It does not say who is allowed to *decide*
+what "now" was, and that gap let three use cases accept an arbitrary `Instant` from an
+HTTP client with nothing bounding it — a cancellation could be dated before the booking
+existed, or years in the future.
+
+**A driver behind a REST endpoint MUST read the timestamp from `ClockPort`. It MUST NOT
+accept one from the request.** The time an action happened is the system's observation,
+not the caller's claim, and there is no business case in this project for a client
+asserting it. Nothing needs validating, because nothing is accepted.
+
+**A driver receiving a timestamp from another bounded context MUST use the one supplied,
+falling back to `ClockPort` only when it is absent.** UC06 and UC07 take `startedAt` and
+`completedAt` from `TourStarted` / `TourCompleted`; UC09 takes `cancelledAt` from the
+guide side. These are facts already recorded in the originating context, crossing a
+boundary. Re-dating them with the receiver's clock would make a booking claim it completed
+at a different moment than the tour did — the timestamps would drift apart by the event's
+delivery latency, and neither would be wrong-looking on its own.
+
+The discriminator is the **caller**, not the field:
+
+| Inbound adapter | Timestamp source |
+|-----------------|------------------|
+| `inbound.rest` → driver | `ClockPort` only. No timestamp on the request DTO |
+| `inbound.listener` → driver | the event's timestamp, `ClockPort` as fallback |
+| another context's driver → inport | the caller's timestamp, `ClockPort` as fallback |
+
+A command reached from both surfaces therefore carries a nullable timestamp, and the REST
+adapter simply never populates it.
+
+Recorded after `ddd-hex-reviewer` reported the gap under `Undocumented` during the UC08
+review: `architecture.definition.md` § 8 permitted "provide time from application
+service" without saying whether an inbound adapter may override the clock, so three use
+cases had quietly answered yes.
+
 ## 9. Shared Kernel (`shared`)
 
 Cross-cutting building blocks that are not owned by any single bounded context.
