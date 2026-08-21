@@ -480,6 +480,46 @@ listener is simply a fan-out. The alternative (one transaction per booking, plus
 outbox to make the fan-out reliable) is a substantially larger design for no invariant
 gained.
 
+### One transaction spanning two bounded contexts
+
+The guideline above covers instances of the same aggregate type inside one context. UC12
+does something the document did not previously address: a `GuideTour` mutation and N
+`TourBooking` mutations share **one** transaction, across a context boundary, because the
+guide's driver calls `booking`'s inport synchronously (§ 11 rule 3).
+
+**This is permitted, narrowly.** All of the following must hold:
+
+1. The call is driver-to-inport, per § 11 rule 3. No other layer may open a cross-context
+   transaction.
+2. The caller genuinely needs confirmation before it can commit its own decision. UC12
+   qualifies: a tour reported cancelled while its bookings still believe it is going ahead
+   is the failure the use case exists to prevent. "It would be convenient" does not qualify.
+3. The callee joins the caller's transaction (`REQUIRED`) rather than opening its own. A
+   `REQUIRES_NEW` callee would give the illusion of atomicity while committing
+   independently — worse than not sharing at all, because the divergence would be silent.
+4. No invariant spans the two aggregates. The tour and its bookings are updated together
+   for consistency of *outcome*, not because either enforces a rule about the other. This
+   keeps § 10's actual prohibition intact.
+
+**Where it is not permitted:** a notification. If the receiving context may react whenever
+it likes, use a domain event and `AFTER_COMMIT` + `REQUIRES_NEW`, as UC06 and UC07 do.
+Reaching for a shared transaction there buys coupling and lock duration for nothing.
+
+The cost is real and accepted: the transaction is open for the duration of N cross-context
+calls, both contexts fail together, and neither can be deployed separately without
+revisiting this. That is the trade for never having a cancelled tour with live bookings.
+
+Switching an interaction between the two models — shared transaction ↔ event — is a
+cross-context interaction model change and an ADR trigger (`sdd.playbook.md` § 6 item 10).
+Establishing the *first* such transaction was reviewed as trigger 5 ("modifying transaction
+boundaries") and ruled **no ADR** by the maintainer, on the grounds that ADR-0008 had
+already examined this exact interaction and been rejected in favour of the direct call.
+This section records that ruling so the precedent is a rule rather than a decision buried
+in one use-case spec.
+
+Found by `ddd-hex-reviewer` under `Undocumented` during the UC09 review, which correctly
+noted that whether trigger 5 fires was "a matter of opinion" while this was unwritten.
+
 If a genuine cross-aggregate invariant ever appears, that is not a transaction-scoping
 question but a modelling error: the aggregate boundary is wrong. Raise it rather than
 widening the transaction.

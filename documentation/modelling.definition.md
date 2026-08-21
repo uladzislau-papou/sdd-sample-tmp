@@ -200,6 +200,41 @@ Constraints:
 - Aggregates never call repositories, message buses, HTTP clients, clocks directly
 
 
+### What an aggregate stores
+
+**An aggregate stores what an invariant or an acceptance criterion must be able to
+observe, and nothing else.** Everything else a transition is told belongs on the emitted
+event, where whoever needs it can read it without the aggregate carrying state it never
+consults.
+
+Apply it by naming the observer. If you cannot name what reads the field — an invariant
+that guards on it, an acceptance criterion that asserts it, a query the system owes an
+answer to — it is event payload, not state.
+
+Worked both ways, because the rule is not "prefer events":
+
+| Field | Stored? | The observer |
+|-------|---------|--------------|
+| `TourBooking.cancelledAt` / `cancelledBy` / `cancellationReason` | **yes** | UC08 AC-06 must prove a pre-existing attribution survived a *rejected* second cancellation. The attempt throws, so no event is emitted and there is nothing but aggregate state to assert against |
+| `BookingActivated.guideTourId`, `BookingCompleted.guideTourId`, `BookingCancelledByGuide.guideTourId` | no | nothing queries which guide tour caused a transition; no invariant guards on it |
+| `startedAt` on `TourBooking` (UC06), `completedAt` on `TourBooking` (UC07) | no | another context's fact, relayed. No booking invariant compares against it |
+| `GuideTour.startedAt` | **yes** | invariant I-07 compares `completedAt` against it |
+
+The temptation this rule resists is storing a value because it was passed in and looks
+like data. A column nothing reads still has to be migrated, mapped, round-tripped and
+tested, and it invites a later reader to treat it as authoritative when the event was.
+
+The temptation it also resists is the opposite one — dropping a field for symmetry with a
+neighbouring use case. `TourBooking` stores its cancellation timestamp while discarding its
+completion timestamp, and that asymmetry is correct: the two have different observers.
+Consistency between use cases is not the criterion; the observer is.
+
+Recorded after `ddd-hex-reviewer` observed that this criterion had decided UC06, UC07,
+UC08 and UC09 while existing only in a use-case spec and a domain spec — authority levels
+14 and 16 — which made the precedent unappealable and unenforceable. Same defect class
+`architecture.definition.md` § 4.6 fixed for write-side query criteria.
+
+
 ## Aggregate Root
 
 *Definition:* The entity that guards the aggregate boundary.  
