@@ -48,7 +48,7 @@ public class GuideTourJooqRepository implements GuideTourRepository {
 
     @Override
     public void update(final GuideTour guideTour) {
-        final LocalDateTime startedAt = Optional.ofNullable(guideTour.startedAt())
+        final LocalDateTime startedAt = guideTour.startedAt()
                 .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
                 .orElse(null);
         final int rowsUpdated = dsl

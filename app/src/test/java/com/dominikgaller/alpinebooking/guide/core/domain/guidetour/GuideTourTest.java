@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class GuideTourTest {
 
@@ -25,6 +26,51 @@ class GuideTourTest {
 
     private GuideTour scheduledTour() {
         return GuideTour.schedule(TOUR_ID, TOUR_REF, SCHEDULED_START);
+    }
+
+    // ── Construction guards (G-01, G-02) ─────────────────────────────────────
+
+    @Test
+    void schedule_throwsNullPointerException_whenIdIsNull() {
+        assertThatNullPointerException()
+                .isThrownBy(() -> GuideTour.schedule(null, TOUR_REF, SCHEDULED_START));
+    }
+
+    @Test
+    void schedule_throwsNullPointerException_whenTourIdIsNull() {
+        assertThatNullPointerException()
+                .isThrownBy(() -> GuideTour.schedule(TOUR_ID, null, SCHEDULED_START));
+    }
+
+    @Test
+    void schedule_throwsNullPointerException_whenScheduledStartIsNull() {
+        assertThatNullPointerException()
+                .isThrownBy(() -> GuideTour.schedule(TOUR_ID, TOUR_REF, null));
+    }
+
+    @Test
+    void start_throwsNullPointerException_whenStartedAtIsNull() {
+        final GuideTour tour = scheduledTour();
+
+        assertThatNullPointerException().isThrownBy(() -> tour.start(null));
+    }
+
+    /**
+     * G-04: {@code startedAt()} previously returned {@code null} before the tour started,
+     * against {@code coding-style.definition.md} section 1.4.
+     */
+    @Test
+    void startedAt_isEmpty_beforeTheTourStarts() {
+        assertThat(scheduledTour().startedAt()).isEmpty();
+    }
+
+    @Test
+    void startedAt_isPresent_afterTheTourStarts() {
+        final GuideTour tour = scheduledTour();
+
+        tour.start(AT_SCHEDULED_START);
+
+        assertThat(tour.startedAt()).contains(AT_SCHEDULED_START);
     }
 
     // ── Happy path ────────────────────────────────────────────────────────────
@@ -53,7 +99,7 @@ class GuideTourTest {
 
         tour.start(AFTER_SCHEDULED_START);
 
-        assertThat(tour.startedAt()).isEqualTo(AFTER_SCHEDULED_START);
+        assertThat(tour.startedAt()).contains(AFTER_SCHEDULED_START);
     }
 
     @Test

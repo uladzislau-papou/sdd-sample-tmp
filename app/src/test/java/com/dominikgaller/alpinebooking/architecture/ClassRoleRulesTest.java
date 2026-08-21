@@ -223,6 +223,32 @@ class ClassRoleRulesTest {
                 .check(production);
     }
 
+    /**
+     * {@code reconstitute} deliberately skips every creation-time invariant
+     * ({@code modelling.definition.md}, Rehydration Rule), so it is a hole in the
+     * Always-Valid guarantee for anything that is not the persistence mapper. It must be
+     * {@code public} — the mappers live in a different package — so visibility cannot
+     * express the restriction and a rule has to.
+     *
+     * <p>Test code calls it freely as a builder; that is fine, and invisible here because
+     * the importer excludes tests.
+     */
+    @Test
+    @DisplayName("Only the persistence mappers may call reconstitute")
+    void reconstitute_isCalledOnlyByPersistenceMappers() {
+        noClasses()
+                .that().resideOutsideOfPackage("..outbound.persistence..")
+                .should().callMethodWhere(
+                        com.tngtech.archunit.core.domain.JavaCall.Predicates.target(
+                                com.tngtech.archunit.core.domain.properties.HasName.Predicates
+                                        .name("reconstitute")))
+                .because("reconstitute bypasses the invariants that request(...) and "
+                        + "schedule(...) enforce. Only the persistence mapper rehydrating a "
+                        + "row that was valid when written may use it — application code "
+                        + "must go through the guarded factories.")
+                .check(production);
+    }
+
     @Test
     @DisplayName("Repository outports expose no persistence type")
     void outports_exposeNoPersistenceTypes() {

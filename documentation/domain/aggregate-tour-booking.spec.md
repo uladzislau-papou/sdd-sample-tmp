@@ -139,7 +139,10 @@ Postconditions:
 - No pending domain events
 
 Emitted events: none. **Persistence mapper only** — `TourBookingMapper` is its sole
-intended caller. It is `public`, so nothing structurally prevents misuse.
+caller. It must stay `public` because the mapper lives in another package, so visibility
+cannot express the restriction; `ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers`
+enforces it instead and fails the build if anything outside `..outbound.persistence..`
+calls it (ADR 0007).
 
 ### confirm(Instant now)
 Preconditions:
@@ -277,8 +280,6 @@ Expressed as checkable items naming the test that satisfies each.
       mechanically by `DependencyRulesTest` and `ClassRoleRulesTest` (ADR 0007)
 
 ### Open
-- [ ] `reconstitute` is `public` and skips invariant checks by design, so application code
-      could bypass `request`'s guards. No test or structural rule prevents it. Same shape
-      as `aggregate-guide-tour.spec.md` G-03
+- [x] `reconstitute` is restricted to the persistence mappers by `ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers` (ADR 0007). It stays `public` because the mapper is in another package, so visibility cannot express it
 - [ ] COMPLETED is declared in `TourBookingStatus` and reachable from no method —
       UC07 (`markCompleted`) is specified and unimplemented

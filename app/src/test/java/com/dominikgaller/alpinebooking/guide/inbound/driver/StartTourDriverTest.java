@@ -127,7 +127,7 @@ class StartTourDriverTest {
 
         driver.start(command(tour));
 
-        assertThat(tour.startedAt()).isEqualTo(CLOCK_NOW);
+        assertThat(tour.startedAt()).contains(CLOCK_NOW);
     }
 
     @Test
@@ -137,7 +137,7 @@ class StartTourDriverTest {
 
         driver.start(command(tour, EXPLICIT_START));
 
-        assertThat(tour.startedAt()).isEqualTo(EXPLICIT_START);
+        assertThat(tour.startedAt()).contains(EXPLICIT_START);
     }
 
     // ── AC-05: not found ─────────────────────────────────────────────────────

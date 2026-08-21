@@ -30,7 +30,7 @@ class GuideTourMapper {
         record.setScheduledStart(LocalDateTime.ofInstant(tour.scheduledStart(), ZoneOffset.UTC));
         record.setStatus(tour.status().name());
         record.setStartedAt(
-                Optional.ofNullable(tour.startedAt())
+                tour.startedAt()
                         .map(i -> LocalDateTime.ofInstant(i, ZoneOffset.UTC))
                         .orElse(null));
         return record;

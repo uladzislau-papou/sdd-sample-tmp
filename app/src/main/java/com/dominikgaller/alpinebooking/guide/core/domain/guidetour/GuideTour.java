@@ -9,6 +9,8 @@ import com.dominikgaller.alpinebooking.shared.domain.event.DomainEvent;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Optional;
+import java.util.Objects;
 import java.util.List;
 
 /**
@@ -62,6 +64,9 @@ public class GuideTour {
             final GuideTourId id,
             final TourId tourId,
             final Instant scheduledStart) {
+        Objects.requireNonNull(id, "GuideTourId must not be null");
+        Objects.requireNonNull(tourId, "TourId must not be null");
+        Objects.requireNonNull(scheduledStart, "scheduledStart must not be null");
         return new GuideTour(id, tourId, scheduledStart, GuideTourStatus.SCHEDULED, null);
     }
 
@@ -91,6 +96,7 @@ public class GuideTour {
      * @throws TourStartTooEarlyException     if {@code startedAt} is before {@code scheduledStart}
      */
     public void start(final Instant startedAt) {
+        Objects.requireNonNull(startedAt, "startedAt must not be null");
         if (status != GuideTourStatus.SCHEDULED) {
             throw new InvalidGuideTourStateException(status);
         }
@@ -132,7 +138,13 @@ public class GuideTour {
         return status;
     }
 
-    public Instant startedAt() {
-        return startedAt;
+    /**
+     * The moment the tour actually started, empty until it has.
+     *
+     * <p>Returns {@link Optional} rather than a nullable {@link Instant}:
+     * {@code coding-style.definition.md} section 1.4 forbids the domain returning null.
+     */
+    public Optional<Instant> startedAt() {
+        return Optional.ofNullable(startedAt);
     }
 }

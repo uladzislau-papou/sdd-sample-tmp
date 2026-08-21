@@ -34,7 +34,7 @@ State:
 | `tourId` | `TourId` | no | External catalogue reference. Lives in `shared.domain` because no context in this system owns it — ADR-0005 category 3 |
 | `scheduledStart` | `Instant` | no | |
 | `status` | `GuideTourStatus` | yes | via transition methods only |
-| `startedAt` | `Instant` | yes | `null` until started |
+| `startedAt` | `Instant` | yes | exposed as `Optional<Instant>` — empty until started (G-04) |
 
 Consistency boundary: the aggregate itself. No cross-aggregate invariant — a guide
 tour knows nothing about how many bookings reference it.
@@ -60,31 +60,36 @@ Enforced today:
 
 Violations MUST result in an exception.
 
-### Known gaps in enforcement
+### Enforcement gaps — all four closed
 
-Documented rather than silently claimed, per `test.definition.md` § 6 ("if coverage
-is intentionally missing, it MUST be documented"). These are **not** invariants the
-code enforces today:
+Kept as history, because one of the four was closed by changing the enforcement
+mechanism rather than the code.
 
-- **G-01** — `GuideTour.schedule(id, tourId, scheduledStart)` performs **no null
-  checks**. `schedule(null, null, null)` yields a live object. `TourBooking.request`
-  by contrast validates its arguments. This is an Always-Valid violation
-  (`modelling.definition.md` § Always-Valid Principle, `sdd.playbook.md` § 8).
-- **G-02** — `start(null)` throws `NullPointerException` from
-  `startedAt.isBefore(...)` rather than a domain exception. The contract says
-  "must not be null" but nothing enforces it.
-- **G-03** — `reconstitute(...)` deliberately skips invariant checks (documented and
-  correct per the rehydration rule, `modelling.definition.md` § Rehydration Rule),
-  but it is `public`, so nothing prevents application code from using it to bypass
-  I-03/I-04. `GuideTourMapper` is its only intended caller.
-- **G-04** — `startedAt()` returns `null` before the tour starts.
-  `coding-style.definition.md` § 1.4 forbids returning null from the domain and
-  application layers and requires `Optional<T>` for absence. The § 1 table describes
-  this as intended, but it is a documented rule violation, not a design choice.
-  `BookingActivated.guideTourId()` is nullable for the same reason.
-  Found by `ddd-hex-reviewer`.
+- **G-01 — closed.** `schedule(...)` performed **no** null checks; `schedule(null, null,
+  null)` yielded a live object, while `TourBooking.request` validated its arguments. Now
+  guarded by `Objects.requireNonNull` on all three parameters. Covered by
+  `GuideTourTest.schedule_throwsNullPointerException_when{Id,TourId,ScheduledStart}IsNull`.
+- **G-02 — closed.** `start(null)` threw `NullPointerException` from
+  `startedAt.isBefore(...)` — the right exception *type* by accident, from the wrong place
+  and with no message. Now an explicit `Objects.requireNonNull`. `NullPointerException` is
+  correct: nulls are programmer errors, not business semantics
+  (`coding-style.definition.md` § 6.2). Covered by
+  `GuideTourTest.start_throwsNullPointerException_whenStartedAtIsNull`.
+- **G-03 — closed by a rule, not by code.** `reconstitute(...)` must stay `public` — the
+  mapper is in another package — so visibility cannot express the restriction.
+  `ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers` now fails the build if
+  anything outside `..outbound.persistence..` calls it, verified by planting a call in
+  `StartTourDriver`. Tests still use it as a builder; the importer excludes them.
+- **G-04 — closed.** `startedAt()` returned `null` before the tour started, against
+  `coding-style.definition.md` § 1.4. Now `Optional<Instant>`, which also simplified
+  `GuideTourMapper` and `GuideTourJooqRepository` — both had been wrapping the nullable
+  return in `Optional.ofNullable` at the call site.
 
-G-01 and G-02 are candidate work items; they are not covered by any current test.
+`BookingActivated.guideTourId()` stays nullable, deliberately: a **record component is a
+field, not a query**. `Optional` is for return values, and Java's own guidance discourages
+`Optional` fields — so an event carrying an absent correlation id is not a § 1.4 violation.
+(`StartTourCommand`'s `Optional<Instant>` component is the inconsistency, in the other
+direction.)
 
 
 ## 3. State Model
@@ -118,8 +123,8 @@ Illegal transitions:
 
 ### `schedule(GuideTourId, TourId, Instant)` — static factory
 
-Preconditions: none enforced (see G-01).
-Postconditions: status `SCHEDULED`, `startedAt` null, no pending events.
+Preconditions: `id`, `tourId` and `scheduledStart` non-null (G-01, enforced).
+Postconditions: status `SCHEDULED`, `startedAt()` empty, no pending events.
 Emitted events: none. Creation is not an event in this context — contrast
 `TourBooking.request`, which emits `TourBookingRequested`.
 
@@ -134,7 +139,7 @@ Emitted events: none. **Must only be called by the persistence mapper.**
 Preconditions:
 - `status == SCHEDULED` (else `InvalidGuideTourStateException`)
 - `startedAt >= scheduledStart` (else `TourStartTooEarlyException`)
-- `startedAt` non-null (contract only — see G-02)
+- `startedAt` non-null, enforced (G-02)
 
 Postconditions:
 - `status == RUNNING`
@@ -191,8 +196,8 @@ pattern. Neither exists yet.
 | Start when not `SCHEDULED` | `InvalidGuideTourStateException` | no state change, no event |
 | Start before `scheduledStart` | `TourStartTooEarlyException` | no state change, no event |
 | Load a non-existent tour | `GuideTourNotFoundException` | thrown by the driver, not the aggregate |
-| `start(null)` | `NullPointerException` | **G-02** — should be a domain exception |
-| `schedule` with null arguments | none | **G-01** — should be rejected |
+| `start(null)` | `NullPointerException` | explicit guard (G-02) — nulls are programmer errors, not business semantics |
+| `schedule` with a null argument | `NullPointerException` | explicit guard (G-01) |
 
 All three domain exceptions extend `RuntimeException` and carry a message naming the
 offending state or time. `GuideTourNotFoundException` lives in the aggregate's
@@ -220,8 +225,10 @@ Expressed as checkable items, naming the test that satisfies each.
 - [x] Persistence round-trip incl. UTC handling — `GuideTourJooqRepositoryIT` (5 methods)
 
 ### Open
-- [ ] G-01: `schedule` rejects null arguments — no test, no enforcement
-- [ ] G-02: `start(null)` raises a domain exception — no test, no enforcement
+- [x] G-01 `schedule` rejects nulls — three `GuideTourTest.schedule_throwsNullPointerException_*` tests
+- [x] G-02 `start(null)` guarded — `GuideTourTest.start_throwsNullPointerException_whenStartedAtIsNull`
+- [x] G-03 `reconstitute` restricted — `ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers`
+- [x] G-04 `startedAt()` returns `Optional` — `GuideTourTest.startedAt_isEmpty_beforeTheTourStarts`, `.startedAt_isPresent_afterTheTourStarts`
 - [x] Orchestration: `StartTourDriverTest` — 14 tests covering happy path, clock
       resolution, not-found, all three illegal states and the too-early guard.
       Verified non-vacuous by mutation testing

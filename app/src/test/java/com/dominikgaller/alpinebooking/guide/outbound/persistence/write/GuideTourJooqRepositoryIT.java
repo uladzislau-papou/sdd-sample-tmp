@@ -92,7 +92,7 @@ class GuideTourJooqRepositoryIT {
         assertThat(loaded.tourId()).isEqualTo(TOUR_REF);
         assertThat(loaded.scheduledStart()).isEqualTo(SCHEDULED_START);
         assertThat(loaded.status()).isEqualTo(GuideTourStatus.SCHEDULED);
-        assertThat(loaded.startedAt()).isNull();
+        assertThat(loaded.startedAt()).isEmpty();
     }
 
     // ── update ───────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ class GuideTourJooqRepositoryIT {
         final var reloaded = repository.findById(tour.id());
         assertThat(reloaded).isPresent();
         assertThat(reloaded.get().status()).isEqualTo(GuideTourStatus.RUNNING);
-        assertThat(reloaded.get().startedAt()).isEqualTo(STARTED_AT);
+        assertThat(reloaded.get().startedAt()).contains(STARTED_AT);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
