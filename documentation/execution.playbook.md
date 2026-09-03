@@ -153,12 +153,10 @@ Standing rules for the whole phase:
 - Always-Valid domain model enforcement
 
 Technical constraints:
-- Java 25 features allowed (records, sealed types, pattern matching, flexible
-  constructor bodies, unnamed variables, stream gatherers) — matches the toolchain
-  declared in `gradle/libs.versions.toml`; raising the baseline is an ADR trigger
-  (`sdd.playbook.md` § 6 item 13, `adr/0006-java-25-baseline.adr.md`)
-- **No preview features.** `--enable-preview` is not enabled and enabling it is a
-  separate ADR — it changes the artifact's compatibility guarantees
+- Kotlin 2.4.10, JVM 25 target (data classes, sealed hierarchies, `when`
+  exhaustiveness, null-safety) — matches the toolchain declared in
+  `gradle/libs.versions.toml`; raising the baseline is an ADR trigger
+  (`sdd.playbook.md` § 6 item 13, `adr/0009-kotlin-migration.adr.md`)
 - No field injection
 - Constructor injection only
 - No framework types inside domain layer

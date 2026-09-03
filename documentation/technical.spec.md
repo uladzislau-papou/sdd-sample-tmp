@@ -15,15 +15,20 @@ The stack is intentionally opinionated to support:
 ## Tech Stack
 
 ### Language & Runtime
-- Java 25 (project baseline, LTS) — see `adr/0006-java-25-baseline.adr.md`.
+- Kotlin 2.4.10, JVM target 25 (LTS) — see `adr/0009-kotlin-migration.adr.md`.
+  Supersedes the Java 25 baseline of `adr/0006-java-25-baseline.adr.md` with the same JVM
+  target, changing only the source language.
   The Gradle toolchain in `gradle/libs.versions.toml` is the single authoritative
   declaration; `.sdkmanrc` and IDE settings are derived from it.
   The baseline tracks LTS releases only; moving it is an ADR trigger.
 
 ### Framework
-- Spring Boot 4.x
+- Spring Boot 4.x, with the `org.jetbrains.kotlin.plugin.spring` (all-open)
+  plugin applied — Kotlin classes are final by default and Spring's proxying
+  needs them open
 - Built on Spring Framework 7
 - Supports modern Gradle versions (incl. Gradle 9)
+- `jackson-module-kotlin` on the classpath for Kotlin data class (de)serialization
 
 ### Build Tool
 - Gradle (preferred: Gradle 9; Gradle 8.14+ acceptable, but not verified)
@@ -36,22 +41,26 @@ The stack is intentionally opinionated to support:
 
 ### SQL Access
 - jOOQ (type-safe SQL)
-- Java 25 supported (including OSS edition)
+- Code generation targets **Java**, not Kotlin, even though hand-written code is Kotlin —
+  generated code is never hand-edited either way, and this keeps codegen unchanged from
+  the prior baseline (`adr/0009-kotlin-migration.adr.md`)
 
 ### Testing
-- JUnit 5 (via Spring Boot test support)
+- JUnit 5 (via Spring Boot test support), written in Kotlin
 - AssertJ as the assertion library (mandatory for assertions)
 - ArchUnit for architecture enforcement (ADR 0007)
 
 **ArchUnit MUST be 1.4.1 or newer.** Versions 1.3.0 and 1.4.0 cannot read Java 25 class
 files (major version 69) and import **zero** classes — silently, with no error or warning.
-Every architecture rule then checks nothing. ArchUnit's own "failed to check any classes"
-guard is what makes this visible, and `ContextRegistryTest.importer_findsProductionClasses`
-asserts the import size directly rather than relying on it.
+This applies at the current JVM 25 target exactly as it did under the Java-25 baseline
+ADR 0006 originally recorded it for; the class files carry the same major version
+regardless of source language. Every architecture rule then checks nothing.
+`ContextRegistryTest.importer_findsProductionClasses` asserts the import size directly
+rather than trusting a green suite as evidence the importer worked.
 
-This is a constraint the Java 25 baseline (ADR 0006) imposes on tooling. Any future
-toolchain bump must re-verify that ArchUnit still reads the new bytecode — a green
-architecture suite is not evidence that it does.
+This is a constraint the JVM baseline (`adr/0009-kotlin-migration.adr.md`) imposes on
+tooling. Any future toolchain bump must re-verify that ArchUnit still reads the new
+bytecode — a green architecture suite is not evidence that it does.
 
 
 ## Baseline Constraints
@@ -93,7 +102,7 @@ SQL Access (jOOQ)
 - jOOQ code generation:
   - MUST be configured in Gradle
   - MUST run against the same schema that Flyway migrates
-- jOOQ version selection MUST be compatible with Java 25.
+- jOOQ version selection MUST be compatible with the JVM 25 target.
 
 
 ### Flyway Migration Classification

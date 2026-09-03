@@ -30,7 +30,7 @@ Pragmatic stance:
 ## 3. Package Structure
 
 ```
-com.dominikgaller.alpinebooking              ← shared root
+com.dominikgaller.alpinebooking              ← shared root (Kotlin, adr/0009-kotlin-migration.adr.md)
 ├── bootstrap                                ← composition root (cross-context)
 │   ├── AlpineBookingApplication
 │   └── <ContextName>Config
@@ -87,8 +87,8 @@ Defines the **application boundary** as interfaces and data carriers. Split into
 
 | Sub-package | Contents | Naming convention |
 |-------------|----------|-------------------|
-| `inport.command` | Input data carriers (immutable records) | `*Command` |
-| `inport.result` | Output data carriers (immutable records) | `*Result` |
+| `inport.command` | Input data carriers (immutable data classes) | `*Command` |
+| `inport.result` | Output data carriers (immutable data classes) | `*Result` |
 | `inport.usecase` | Use case interfaces (inbound ports) | `*UseCase` |
 
 Rules:

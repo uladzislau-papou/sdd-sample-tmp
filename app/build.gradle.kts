@@ -8,7 +8,8 @@ buildscript {
 }
 
 plugins {
-    java
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.spring)
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependency.management.plugin)
     alias(libs.plugins.flyway.plugin)
@@ -16,10 +17,15 @@ plugins {
     alias(libs.plugins.spotless)
 }
 
-val javaVersion = JavaLanguageVersion.of(libs.versions.java.get().toInt())
+val jvmTargetVersion =
+    JavaLanguageVersion.of(
+        libs.versions.jvmTarget
+            .get()
+            .toInt(),
+    )
 
 springBoot {
-    mainClass.set("com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication")
+    mainClass.set("com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplicationKt")
 }
 
 repositories {
@@ -32,6 +38,8 @@ dependencies {
     implementation(libs.spring.boot.starter.jooq)
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.core)
+    implementation(libs.jackson.module.kotlin)
+    implementation(libs.kotlin.reflect)
     runtimeOnly(libs.h2)
 
     testImplementation(libs.spring.boot.starter.test)
@@ -46,14 +54,15 @@ dependencies {
     runtimeOnly(libs.jooq.codegen)
 }
 
-// Toolchain is the single authoritative Java version declaration (ADR 0006).
+// Toolchain is the single authoritative JVM version declaration
+// (adr/0009-kotlin-migration.adr.md, superseding ADR 0006's Java 25 baseline).
 // The vendor is pinned so the build is reproducible: without it, Gradle's
-// auto-detection matches any locally installed JDK reporting language version 25 —
-// including early-access builds — so the selected JDK would depend on the machine.
-// foojay-resolver (see settings.gradle.kts) provisions Temurin if it is absent.
-java {
-    toolchain {
-        languageVersion.set(javaVersion)
+// auto-detection matches any locally installed JDK reporting the target language
+// version, including early-access builds. foojay-resolver (see settings.gradle.kts)
+// provisions Temurin if it is absent.
+kotlin {
+    jvmToolchain {
+        languageVersion.set(jvmTargetVersion)
         vendor.set(JvmVendorSpec.ADOPTIUM)
     }
 }
@@ -70,7 +79,7 @@ flyway {
     user = codegenDbUser
     password = codegenDbPassword
     cleanDisabled = false
-    locations = arrayOf("filesystem:${projectDir}/src/main/resources/db/migration")
+    locations = arrayOf("filesystem:$projectDir/src/main/resources/db/migration")
 }
 
 jooq {
@@ -95,6 +104,13 @@ jooq {
             }
         }
     }
+}
+
+// Generated jOOQ sources stay Java (adr/0009-kotlin-migration.adr.md); the Kotlin
+// compiler reads them directly from the shared main source set for cross-compilation,
+// so both compile tasks need the generated sources to exist first.
+tasks.named("compileKotlin") {
+    dependsOn(tasks.named("jooqCodegen"))
 }
 
 tasks.named("compileJava") {
@@ -123,18 +139,19 @@ configurations.all {
         }
     }
 }
-// Formatting gate (technical.spec.md, Build & Quality Gates).
-// Deliberately hygiene-only: no formatter is applied, because restyling 90 hand-written
-// files would bury every future diff and this project's coding style is documented prose
-// rather than a formatter config (coding-style.definition.md). These rules catch the
-// mechanical defects a reviewer should never have to mention.
+// Formatting gate (technical.spec.md, Build & Quality Gates; adr/0009-kotlin-migration.adr.md).
+// ktlint via Spotless, replacing the Java-era hygiene-only java{} block — see ADR 0009 for
+// why ktlint rather than Detekt. Only Kotlin sources are targeted; the generated jOOQ Java
+// sources are neither hand-written nor ours to format.
 spotless {
-    java {
-        target("src/**/*.java")
-        targetExclude("**/build/generated-src/**")
-        removeUnusedImports()
-        trimTrailingWhitespace()
-        endWithNewline()
+    kotlin {
+        target("src/**/*.kt")
+        targetExclude("**/build/**")
+        ktlint()
+    }
+    kotlinGradle {
+        target("*.gradle.kts")
+        ktlint()
     }
 }
 
