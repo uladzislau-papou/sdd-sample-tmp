@@ -15,5 +15,10 @@
       "Bash(git log:*)",
       "Bash(git show:*)"
     ]
+  },
+  "attribution": {
+    "dir": "",
+    "commit": "",
+    "pr": ""
   }
 }
