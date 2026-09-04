@@ -2,18 +2,26 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(./gradlew clean:*)",
-      "Bash(./gradlew build:*)",
+      "Bash(./gradlew spotlessApply:*)",
+      "Bash(./gradlew spotlessCheck:*)",
+      "Bash(./gradlew detekt:*)",
       "Bash(./gradlew test:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew clean:*)",
       "Bash(./gradlew compileKotlin:*)",
-      "Bash(./gradlew :app:test:*)",
-      "Bash(./gradlew :app:compileKotlin:*)",
-      "Bash(./gradlew :app:jooqCodegen:*)",
-      "Bash(./gradlew flywayMigrate:*)",
+      "Bash(./gradlew compileTestKotlin:*)",
+      "Bash(./gradlew jacocoTestReport:*)",
+      "Bash(./gradlew bootRun:*)",
       "Bash(git diff:*)",
       "Bash(git status:*)",
       "Bash(git log:*)",
       "Bash(git show:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./keys/**)",
+      "Read(./rest/http-client.env.json)",
+      "Read(./docker-compose/.env)"
     ]
   },
   "attribution": {

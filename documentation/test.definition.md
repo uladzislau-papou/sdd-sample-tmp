@@ -1,302 +1,330 @@
-# Test Definition – Alpine Booking (`test.definition.md`)
+# Test Definition – Risk Management Service (`test.definition.md`)
 
 ## Purpose
 
-This document defines the testing strategy, rules, and quality gates for Alpine Booking.
+The testing strategy, rules, and quality gates for RMS.
 
-Tests are not optional. They are the enforcement mechanism for:
-- Always-Valid domain invariants
-- Use case behavior
-- Hexagonal architecture boundaries
-- Persistence correctness (Flyway + jOOQ)
+Tests are the enforcement mechanism for:
 
+- Transition legality in the KYC case lifecycle and the QES session lifecycle
+- Provider translation correctness — the place a silent mapping bug costs the most
+- Webhook idempotency and outbox delivery semantics
+- Authorization: scope enforcement on every reachable surface
+- The GraphQL and REST contracts
+
+---
 
 # 0. Scope of This Document
 
-This document defines **what** a test asserts: taxonomy, assertion rules,
-fixtures, naming, coverage, and the canonical quality gates (§ 7).
+This document defines **what** a test asserts: taxonomy, assertion rules, fixtures,
+naming, coverage, and the canonical quality gates (§ 7).
 
-It does **not** define *when* a test is written. That is `tdd.definition.md`,
-which mandates test-first (RED before any production code) and owns the RED
-evidence rule. The two documents are complementary and must not restate each
-other.
+It does **not** define *when* a test is written. That is `tdd.definition.md`.
 
 - "Which assertion style, at which layer, covering what?" → this document
 - "Written before or after the code, and how is that proven?" → `tdd.definition.md`
 
+---
 
 # 1. Tooling Baseline
 
 ## 1.1 Frameworks
-- **JUnit 5** is the test runner baseline.
-- **AssertJ** is mandatory for assertions.
 
-## 1.2 Spring Boot
-- Spring Boot test support MAY be used for:
-    - adapter integration tests
-    - web/API tests
-    - wiring tests for application services
+- **JUnit 5** (`useJUnitPlatform`) is the runner.
+- **AssertJ** is the preferred assertion library for new tests.
+- **mockito-kotlin** is the collaborator-doubling tool (`whenever`, `verify`, `mock`,
+  `argumentCaptor`).
+- **`spring-boot-starter-graphql-test`** — `GraphQlTester` / `ExecutionGraphQlServiceTester`
+  for GraphQL controllers.
+- **`json-schema-validator`** — validates emitted CloudEvents against
+  `src/test/resources/audit/cloudevents.schema.json`.
 
-Domain tests SHOULD NOT require Spring.
+### On assertion-library consistency
 
-## 1.3 Database for Tests
-- **H2** is the default database for tests.
-- **Flyway** MUST run migrations for any test that touches persistence.
-- **jOOQ** is used to read/write database state in persistence adapter tests (no JPA/Hibernate).
+The existing suite is mixed: ~314 `org.junit.jupiter.api.Assertions` usages, ~111 AssertJ,
+~24 `kotlin.test`. That is a fact, not a licence.
 
-### No test may create a file-based database
+**New and modified tests use AssertJ.** Do not bulk-convert existing tests as a side
+effect of an increment — a conversion sweep is its own increment with its own review.
+Do not add new `Assertions.assertEquals` or `kotlin.test` usages.
 
-`application-test.yml` (in-memory H2) is **profile-specific**: it loads only when the
-`test` profile is active. A test that boots a Spring context without activating it
-falls back to `application.yml` — the *production* datasource, `jdbc:h2:file:./data/…`
-— and writes a real database file relative to the test JVM's working directory
-(`app/`, for a Gradle `Test` task).
+## 1.2 Spring
 
-That file survives across runs, and `./gradlew clean` does not remove it, so run *n+1*
-inherits run *n*'s state. This is order-dependence (§ 8) and latent flakiness (§ 7)
-arriving through configuration rather than through test code.
+Spring test support is used for controller and integration tests. **Pure service and
+mapper tests must not start a Spring context** — construct the class with mocked
+collaborators. A `@SpringBootTest` where a plain constructor call would do costs the whole
+suite seconds each time.
+
+## 1.3 Database for tests
+
+RMS runs on **PostgreSQL and only PostgreSQL** (`technical.spec.md` § 3.1). There is no
+H2 substitute and no Testcontainers dependency.
 
 Therefore:
 
-- Any test that starts a Spring context and genuinely needs a database MUST declare
-  `@ActiveProfiles("test")`.
-- A test that does **not** need a database MUST NOT start one — use a slice
-  (§ 2.4), which auto-configures no DataSource at all.
-- `app/data/` must never appear after `./gradlew clean test`. If it does, a test is
-  running against the production datasource.
+- A test that genuinely needs the database guards on availability and skips when it is
+  absent — `onb/integration/PostgresAvailability.kt` is the pattern. Follow it.
+- A skipped-because-unavailable integration test is **not** coverage. Do not close a DoD
+  item with a test that did not run in the environment where you claim it passed.
+- Everything that can be tested without a database MUST be tested without one. Repository
+  query semantics and Flyway migration correctness are the legitimate exceptions.
 
-Because `bootstrap` sits outside every bounded-context package
-(`architecture.definition.md` § 4.9), `@WebMvcTest` and `@SpringBootTest` cannot find
-`AlpineBookingApplication` by searching upwards. Each slice therefore supplies its own
-minimal `@SpringBootApplication` in its own test package — `WebTestApplication`,
-`GuideWebTestApplication`, `PersistenceTestApplication`, `GuidePersistenceTestApplication`.
-Follow that pattern rather than widening a slice to the whole application.
+## 1.4 Playwright
 
+`playwright/api/` holds API-level tests run against a **running** service
+(`npm run smoke`, `npm run test:api`). They are not part of `./gradlew test` and are not a
+substitute for it. Use them for end-to-end contract confidence, not for business-rule
+coverage.
 
-# 2. Test Taxonomy (Required Types)
+---
 
-Tests are grouped by intent and architectural layer.
+# 2. Test Taxonomy
 
-## 2.1 Domain Tests (Mandatory, Fast)
-**Scope:** Domain layer only (Aggregates, Entities, Value Objects, Domain Services, Domain Events).
+## 2.1 Service tests (mandatory)
 
-Rules:
-- MUST NOT use Spring.
-- MUST NOT hit the database.
-- MUST express invariants and state transitions.
-- MUST cover negative cases (invalid state transitions, invariant violations).
+**Scope:** a single `@Service` with its collaborators mocked.
 
-Examples of assertions (style guidance):
-- Use AssertJ fluent assertions.
-- Use `assertThatThrownBy(...)` for invariant failures.
-- Prefer domain-specific value comparisons over technical ones.
-
-## 2.2 Use Case Tests (Mandatory)
-**Scope:** Application layer (Use Cases / Application Services) with ports mocked/stubbed.
-Always prefer good stubs before mocks.
+This is the core of the suite — it is where business behaviour lives
+(`modelling.definition.md` § 1).
 
 Rules:
-- SHOULD be Spring-free where possible.
-- MAY use Spring only if wiring complexity is meaningful to validate.
-- MUST validate:
-    - orchestration logic (what ports are called and when)
-    - emitted domain events (if applicable)
-    - transactional expectations (conceptually, not by inspecting Spring internals)
-    - failure scenarios (e.g., missing entity, invalid state)
 
-## 2.3 Adapter Integration Tests (Mandatory when adapter changes)
-**Scope:** Persistence adapters and infrastructure adapters.
+- No Spring context.
+- MUST cover the happy path **and** every rejection path the service can produce.
+- MUST assert the **thrown type and the condition**, not just that something threw.
+- MUST verify the side effects that matter: what was persisted, which audit event was
+  emitted, which outbox row was enqueued — and, with `never()`, what was *not* done on a
+  rejection path.
+- Transition legality gets its own test per illegal source state that the contract names.
 
-For persistence (Flyway + jOOQ + H2):
-- MUST run Flyway migrations.
-- MUST verify roundtrip correctness:
-    - write → read → domain equivalence (where mapping exists)
-- MUST validate query semantics that matter for the domain:
-    - uniqueness constraints
-    - overlap queries (date ranges)
-    - concurrency-relevant behavior where possible (at least idempotency)
+## 2.2 Mapper and translation tests (mandatory when a mapping changes)
+
+**Scope:** `api/mapper/*`, provider model ↔ our model.
+
+This is the highest-value, lowest-cost test class in RMS. A provider adds a status, an
+`else` branch swallows it, and a case silently stalls.
 
 Rules:
-- MUST NOT test internal framework behavior.
-- MUST test system behavior at adapter boundary.
 
-## 2.4 API / Web Tests (As Needed)
-**Scope:** Inbound adapters (REST controllers, messaging consumers).
+- MUST cover **every** enum value in the source vocabulary. A mapping test that covers
+  three of nine provider statuses is not a mapping test.
+- MUST assert that an unknown input fails loudly rather than defaulting.
+- Round-trip where a round-trip exists.
+
+## 2.3 Controller tests (mandatory for every exposed operation)
+
+**Scope:** GraphQL controllers via `GraphQlTester`; REST controllers via MockMvc slice.
 
 Rules:
-- MUST exist for:
-    - externally exposed endpoints
-    - request validation rules
-    - HTTP status mapping
-    - error response contract
-- SHOULD use slice tests (e.g., MVC slice) when possible.
-- MUST map each endpoint to a Use Case (traceability).
 
+- MUST exist for every externally reachable operation.
+- MUST cover: happy path, input-validation failure, and each documented error
+  classification.
+- MUST assert the **error classification** (`BAD_USER_INPUT`, `NOT_FOUND`, HTTP status),
+  not merely that an error occurred.
+- MUST NOT assert business rules — those belong in the service test. A controller test
+  that re-tests the state machine is testing the wrong thing at the wrong cost.
+- Every operation maps to a use case spec (§ 9).
 
-# 3. Assertion Rules (Strict)
+## 2.4 Authorization tests (mandatory for every new surface)
 
-## 3.1 AssertJ is Mandatory
-- Do not use `assertEquals`, `assertTrue`, etc.
-- Prefer AssertJ fluent style with meaningful failure messages.
+**Scope:** the scope-enforcing filters and interceptors.
 
-## 3.2 Exception Expectations
-- Invariant violations MUST be tested with:
-    - `assertThatThrownBy(...)`
-    - expected exception type (domain exception or IllegalArgumentException depending on modelling.definition)
-    - optional message check only if message is part of contract
+Every new externally reachable endpoint MUST have tests for:
 
-## 3.3 Equality & Identity
-- Domain identity MUST be tested via explicit identity fields (e.g., `BookingId`), not object identity.
-- Value Objects SHOULD be compared by value.
+- missing token → 401
+- valid token, wrong scope → 403
+- valid token, correct scope → passes through
 
+`OnbScopeEnforcingFilterTest` and `WebhookJwtAuthFilterTest` are the references. An
+endpoint shipped without these is a security regression, not a coverage gap.
+
+## 2.5 Integration tests (mandatory when persistence or the schema changes)
+
+**Scope:** repositories, Flyway migrations, outbox round-trips, GraphQL against a real
+context. Named `*IntegrationTest`.
+
+Rules:
+
+- MUST run against real PostgreSQL with Flyway applied.
+- MUST verify what a mock cannot: query semantics, constraint enforcement, optimistic-lock
+  conflict behaviour, JSON column round-trips, migration effects.
+- MUST guard on database availability (§ 1.3) and MUST NOT silently pass when skipped.
+
+## 2.6 Audit tests (mandatory when an audit event changes)
+
+Emitted CloudEvents are validated against the JSON schema in `src/test/resources/audit/`.
+A new or changed event MUST have a test asserting its type, subject, attribution and
+payload keys, and the catalogue in `docs/` MUST be updated in the same increment.
+
+---
+
+# 3. Assertion Rules
+
+## 3.1 AssertJ for new tests
+
+```kotlin
+assertThat(result.status).isEqualTo(KycCaseStatus.ACCEPTED)
+assertThatThrownBy { service.acceptCase(input) }
+    .isInstanceOf(BadUserInputException::class.java)
+    .hasMessageContaining("in status DECLINED")
+```
+
+## 3.2 Exception expectations
+
+- Assert the **specific** type from `domain/exception`. `isInstanceOf(Exception::class.java)`
+  asserts nothing.
+- Assert on the message only where the message is part of the contract — for
+  `BadUserInputException` on an illegal transition, it is: the caller reads it.
+- **Never widen an expected exception type to make a test pass.** That is weakening
+  (`tdd.definition.md` § 5).
+
+## 3.3 Verifying collaborators
+
+- `verify(repo).save(captor.capture())` and assert on the captured entity — not on the
+  repository call alone. A `verify(...).save(any())` proves a call happened, not that the
+  right thing was saved.
+- Use `never()` on rejection paths. "Nothing was persisted and no audit event fired" is
+  half the contract of a rejection.
+- Do not mock entities or enums. Build real ones.
+
+## 3.4 Time
+
+Where a service reads the clock, inject it. A test asserting on `Instant.now()` with a
+tolerance window is a flaky test waiting for a slow CI runner.
+
+---
 
 # 4. Test Data & Fixtures
 
-## 4.1 Principles
-- Tests MUST be readable and intention-revealing.
-- Prefer domain builders or factory methods over raw constructors when setup is non-trivial.
+- Shared fixtures live in `<module>/testsupport/` — `KycTestFixtures`,
+  `OnbTestFixtures`, `qes/testfixtures/`. Extend those rather than duplicating builders.
+- A fixture builds a **valid** object by default; invalid variants are constructed
+  explicitly in the test that needs them, so the invalidity is visible at the assertion
+  site.
+- No randomness unless seeded and justified.
+- No shared mutable state between tests. No reliance on execution order.
+- Realistic-looking personal data in fixtures MUST be obviously synthetic.
 
-## 4.2 Builder Rules
-- Builders MUST live in test scope.
-- Builders MUST create valid domain objects by default.
-- If invalid objects are needed, they MUST be created intentionally and explicitly in the test.
-
-## 4.3 Data Randomness
-- Avoid randomness in tests unless it is deterministic (seeded) and justified.
-- If randomness is used, it MUST be reproducible.
-
+---
 
 # 5. Naming & Structure
 
-## 5.1 Test Names
-Tests MUST be behavior-driven and domain-oriented.
+## 5.1 Test names
 
-**Convention: `<method>_<condition>_<expectedResult>`.**
+`<methodOrSubject>_<condition>_<expectedResult>`:
 
 ```
-confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed
-markActive_idempotent_whenAlreadyActive_noEventEmitted
-start_usesClockPort_whenStartedAtIsEmpty
-update_changesParticipantCount_inDatabase
+acceptCase_throwsBadUserInput_whenCaseIsDeclined
+collectParties_advancesToPartiesCollected_whenFunctionaryAndUboExist
+mapProviderStatus_coversEveryIdnowStatus
+enforceScope_returns403_whenScopeMissing
 ```
 
-The method under test comes first, so tests for one method sort together and a failure
-name points straight at the production method. Where there is no single method — value
-object construction, for instance — the subject takes its place
-(`value0Throws`, `blankEmailThrows`).
+`@Nested` classes group by method or scenario where a class has many cases.
 
-`@DisplayName` with a Given/When/Then narrative MAY be added where the name alone is
-not self-explanatory. It is not required, and none of the current tests use it.
+## 5.2 Package placement
 
-> This section previously listed `should_<behavior>_when_<condition>` as the preferred
-> style. **No test in the repository has ever used it** — all 145 use the
-> method-first form above. The written rule was documenting an aspiration rather than
-> the convention, so it has been replaced with the real one. If the aspiration is
-> preferred, that is a rename of every test method and belongs in its own increment.
+Tests mirror production packages. `src/test/kotlin/.../kyc/service/KycCaseDecisionServiceTest.kt`
+tests `src/main/kotlin/.../kyc/service/KycCaseDecisionService.kt`.
 
-## 5.2 Package Placement
-Tests SHOULD mirror production packages to support navigation and traceability.
+Suffixes: `*Test` for unit and slice; `*IntegrationTest` for anything requiring a real
+database or a full context.
 
-Examples, in the actual ontology (`architecture.definition.md` § 3):
-- `booking.core.domain.tourbooking` → `TourBookingTest`, `ParticipantCountTest`
-- `booking.inbound.driver` → `ConfirmTourBookingDriverTest`
-- `booking.inbound.listener` → `TourStartedListenerTest`
-- `booking.inbound.rest` → `TourBookingControllerTest`
-- `booking.outbound.persistence.write` → `TourBookingJooqRepositoryIT`
-- `com.dominikgaller.alpinebooking.architecture` → the ArchUnit suite (ADR 0007), which
-  mirrors no production package because it is about the tree as a whole
+---
 
-> This section previously illustrated mirroring with `...application...`,
-> `...adapters.persistence...` and `...adapters.inbound.rest...` — packages that do not
-> exist and never have. It was the same dead vocabulary removed from
-> `coding-style.definition.md` § 3.2, and `tasks.md` task 1.4.2 claimed to have purged it
-> while missing this occurrence. Found by `ddd-hex-reviewer`.
+# 6. Coverage Expectations
 
+JaCoCo runs and produces a report (`build/reports/jacoco/`). **There is no coverage
+threshold and adding one is a deliberate decision, not a default.** A percentage measures
+lines executed, which is orthogonal to the themes below.
 
-# 6. Coverage Expectations (Qualitative)
+Mandatory coverage themes — these are what a reviewer checks, not a number:
 
-This project targets **meaningful coverage**, not numeric vanity.
+- Every service rejection path has a test.
+- Every enum-to-enum mapping is covered for every source value.
+- Every externally reachable operation has a controller test and an authorization test.
+- Every Flyway migration that changes existing data has an integration test proving the
+  effect.
+- Every audit event has a schema-validated test.
+- Every documented error classification has a test producing it.
 
-**No coverage tool is configured, and that is a decision rather than an omission.**
-There is no jacoco, no threshold, no report. A percentage would measure lines executed,
-which is not what this document asks for — the mandatory themes below are about *which
-behaviours* are covered, and a line-coverage gate can be satisfied without asserting
-anything (§ 8 forbids exactly that). The enforcement mechanism here is instead:
+If coverage is intentionally missing, it MUST be recorded in the use case spec (or an ADR
+if strategic).
 
-- every DoD item names the test that satisfies it (§ 9), so coverage is traceable
-  per criterion rather than aggregate;
-- `ddd-hex-reviewer` reports production branches the diff adds without a test;
-- where a batch of tests passes on first run, mutation testing proves they are not
-  vacuous (`tdd.definition.md` § 2.2).
-
-Revisit if the project grows past the point where a human can hold the coverage map —
-but add it as a *report*, not a gate, unless there is a specific behaviour a threshold
-would have caught.
-
-Mandatory coverage themes:
-- Every Aggregate invariant has at least one test.
-- Every Use Case has:
-    - at least one happy path test
-    - at least one failure scenario test
-- Every non-trivial query in persistence adapter has an integration test.
-
-If coverage is intentionally missing, it MUST be documented in the Use Case Spec (or ADR if strategic).
-
+---
 
 # 7. Quality Gates (Merge Blockers)
 
-**Canonical list. This is the only quality-gate list in the project** — it
-supersedes the copies that previously lived in `sdd.playbook.md` § 5 and
-`technical.spec.md`. Both now point here.
+**Canonical list. This is the only quality-gate list in the project.**
+`technical.spec.md` § 7 owns the commands; `sdd.playbook.md` § 5 owns the principle.
 
 A change MUST NOT be considered complete unless:
 
-1. `./gradlew clean test` succeeds
-2. `./gradlew build` succeeds
-3. `./gradlew spotlessCheck` succeeds (wired into `check`, so `build` covers it)
-4. The ArchUnit suite in `app/src/test/.../architecture/` passes (ADR 0007)
-5. All new/changed behavior is test-covered according to this definition
-6. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2),
-   or is a behaviour-preserving change meeting § 2.1's evidence requirement
-7. No ignored/disabled tests are introduced
-8. No flaky tests are introduced
-9. No test was weakened, loosened, or deleted to reach green
-10. No architecture rule was weakened to reach green. Rules are enforcement; the
-    definition they cite is authoritative, so a failing rule means the code is wrong
-    unless the *definition* changed first (`file-usage.definition.md` § 5.1)
-11. `ddd-hex-reviewer` returns `PASS`
-12. Specs, port specs and `rest/*.http` reflect the code as built
+1. `./gradlew spotlessCheck` passes (run `spotlessApply` first)
+2. `./gradlew detekt` passes with no new findings
+3. `./gradlew test` passes
+4. `./gradlew build` succeeds — this includes compilation under `allWarningsAsErrors`
+5. All new/changed behaviour is test-covered according to this definition
+6. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2), or is
+   a behaviour-preserving change meeting § 2.1's evidence requirement
+7. No `@Disabled` / `@Ignore` introduced
+8. No flaky test introduced
+9. No test weakened, loosened, or deleted to reach green
+10. No `@Suppress` added to silence a compiler warning or a detekt finding without a
+    stated, reviewed reason
+11. `rms-architecture-reviewer` returns `PASS`
+12. Specs, integration specs and `rest/*.http` reflect the code as built
+13. New or changed configuration is in `.env.example`
+14. New or changed audit events are in the `docs/` catalogue
+15. No new or edited **applied** Flyway migration; new schema is a new timestamped file
 
-Gates are merge blockers, not advisories — see `sdd.playbook.md` § 5 for the
-principle. There is no partial credit.
+Gates are merge blockers, not advisories. There is no partial credit.
 
-The outer loop (`loop.playbook.md`) uses this list verbatim as one of its three
-exit conditions, which is why it must exist in exactly one place.
+The outer loop (`loop.playbook.md`) uses this list verbatim as one of its three exit
+conditions, which is why it must exist in exactly one place.
 
+### Not gates
+
+Deliberately excluded, so nobody adds them by assumption:
+
+- **JaCoCo coverage percentage** — a report, not a threshold (§ 6).
+- **Playwright** (`npm run smoke`, `npm run test:api`) — requires a running service, so it
+  cannot gate a code review. Run it before a deploy.
+
+---
 
 # 8. Anti-Patterns (Forbidden)
 
-- Tests that assert implementation details (framework internals, private methods)
-- Controller tests that validate business logic instead of use case behavior
-- Integration tests without Flyway migrations
-- Tests that depend on execution order
-- Over-mocking domain behavior (mocking value objects, mocking aggregates)
-- Snapshot-like tests without explicit behavioral intent
-- “Green tests” that do not assert anything meaningful
+- Asserting that an exception was thrown without asserting its type
+- `verify(repo).save(any())` as the only assertion about what was persisted
+- A mapping test covering some of an enum's values
+- A controller test re-testing business rules
+- Starting a Spring context for a class that has no Spring dependency
+- An integration test that silently passes when the database is unavailable
+- Mocking entities, enums, or value types
+- Tests that depend on execution order or shared mutable state
+- Asserting on wall-clock time with a tolerance window
+- A new endpoint with no authorization test
+- Green tests that assert nothing meaningful
 
+---
 
-# 9. Traceability Requirement
+# 9. Traceability
 
 Every code change MUST be traceable to at least one spec.
 
-Minimum traceability for tests:
-- Domain Test ↔ Domain Spec / invariant reference
-- Use Case Test ↔ Use Case Spec `AC-NN` (cite the identifier, not the prose)
-- Adapter Integration Test ↔ Port specification / adapter contract
-- API / Web Test ↔ Use Case Spec REST section + the matching `rest/uc<nn>-*.http` request
+| Test kind | Traces to |
+|-----------|-----------|
+| Service test | Use case spec `AC-NN` (cite the identifier, not the prose) |
+| Mapper test | The integration spec's translation table |
+| Controller test | Use case spec § 9 API Contract + the matching `rest/uc<nn>-*.http` request |
+| Authorization test | The scope declared in the use case spec § 9 |
+| Integration test | The migration or the repository contract in the integration spec |
+| Audit test | The event catalogue entry in `docs/` |
 
 If a test cannot be traced to a spec, the spec is missing or the test is noise.
 
-Traceability runs in both directions. A DoD item (`use-case spec` § 10) must
-name the test that satisfies it — `covered by <TestClass>.<method>`, not
-"implemented". An unnamed DoD item is untickable.
+Traceability runs both ways: a DoD item (use case spec § 10) must name the test that
+satisfies it — `covered by <TestClass>.<method>`, not "implemented". An unnamed DoD item
+is untickable.

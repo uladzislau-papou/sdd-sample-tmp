@@ -8,46 +8,66 @@ goal: Humans take notes and share them
 Non-authoritative scratchpad. May not contradict formal definitions
 (`file-usage.definition.md`).
 
-## DomainEvent List inside AggregateRoot
-Thinking about the DomainEvents. This is pretty neat when keeping the core clean.
-On the other hand, its a little bit weird design. As long as we recall it weird,
-I think we are fine.
+## Open questions carried over from the adaptation
 
-Still open as a design musing. Worth noting that ADR 0004 settled the *port* side
-of this (`publish(DomainEvent)` rather than per-type overloads), and that the drain
-pattern `pullDomainEvents().forEach(publisher::publish)` is now identical in all eight
-drivers — so the weirdness is at least uniform.
+These were surfaced while re-basing this documentation set onto
+`risk-management-service`. None is decided; each is a candidate for an ADR or a cleanup
+increment.
 
-## Missing ReadModel
-The reference implementation would benefit a read model. Attendees can then
-see how ReadModels and Queries are placed.
+### The exception taxonomy lives in `qes`
 
-Confirmed by `spec-documenter`: only `outbound/persistence/write` exists, and
-`architecture.definition.md` § 4.6 documents an `outbound.persistence.read` side
-that has no implementation. A read-side use case would exercise it — currently every
-use case is a command, so the CQRS half of the package ontology is unused.
+`DomainException`, `BadUserInputException`, `EntityNotFoundException` and `DomainErrorCode`
+sit in `qes/domain/exception/` and are imported ~110 times across `kyc`, `onb` and `boni`.
+That is the single largest source of cross-module coupling in the codebase and it is
+entirely accidental — `qes` was simply the first module.
 
----
+Moving them to `common` is mechanical but wide. Registered as a wart in
+`architecture.definition.md` § 11.3. Worth its own increment; not worth doing as a side
+effect of feature work.
 
-*Closed notes*
+### `api/integration` holds outbound clients
 
-- ~~UC12's DELETE verb vs the UC08 verb ruling~~ — closed by the maintainer's ruling:
-  UC12 § 9 became `POST /api/v1/guide-tours/{guideTourId}/cancel`, for the same reasons
-  as UC08 (`DELETE` bodies dropped by intermediaries; cancellation is a state transition,
-  not a removal). Implemented as ruled — `GuideTourRestAPI.cancel` and
-  `rest/uc12-cancel-tour-by-guide.http` both use `POST .../cancel`. Raised by
-  `spec-documenter` during the UC08 reconciliation.
+Outbound provider clients live under a package called `api`. The name says "inbound
+delivery" and the contents are the opposite. Renaming touches every provider import.
+Registered as a wart; consistency currently beats a half-rename.
 
-- ~~UC07 drops the guide-tour correlation id — deliberate?~~ — closed, **not** deliberate.
-  `TourCompleted` carries `guideTourId` and UC06 threaded it all the way through
-  (`MarkBookingActiveCommand` → `BookingActivated`), but the first UC07 implementation
-  discarded it at every hop while UC07 § 2 still listed it as an input. Reported by
-  `spec-documenter`. Resolved by propagating it rather than by amending the spec: half a
-  correlation trail is worse than none, because it looks complete. `BookingCompleted`,
-  `MarkBookingCompletedCommand` and `TourBooking.markCompleted` now all carry it, and
-  each of the three hops has its own test, mutation-verified.
-- ~~Documentation, especially in the domain directory, is missing the definitions for
-  the guide bc~~ — closed. `documentation/domain/aggregate-guide-tour.spec.md`,
-  `documentation/ports/guide-tour-repository.outport.spec.md` and
-  `documentation/ports/start-tour.inport.spec.md` now exist. The guide domain spec
-  records three enforcement gaps it found (G-01 to G-03) as open work.
+### `onb` reads `kyc` internals directly
+
+117 imports, including repositories and entities. Accepted and bounded in
+`architecture.definition.md` § 11.2 — `onb` exists to project KYC state outward, the
+modules ship together, and a facade would add indirection without reducing coupling.
+
+The line that matters is that `onb` must not **write** `kyc` state outside a `kyc` service.
+Worth an explicit reviewer check; worth a test if one can be written cheaply.
+
+### Assertion libraries are mixed
+
+~314 `org.junit.jupiter.api.Assertions`, ~111 AssertJ, ~24 `kotlin.test` across 300 test
+files. `test.definition.md` § 1.1 rules that new tests use AssertJ and forbids a
+bulk-conversion sweep as a side effect. A deliberate conversion increment is a reasonable
+thing to want; it is also a large, low-information diff. Undecided.
+
+### No Testcontainers
+
+Integration tests guard on PostgreSQL availability and skip when it is absent
+(`onb/integration/PostgresAvailability.kt`). That means a green local suite can hide an
+untested query. `test.definition.md` § 1.3 forbids closing a DoD item with a skipped test,
+which is the mitigation, not a fix.
+
+Adding Testcontainers is ADR triggers 2 and 3. Whether it is worth the CI time is a real
+question, not a formality.
+
+### No spec coverage yet
+
+`documentation/domain/`, `documentation/integrations/` and `documentation/use-cases/`
+contain only templates. The deliberate policy (`sdd.playbook.md` § 9) is that specs are
+written for what is **touched**, so coverage grows with the work rather than being
+back-filled across ~580 production files.
+
+The first few increments will therefore spend proportionally more time in the Spec Phase
+than later ones. That is expected, not a sign the process is too heavy.
+
+### `qes/validation/annatation` is misspelled
+
+Registered as a wart. New constraints go in a correctly spelled sibling package rather
+than joining the typo.

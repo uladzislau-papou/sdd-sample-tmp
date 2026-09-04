@@ -1,376 +1,271 @@
 # Modelling Definition
 
-For this project, we model strictly according to the DDD building blocks.
+How Risk Management Service models its business concepts, so modelling stays consistent,
+reviewable and reviewable *mechanically*.
 
-Purpose: This handbook defines what we mean by DDD building blocks in this codebase, 
-so modelling stays consistent, reviewable, and automatable.
+**Read `architecture.definition.md` § 2 first.** RMS is a layered modular monolith whose
+domain layer is JPA entities. This document defines modelling doctrine *for that shape*,
+not for a Ports & Adapters core. Where classical DDD advice would contradict the shape,
+this document says which one wins.
 
-*Core principles:*
-- Model the business in the Domain layer. Infrastructure is replaceable.
-- Business rules live where they are enforced (mostly aggregates/value objects).
-- Prefer small aggregates with clear consistency boundaries.
-- Prefer explicit types (value objects) over primitives for meaningful concepts.
+---
 
-# Strategic Domain Driven Design Clarifier
+# 1. The Model Is Persistent
 
-This is intentionally small and ontology-focused.
+**An RMS domain class is a JPA entity.** `@Entity`, `@Table`, `@Column`, relations,
+`@Version`, Hibernate timestamps — all of it lives on the same class that carries the
+business state.
 
-## System Boundary Clarification
+This is a deliberate trade recorded in `adr/0003-jpa-entities-as-domain-model.adr.md`.
+It buys one model instead of two plus a mapping layer; it costs the ability to enforce
+"always-valid" at construction, because Hibernate constructs instances by reflection and
+populates them field by field.
 
-The domain model is defined within a single bounded context.
+What follows from that, and is therefore doctrine here:
 
-A bounded context defines:
-- The scope in which the model is consistent.
-- The vocabulary used inside the model.
-- The ownership of invariants.
+- **Validity is enforced at the boundary and in services, not in constructors.**
+  Bean Validation on `api.input` types guards the inbound edge; the service guards the
+  transition. An entity's `init` block may assert structural facts, but it is not the
+  primary guard and must not assume a full object graph.
+- **State transitions are service methods, not entity methods**, whenever they need to
+  consult another row, the clock, or configuration. An entity method that could be
+  written using only its own fields SHOULD live on the entity.
+- **Illegal state is prevented by the transition, not by the type.** A `KycCase` can hold
+  any `KycCaseStatus` the database holds; what stops an illegal one is
+  `KycCaseStateMachineService` refusing the transition.
 
-External systems MUST NOT leak their models directly into the domain.
-If necessary, mapping or anti-corruption logic MUST be used at the boundary.
+Anyone reaching for "the aggregate should enforce this invariant" must first check
+whether it can be enforced with the entity's own fields. If it cannot, the service is the
+correct home and that is not a compromise.
 
-# Validity & Invariants
+---
 
-## Always-Valid Principle
+# 2. Building Blocks
 
-Domain objects (Entities, Aggregates, Value Objects) MUST be valid at all times.
+## 2.1 Entity
 
-## Definition of “valid”:
+**Definition:** a persistent business object with database identity.
 
-An object is considered valid if:
-1.	All structural constraints are satisfied (type safety, non-null where required).
-2.	All Value Object invariants hold.
-3.	All state-dependent invariants hold according to the explicit state model.
+Rules:
 
-“Always valid” does NOT mean “fully completed”.
-Partial or evolving states are allowed if they are explicitly modelled (e.g. Pending, Confirmed, Cancelled) and define their own invariants.
+- `@Entity data class` with a `UUID` `@Id`, `@GeneratedValue`.
+- Equality is by `id` in business terms. Kotlin `data class` equality compares all
+  properties — do not rely on it for identity; compare ids explicitly.
+- Mutable state uses `var`; immutable columns use `val`. See § 2.2.
+- Class KDoc documents **every** property, including what `null` means for nullable ones
+  (`coding-style.definition.md` § 1.4). `KycCase` is the reference for the standard.
+- MUST NOT call a repository, an HTTP client, or a scheduler.
+- MUST NOT read the clock to make a decision.
 
-## State-Dependent Invariants
+## 2.2 Mutability
 
-Invariants MAY depend on the current lifecycle state.
+- A column the business never changes after insert is `val` (`id`, `createdAt`,
+  `caseNumber`, foreign keys that define the row's identity).
+- A column advanced by a lifecycle is `var`.
+- **A `var` column that participates in a lifecycle MUST only be written by the service
+  that owns that lifecycle.** Two services writing `KycCase.status` is a modelling error,
+  not a coordination problem.
+- Entities whose status is advanced from more than one path carry `@Version`. Optimistic
+  locking is how concurrent illegal transitions are rejected rather than silently
+  last-writer-wins.
 
-Example:
-- confirmedAt MAY only be set if status == CONFIRMED.
-- A CancelledBooking MUST NOT allow further modifications.
+## 2.3 Value types
 
-State transitions MUST enforce invariants atomically.
+RMS uses primitives and enums for most values. That is the convention; a `String`
+company name is not drift.
 
-## Policies vs Invariants
+Introduce a dedicated type when **all** of the following hold:
 
-A clear distinction MUST be made between:
-- Invariants → internal consistency rules of the aggregate.
-- Business policies → rules depending on external systems, time, or cross-aggregate information.
+1. the value has validation rules that would otherwise be re-checked at several sites,
+2. it is passed through more than one layer, and
+3. mixing it up with another value of the same primitive type is a plausible bug.
 
-Policies MUST NOT require infrastructure access inside the aggregate.
-If required, external information MUST be passed as parameters or handled in Application Services.
+Otherwise: constrain it with Bean Validation at the boundary and keep the primitive.
 
-## Rehydration Rule
+Enums are mandatory for closed value sets that appear in a column, a GraphQL schema, or a
+provider translation table. A status held as a `String` is drift.
 
-Rehydrating an object from persistence MUST NOT violate invariants.
+## 2.4 Aggregate-shaped entities
 
-If historical data violates current invariants, this MUST be handled explicitly via:
-- Data migration
-- Repair use cases
-- Compatibility logic
+RMS does not have formal aggregates, but some entities are consistency anchors:
+`KycCase`, `Company`, `Identification`, `SignatureSession`, `BoniDecision`,
+`AuditOutboxEntry`, `WebhookDelivery`.
 
-Silent acceptance of invalid domain state is NOT allowed.
+For those:
 
-# Building blocks
+- One repository, one owning service (or one owning package of services).
+- Child rows (`KycCaseSignee`, `KycUbo`, `SignatureSessionSigner`, …) are loaded and
+  written through the anchor's owning service, not by unrelated modules.
+- A transaction changes one anchor's state. Changing two anchors' lifecycle states in one
+  transaction requires a spec that says why.
 
-## Entity
+## 2.5 Service
 
-*Definition:* Domain object with an identity that persists across state changes.
+**Definition:** the unit of business behaviour. A `@Service` class.
 
-*Rules:*
-- Has an ID (usually an ID Value Object).
-- Equality is by identity, not by all fields.
-- Mutable lifecycle is allowed (via behaviour methods), but invariants must hold.
+Responsibilities:
 
-*Constraints:*
-- Entities are always valid.
-- Entities do not perform IO.
-- Entities do not depend on Spring/JPA.
+- Own the transaction
+- Load, decide, mutate, persist
+- Enforce transition legality
+- Emit audit events, enqueue outbound deliveries
+- Translate provider results into our vocabulary
 
+Rules:
 
-## Value Object
+- A service method that spans several sub-domains delegates rather than inlining. Name
+  the collaborators; do not grow a god service.
+- A service MUST NOT be constructed with a controller, a mapper that needs IO, or another
+  module's controller.
+- **Self-invocation does not go through the proxy.** A `@Transactional` method called from
+  within the same class is not transactional. Split the class or inject a collaborator.
+- A service that only reads is a `*QueryService` and is `@Transactional(readOnly = true)`.
 
-*Definition:* Immutable object defined by its values.
+## 2.6 State machine
 
-*Rules:*
-- Immutable (final fields; no setters).
-- Equality is by value.
-- Validation happens at creation time (constructor / static factory).
+`kyc` models the case lifecycle with Spring Statemachine
+(`kyc/statemachine/`, `adr/0007-kyc-case-state-machine.adr.md`).
 
-*Constraints:*
-- Ideally, use records.
-- No IO.
-- No back-references to entities/aggregates.
-- Prefer dedicated types to String/BigDecimal/UUID.
+Rules:
 
-## Identity
-
-*Definition:* A unique identifier for an entity or aggregate.
+- **Transition legality is declared in the state-machine configuration, not scattered
+  through services.** A service that hand-checks a status before calling the machine is
+  duplicating the machine's job — unless the check produces a *different* error message
+  the API contract requires, in which case the duplication is deliberate and documented
+  (`KycCaseDecisionService.collectParties` is the precedent).
+- A new status or event is a change to the machine configuration first, the enum second,
+  and a Flyway migration third if it is persisted.
+- Every transition that matters to a regulator emits an audit event.
 
-Entities and Aggregates MUST have identity.
-
-ID Modelling
+## 2.7 Mapper
 
-The rule is **scoped to the owning bounded context**. Inside the context that owns
-an identity, it is a Value Object. Crossing a context boundary, it is a string.
+Stateless translation. Entity → DTO, provider model → our model, input → entity.
 
-**Own identities — MUST be Value Objects.**
-- An identity owned by *this* bounded context MUST be modelled as a Value Object.
-- It MUST NOT be a primitive type.
-- It MUST be immutable, and MUST validate its own format at construction.
-- Placement depends on reuse:
-  - If only used inside the aggregate → may be defined inline.
-  - If referenced across aggregates → define in a shared domain type package
-    **within the bounded context** (not in `shared`).
+Rules:
 
-Examples: `BookingId` in `booking.core.domain.tourbooking`, `GuideTourId` in
-`guide.core.domain.guidetour`.
-
-**Foreign identities — MAY be plain `String`.**
-
-A reference to an identity **owned by another bounded context** MAY be carried as a
-plain `String`. This is a deliberate exception, not an oversight, and it applies to
-commands, results, domain events and aggregate state alike.
-
-Rationale: the alternative is to promote every referenced identity into the shared
-kernel so both contexts can share the type. That inverts the point of having
-contexts — it makes them co-evolve through `shared`, so a change to one context's
-identity format becomes a change to the other's compile-time dependencies. Treating
-the boundary as a **serialization boundary** keeps the contexts independent, which is
-worth more than type safety on a value the receiving context only ever stores and
-echoes back.
+- Pure. No repository, no clock, no IO. A mapper that needs one of those is a service.
+- A mapper is the **only** place a provider's vocabulary is allowed to meet ours.
+- Mapping is total: an unmapped enum case is a failure, not a silent `null`. Prefer an
+  exhaustive `when` with no `else`.
 
-The receiving context does not own the identity, cannot validate its invariants, and
-must not reason about its structure. A `String` states that honestly; a Value Object
-would imply knowledge the context does not have.
+## 2.8 Repository
 
-Example: `guideTourId` is owned by `guide` (as `GuideTourId`). Where `booking`
-carries it — `TourBooking.markActive(Instant, String)`, `BookingActivated`,
-`TourStarted` — it is a plain `String` correlation id.
+Spring Data JPA interface. See `architecture.definition.md` § 4.3.
 
-Constraints on foreign identities:
-- MUST be treated as opaque. No parsing, no substring, no format assumptions, no
-  reconstructing the owning context's Value Object from it.
-- MUST NOT carry business meaning in the receiving context. It is a correlation
-  handle for tracing and for calling back through a port — never a value to branch on.
-- SHOULD be named so the ownership is obvious (`guideTourId`, not `id`).
-- If the receiving context starts enforcing rules about a foreign identity, that is a
-  signal the boundary is wrong — raise it rather than promoting the type.
+- Method names use business language: `findByCaseIdOrThrow`, `findConfirmedByCompanyId`.
+- A query that encodes a business criterion states that criterion in KDoc. The service
+  still enforces the rule — the query selects candidates, it does not replace the guard.
 
-**Identities owned by no context in this system.**
+## 2.9 Outbox entry
 
-An identifier belonging to an *external* system, referenced by more than one of our
-contexts and owned by none of them, is a third category. It MAY live in `shared` as a
-Value Object, because doing so couples our contexts to the external contract rather
-than to each other — which is what the shared kernel is for
-(`architecture.definition.md` § 9).
+An outbox row is a **promise to deliver**, not a domain fact.
 
-`shared.domain.TourId` is the only such case today: there is no `Tour` aggregate in
-this system, the tour catalogue is external, and both contexts must validate the
-reference identically. See `adr/0005-bounded-context-identity-boundaries.adr.md`.
+- Written inside the business transaction, delivered by a scheduler afterwards.
+- Carries its own status, attempt count and error, so a delivery failure is visible
+  without reading logs.
+- Idempotency is the receiver's contract *and* ours: an entry that may be delivered twice
+  must carry a stable key the receiver can deduplicate on.
+- Kinds in use: `audit_outbox` (`common.audit`), `webhook_deliveries`
+  (`common.webhook`), the ONB progress and RADar decision deliveries (`onb`).
 
-This category is deliberately narrow. "Both contexts use it" is not sufficient
-justification — the test is whether *neither* context owns it. If one does, the other
-uses a `String`.
+---
 
+# 3. Validity
 
-## Aggregate
+## 3.1 Where validation happens
 
-*Definition:* A consistency boundary. The aggregate root enforces invariants and is the only entry point 
-for modifications.
+| Layer | What it validates | Mechanism |
+|-------|-------------------|-----------|
+| `api.input` | Shape, format, required fields, ranges | Bean Validation (`@Valid`, constraints in `validation/`) |
+| `api.controller` | Nothing beyond `@Valid` | — |
+| `service` | Transition legality, cross-row rules, authorization of the operation | Explicit checks, state machine |
+| `domain.model` | Structural facts the row alone can assert | `init` block (sparingly) |
+| database | Uniqueness, nullability, foreign keys | Flyway DDL constraints |
 
-*Rules:*
-- Only the Aggregate Root is referenced from outside the aggregate.
-- One aggregate handles one transactional consistency set of invariants.
-- Other entities inside the aggregate are not loaded/modified independently.
-- Cross-aggregate rules are eventual or orchestrated (not enforced as a single invariant).
+Each layer's job is distinct. A rule enforced only by the database is a rule with a
+500-shaped error message; a rule enforced only at the boundary is a rule a scheduler or
+webhook path can bypass.
 
-*Command rule of thumb:*
-- One command → one aggregate root mutation (fast to implement, easy to reason about).
-- If a use case needs multiple aggregates, that’s orchestration (application service) + eventual consistency.
+**A rule reachable from more than one inbound surface MUST be enforced in the service.**
+GraphQL, REST, webhook and scheduler all converge there; nothing else does.
 
-Constraints:
-- Aggregates are always valid.
-- Aggregates do not perform IO.
-- Aggregates do not depend on Spring/JPA.
-- Aggregate methods enforce invariants
-- Aggregate methods can return / record domain events
-- Aggregates never call repositories, message buses, HTTP clients, clocks directly
+## 3.2 Rehydration
 
+Loading a row that no longer satisfies a current rule MUST NOT be silently accepted into a
+new decision. Handle it explicitly: a Flyway data migration, a repair path, or an explicit
+guard that fails loudly. Silent acceptance of stale-invalid state is forbidden.
 
-### What an aggregate stores
+---
 
-**An aggregate stores what an invariant or an acceptance criterion must be able to
-observe, and nothing else.** Everything else a transition is told belongs on the emitted
-event, where whoever needs it can read it without the aggregate carrying state it never
-consults.
+# 4. Errors
 
-Apply it by naming the observer. If you cannot name what reads the field — an invariant
-that guards on it, an acceptance criterion that asserts it, a query the system owes an
-answer to — it is event payload, not state.
+## 4.1 Taxonomy
 
-Worked both ways, because the rule is not "prefer events":
+The base types live in `qes.domain.exception` and are used by every module
+(`architecture.definition.md` § 4.2, § 11.3):
 
-| Field | Stored? | The observer |
-|-------|---------|--------------|
-| `TourBooking.cancelledAt` / `cancelledBy` / `cancellationReason` | **yes** | UC08 AC-06 must prove a pre-existing attribution survived a *rejected* second cancellation. The attempt throws, so no event is emitted and there is nothing but aggregate state to assert against |
-| `BookingActivated.guideTourId`, `BookingCompleted.guideTourId`, `BookingCancelledByGuide.guideTourId` | no | nothing queries which guide tour caused a transition; no invariant guards on it |
-| `startedAt` on `TourBooking` (UC06), `completedAt` on `TourBooking` (UC07) | no | another context's fact, relayed. No booking invariant compares against it |
-| `GuideTour.startedAt` | **yes** | invariant I-07 compares `completedAt` against it |
+| Type | Meaning | Surfaced as |
+|------|---------|-------------|
+| `BadUserInputException` | The caller asked for something illegal | GraphQL `BAD_USER_INPUT` / HTTP 400 |
+| `EntityNotFoundException` | The referenced row does not exist | GraphQL `NOT_FOUND` / HTTP 404 |
+| `DomainException` | Base type; carries a `DomainErrorCode` | classified by the advice |
+| Provider exceptions (`SigniusIntegrationException`, `PostIdentIntegrationException`, …) | An external system failed | HTTP 502 / provider-specific classification |
 
-The temptation this rule resists is storing a value because it was passed in and looks
-like data. A column nothing reads still has to be migrated, mapped, round-tripped and
-tested, and it invites a later reader to treat it as authoritative when the event was.
+Rules:
 
-The temptation it also resists is the opposite one — dropping a field for symmetry with a
-neighbouring use case. `TourBooking` stores its cancellation timestamp while discarding its
-completion timestamp, and that asymmetry is correct: the two have different observers.
-Consistency between use cases is not the criterion; the observer is.
+- **Do not use `IllegalArgumentException`, `IllegalStateException` or `RuntimeException`
+  for business semantics.** They map to 500 and tell the caller nothing.
+- An illegal lifecycle transition is `BadUserInputException` with a message naming the
+  case, the attempted event and the current status. `KycCaseDecisionService` is the
+  reference for the message shape.
+- A provider failure is never re-thrown raw. Wrap it.
+- Error messages MUST NOT contain personal data, provider payloads, or secrets.
 
-Recorded after `ddd-hex-reviewer` observed that this criterion had decided UC06, UC07,
-UC08 and UC09 while existing only in a use-case spec and a domain spec — authority levels
-14 and 16 — which made the precedent unappealable and unenforceable. Same defect class
-`architecture.definition.md` § 4.6 fixed for write-side query criteria.
+## 4.2 Domain error vs technical error
 
+- **Domain error** — expected, the caller can act on it, mapped to a 4xx / typed GraphQL
+  error, not alerted on.
+- **Technical error** — unexpected, mapped to 5xx, logged with a correlation id, alerted on.
 
-## Aggregate Root
+Classifying a technical failure as a domain error to keep dashboards clean is forbidden.
 
-*Definition:* The entity that guards the aggregate boundary.  
+---
 
-*Rules:*
-- Public behaviour methods live on the root.
-- Root holds the domain events produced during changes (or returns them).
+# 5. Events
 
-## Domain Service
+RMS has two distinct kinds. Do not conflate them.
 
-*Definition:* Stateless domain logic that doesn’t naturally belong to a single aggregate.
+## 5.1 Audit events
 
-*Rules:*
-- Stateless and pure (no IO).
-- Uses domain types (entities/value objects), not DTOs.
+CloudEvents emitted through `common.audit` for regulated actions. Contract, retained,
+catalogued (`docs/audit-kernel.md`, `docs/kyc/kyc-event-catalogue.md`).
 
-*When to use:*
-- A rule uses multiple domain concepts but is still “pure domain logic”.
-- Avoid turning domain services into “god classes”.
+- Past tense, business vocabulary.
+- Attributed to an operator or to `svc:risk-management-service`.
+- Personal data hashed or omitted.
+- **Adding or changing an audit event is a contract change** and requires the catalogue
+  to be updated in the same increment.
 
-## Application Service (Use Case)
+## 5.2 Spring application events
 
-*Definition:* Orchestrates a use case: loads aggregates, invokes domain behavior, persists, publishes.
+In-process, e.g. `qes/config/StatusChangeListener`. Internal coordination only.
 
-*Responsibilities:*
-- Load aggregates via repositories.
-- Execute domain behavior.
-- Pass required external data as parameters.
-- Apply authorization rules at a clearly defined boundary.
-- Persist changes.
-- Trigger event publication.
+- Never a substitute for an audit event.
+- Never the mechanism for something that must survive a crash — that is an outbox row.
+- A listener that performs business logic belongs in a service the publisher calls
+  directly, unless the decoupling is deliberate and specified.
 
-Application Services MUST NOT contain domain invariants.
+---
 
-If orchestration spans multiple aggregates over time or asynchronously,
-a dedicated process manager / saga SHOULD be used.
+# 6. Anti-patterns
 
-## Factory
-
-*Definition:* A domain creation component that ensures invariants at construction.
-
-*Rules:*
-- Prefer static named constructors on the aggregate/value object first.
-- Use a factory when creation needs:
-  - multiple steps
-  - generation of IDs
-  - collaboration of multiple values
-
-*Constraints:*
-- Factories should be immutable and thread-safe.
-- Factories should not have side effects.
-
-Factories are used to guarantee invariant-safe object creation.
-
-*Creation Rules:*
-- Prefer named constructors or static factory methods.
-- Builders SHOULD only be used when:
-- The object has many optional parameters, AND
-- Readability significantly improves, AND
-- Invariants are enforced at build() time.
-
-Half-constructed domain objects MUST NOT exist.
-
-All factories MUST ensure the object is valid upon creation.
-
-## Repository
-
-*Definition:* Repositories abstract persistence for aggregates.
-
-*Rules:*
-- Repositories return and persist aggregate roots, not JPA entities.
-- Keep method names in domain language: findBy(OrderId), save(Order).
-- MUST load, update, save, delete complete aggregates
-- MUST delete complete aggregates with all attached entities and value objects.
-- MUST persist aggregate state atomically.
-- MUST NOT expose partial modification methods.
-
-*Constraints:*
-- Repository interface lives in the domain (or application core).
-- Implementation lives in the infrastructure adapter (Spring Data / JPA / jOOQ).
-
-## Domain Event
-
-Domain Events
-
-*Definition:* Domain Events represent facts that happened inside the domain.
-
-*Rules:*
-- MUST be immutable.
-- MUST be part of the ubiquitous language.
-- MUST describe something that already happened (past tense).
-
-Domain Events are raised inside aggregates.
-
-*Publication:*
-- Application layer is responsible for publishing events AFTER successful transaction commit.
-
-*Domain vs Integration Events:*
-
-A distinction MUST be made between:
-- Domain Event → internal to the bounded context.
-- Integration Event → external communication contract.
-
-Integration Events MAY be derived from Domain Events but are NOT the same concept.
-
-## Commands & Queries
-
-*Definition:* Commands and Queries represent application boundary inputs.
-
-*Rules:*
-- MUST be immutable.
-- MUST NOT contain domain behavior.
-- MUST represent intent (Command) or information request (Query).
-- MUST NOT depend on infrastructure types.
-
-If crossing process boundaries, they MUST be treated as versioned message contracts.
-
-Serializable is NOT a requirement unless required by the transport mechanism.
-
-## Read Models
-
-*Definition:* Read Models are optimized representations for queries.
-They are not part of the transactional aggregate model.
-
-*Rules:*
-- MAY denormalize data.
-- MAY join multiple aggregates.
-- MUST NOT contain domain invariants.
-- MUST NOT mutate domain state.
-
-Read Models exist to optimize query performance and projection use cases.
-
-# Error model
-
-- Use domain exceptions (or Result style) for business rule violations:
-  - OrderAlreadyPaid, InsufficientStock
-- Distinguish:
-  - Domain errors (expected) vs technical errors (unexpected)
-  - Domain errors should be mappable to API errors consistently.
+- A status held as a `String`
+- A transition legality check duplicated in three services instead of the state machine
+- An entity method that loads another row
+- `@Transactional` on a self-invoked method
+- A mapper with a repository dependency
+- A provider enum used directly as our enum
+- An `else ->` branch hiding an unmapped provider status
+- Personal data in an exception message, a log line, or an unhashed audit field
+- A second service writing a lifecycle column it does not own
+- An outbox row written outside the business transaction that justified it

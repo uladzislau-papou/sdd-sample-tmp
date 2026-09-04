@@ -52,11 +52,12 @@ this is per-unit.
    ticket/page, the starting set is that one unit.
 2. **Refine with four signals.** For each candidate unit, and across pairs of
    candidate units, check:
-   - spans more than one bounded context (registered contexts are in
-     `architecture.definition.md` § 11)
-   - spans more than one aggregate root
-   - spans more than one distinct trigger (e.g. one REST endpoint + one
-     event-driven reaction)
+   - spans more than one module (registered modules are in
+     `architecture.definition.md` § 11.1)
+   - spans more than one consistency-anchor entity
+     (`modelling.definition.md` § 2.4)
+   - spans more than one distinct trigger (e.g. one GraphQL mutation + one
+     provider webhook + one scheduler)
    - would force § 7 Acceptance Criteria to cover unrelated business outcomes
      that don't share one § 1 Intent
    Any signal justifies **splitting** a unit further. The *absence* of all four
@@ -79,14 +80,27 @@ the others — report and continue.
 ### 2.1 — ADR-trigger scan
 
 Check the unit's requirements against the full canonical list in
-`sdd.playbook.md` § 6 (all 13 triggers — new external dependency, new bounded
-context, changed persistence strategy, new async/event-driven processing, changed
-transaction boundaries, etc.), not only the bounded-context case.
+`sdd.playbook.md` § 6 — **all seventeen triggers**, not only the module case.
+
+The RMS-specific ones fire more often than people expect and are the ones most
+often missed at spec time:
+
+- **14 — a new provider**, or a change to which provider is the default for an
+  operation. A provider is a contract, an SLA and a failure mode, not a config value.
+- **15 — anything touching authentication or authorization**: a new scope, a
+  change to how operator identity is established, a surface with a different
+  auth mechanism.
+- **16 — a change to the audit contract** (envelope, transport, guarantee).
+  Note: *adding* an event to the existing contract is a catalogue update, not an ADR.
+- **17 — a change to how personal data is stored, hashed, retained or deleted.**
+
+Also watch for: a new cross-module edge or an inverted one (10), a new outbound
+delivery needing infrastructure (3), a widened transaction (5).
 
 **Any trigger fires → halt this unit.** Report which trigger, why, and what the
-user needs to do (write the ADR, and — for a new bounded context specifically —
-register it in `architecture.definition.md` § 11) before this unit can be
-specced. Do not draft the spec anyway "for now." Move to the next unit.
+user needs to do (write the ADR, and — for a new module specifically — register it
+in `architecture.definition.md` § 11.1) before this unit can be specced. Do not
+draft the spec anyway "for now." Move to the next unit.
 
 ### 2.2 — Gap check
 
@@ -94,8 +108,21 @@ Compare the unit's available content against every section the template
 requires: § 1 Intent, § 2 Input Contract, § 3 Output Contract (including the
 error-type table), § 4 Preconditions, § 5 Flow, § 6 Side Effects, § 7 Acceptance
 Criteria (each needs a stable `AC-NN`, Given/When/Then, and must describe
-business behaviour — not implementation), § 8 Failure Scenarios, § 9 REST
-Contract (or the explicit "Not applicable — event-driven/outport-triggered").
+business behaviour — not implementation), § 8 Failure Scenarios, § 9 API
+Contract (or the explicit "Not applicable — scheduler/internal").
+
+RMS-specific gaps that a ticket almost never supplies and you must ask about
+rather than infer:
+
+- **Which lifecycle states is this legal from**, and what happens from each
+  illegal one — a message, a classification, a status
+- **Which scope** the caller must hold, and whether an operator must be present
+  or a service actor is acceptable
+- **Which audit event** fires, and its actor
+- **Idempotency**: is a repeat safe, and what makes it safe
+- **For a provider-facing unit**: the complete external vocabulary, so the
+  integration spec's § 3 translation table can be exhaustive. A partial list of
+  provider statuses is the single most expensive gap to discover later
 
 For anything missing or ambiguous, **ask the user** — do not draft best-effort
 content or leave a TODO. A spec with an unresolved gap in § 7 or § 10 is not
@@ -129,7 +156,13 @@ Use the three subsections from the template: `### Behaviour`, `### Contracts`,
    headings, no renumbering. Sections that don't apply say so explicitly
    ("Not applicable — ...").
 4. Do not write `rest/*.http` files here — that happens at implement phase
-   (`CLAUDE.md`, REST Endpoint Documentation), not spec creation.
+   (`CLAUDE.md`, API Request Documentation), not spec creation.
+5. If the unit needs a **domain spec** (new entity or a changed lifecycle) or an
+   **integration spec** (new surface or provider contract), say so in the report
+   and offer to write them from
+   `documentation/domain/domain.spec.template.md` and
+   `documentation/integrations/integration.spec.template.md`. Do not write them
+   unasked — the use case spec is this skill's deliverable.
 
 Write directly once 2.1–2.3 are clear for this unit — the split confirmation
 (Step 1) and the gap-resolution loop (2.2) already gate the content; there is no
@@ -143,14 +176,16 @@ End with a structured, per-unit summary — this project reports in checklists
 (DoD scoreboards, Agent Output Contracts), not prose:
 
 ```
-Source          PROJ-123 (Epic) — 3 child issues, 1 linked Confluence page
+Source          RISK-123 (Epic) — 3 child issues, 1 linked Confluence page
 Proposed split  3 units (matches Jira breakdown; no merge/further-split signals fired)
 
-Unit 1  uc13-request-guide-reassignment.spec.md   WRITTEN
-Unit 2  uc14-notify-affected-bookings.spec.md      WRITTEN
-Unit 3  guide-availability-cache                   HALTED
-        Trigger: sdd.playbook.md § 6.11 (introducing caching)
-        Action needed: write an ADR for the caching strategy, then re-run
+Unit 1  uc13-decline-kyc-case-with-reason.spec.md  WRITTEN
+        Also needs: entity-kyc-case.spec.md § 4 lifecycle row (offered)
+Unit 2  uc14-deliver-decision-to-radar.spec.md     WRITTEN
+        Also needs: radar-decisions.outbound.spec.md (offered)
+Unit 3  onfido-identity-provider                   HALTED
+        Trigger: sdd.playbook.md § 6.14 (onboarding a new provider)
+        Action needed: write an ADR for the provider decision, then re-run
         /spec-create against this unit's source content.
 
 Next    Run /uc-to-plan uc13, /uc-to-plan uc14 for the written specs.
@@ -167,4 +202,6 @@ Next    Run /uc-to-plan uc13, /uc-to-plan uc14 for the written specs.
 - Treating the Jira/Confluence child breakdown as final without checking the
   four refinement signals, or discarding it without a signal-backed reason
 - Generating `rest/*.http` files at this phase
+- Leaving a provider translation table partial because the ticket only listed the
+  statuses the happy path uses
 - Reporting the outcome as prose instead of a per-unit checklist

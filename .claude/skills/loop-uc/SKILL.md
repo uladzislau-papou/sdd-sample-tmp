@@ -26,7 +26,7 @@ stopping decision.
 ## Step 0 — Setup (once)
 
 1. Read `CLAUDE.md` for the authority order.
-2. Read the always-read four: `architecture.definition.md`,
+2. Read the always-read four: `architecture.definition.md` (including the § 11 registry),
    `coding-style.definition.md`, `modelling.definition.md`, `tdd.definition.md`.
 3. Resolve the spec: `documentation/use-cases/uc<nn>-*.spec.md`.
    Glob it — do not assume the filename stem, and note that spec filenames are
@@ -68,14 +68,15 @@ Rebuild the mirror in `tasks.md`:
 ```markdown
 ## DoD Scoreboard – UC07 (iteration 3/10)
 
-Mirrored from documentation/use-cases/uc07-mark-booking-completed.spec.md § 10.
+Mirrored from documentation/use-cases/uc07-<name>.spec.md § 10.
 Authoritative source is the spec; this table is rebuilt each iteration.
 
-- [x] AC-01 covered by TourBookingTest.should_complete_when_active
-- [x] AC-02 covered by TourBookingTest.should_reject_completion_when_not_active
-- [ ] MarkBookingCompletedDriver orchestration covered by MarkBookingCompletedDriverTest
-- [ ] rest/uc07-mark-booking-completed.http covers 200, 404, 409
-- [ ] ddd-hex-reviewer: PASS
+- [x] AC-01 covered by KycCaseDecisionServiceTest.acceptCase_advancesToAccepted_whenScreeningCleared
+- [x] AC-02 covered by KycCaseDecisionServiceTest.acceptCase_throwsBadUserInput_whenCaseIsDeclined
+- [ ] KycDecisionMapper covers every KycCaseStatus, covered by KycDecisionMapperTest
+- [ ] Authorization covered by KycScopeInterceptorTest: 401, 403, pass-through
+- [ ] rest/uc07-<name>.http covers success, BAD_USER_INPUT, NOT_FOUND, 401, 403
+- [ ] rms-architecture-reviewer: PASS
 - [ ] Quality gates (test.definition.md § 7) green
 ```
 
@@ -88,10 +89,11 @@ Compute `ticked / total` and append to `dod_history`.
 Priority (`loop.playbook.md` § 2.2):
 
 1. any entry in `open_findings` — **always first**
-2. domain-layer criteria
-3. use-case-layer criteria
-4. adapter / REST criteria
-5. gate-shaped criteria — never selected; they are evaluated in step 6
+2. service-layer criteria (business rules, transition legality, rejection paths)
+3. mapper / translation criteria
+4. controller, authorization and API-contract criteria
+5. integration criteria (repository queries, migrations, outbox round-trips)
+6. gate-shaped criteria — never selected; they are evaluated in step 6
 
 State the selection explicitly before doing any work: *"Iteration 3/10 —
 working: `<criterion>`"*.
@@ -106,20 +108,27 @@ If `--dry-run`, stop here and report.
 
 ### RED
 
-Pick the layer from `tdd.definition.md` § 3 (inside-out: domain → driver → rest
-→ persistence). Write **one** test. Run it:
+Pick the layer from `tdd.definition.md` § 3 (service → mapper → controller →
+authorization → integration). Write **one** test. Run it:
 
 ```bash
-./gradlew :app:test --tests '*<TestClass>.<method>'
+./gradlew test --tests '*<TestClass>.<method>'
 ```
+
+This is a single-module Gradle build — there is no `:app:` prefix.
 
 **Quote the actual failure output** — command, test name, assertion message.
 This is a gate, not a formality (`tdd.definition.md` § 2). No quoted RED, no
 GREEN. A predicted failure is not a failure.
 
-If the test unexpectedly **passes**: that is a finding. Either the behaviour
-already exists — close the criterion and note it — or the test does not test what
-it claims. Do not proceed as if RED happened.
+If the test unexpectedly **passes**: that is a finding, and in this brownfield codebase
+it is common. Either the behaviour already exists — close the criterion, record that the
+gap was *coverage*, and prove the test is not vacuous per `tdd.definition.md` § 2.2 — or
+the test does not test what it claims. Do not proceed as if RED happened.
+
+If the criterion modifies an **untested** service method, write a characterization test
+for its current behaviour first and land it as its own iteration
+(`tdd.definition.md` § 2.3).
 
 ### GREEN
 
@@ -127,14 +136,14 @@ Least production code that passes that one test. Nothing more — do not impleme
 criteria that are not currently red.
 
 ```bash
-./gradlew :app:test
+./gradlew test
 ```
 
 Exit: new test passes, nothing previously green broke.
 
 ### REFACTOR
 
-Improve naming, extract value objects, move logic to where the ontology says it
+Improve naming, extract private steps, move logic to where the ontology says it
 belongs. Exit: full suite green and **no test file modified**. If a test had to
 change, the behaviour changed — back it out and do it as its own RED.
 
@@ -145,7 +154,7 @@ change, the behaviour changed — back it out and do it as its own RED.
 Dispatch both subagents concurrently. Do not serialise them; they are independent.
 
 ```
-Agent(subagent_type: "ddd-hex-reviewer",
+Agent(subagent_type: "rms-architecture-reviewer",
       prompt: "Review the working diff for UC<nn> iteration <n>. Criterion worked:
                <criterion>. Layers touched: <layers>. Return PASS or DRIFT.")
 
@@ -178,16 +187,18 @@ Recompute the DoD state **from evidence**, not from memory. For gate-shaped
 criteria, run them:
 
 ```bash
-./gradlew clean test
-./gradlew build
+./gradlew spotlessApply && ./gradlew spotlessCheck && ./gradlew detekt && ./gradlew test && ./gradlew build
 ```
+
+All fifteen gates in `test.definition.md` § 7 — including the ones no Gradle task checks:
+`.env.example` coverage, the `docs/` audit catalogue, and no edited applied migration.
 
 Update `tasks.md`. Append the new ticked-count to `dod_history`.
 
 ### Exit — all three required (`loop.playbook.md` § 3)
 
 - every DoD box ticked, with named evidence, **and**
-- `ddd-hex-reviewer` returned `PASS` on the final state, **and**
+- `rms-architecture-reviewer` returned `PASS` on the final state, **and**
 - the `test.definition.md` § 7 gates pass, evaluated fresh
 
 → report `DONE`.
@@ -223,17 +234,17 @@ Otherwise: `iteration += 1`, go to Step 1.
 
 ```
 Iteration      3/10
-Criterion      MarkBookingCompletedDriver orchestration
-Completed      MarkBookingCompletedDriver + inport triple
-Verification   RED: MarkBookingCompletedDriverTest.should_publish_event_on_completion
-                    → java.lang.AssertionError: Expecting actual not to be empty
-               GREEN: 47 tests passed
-               Gates: ./gradlew clean test OK, ./gradlew build OK
-Specs touched  uc07-mark-booking-completed.spec.md (§ 3, § 10),
-               aggregate-tour-booking.spec.md (§ 4)
+Criterion      Decision mapper covers every KycCaseStatus
+Completed      KycDecisionMapper exhaustive when; removed the else branch
+Verification   RED: KycDecisionMapperTest.mapDecision_coversEveryKycCaseStatus
+                    → java.lang.AssertionError: Expecting map to contain key DECLINED
+               GREEN: 312 tests passed
+               Gates: spotlessCheck OK, detekt OK, test OK, build OK
+Specs touched  uc07-<name>.spec.md (§ 3, § 10),
+               integrations/radar-decisions.outbound.spec.md (§ 3 translation table)
 Drift review   PASS
-DoD delta      2/6 → 3/6 (driver orchestration closed)
-Next step      rest/uc07-*.http coverage for 200/404/409
+DoD delta      2/7 → 3/7 (mapping criterion closed)
+Next step      authorization tests for the new surface (401/403/pass-through)
 ```
 
 Final report adds the terminal state, the full scoreboard, and the last verdict.

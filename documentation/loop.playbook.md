@@ -25,7 +25,7 @@ objectively checkable criteria (`sdd.playbook.md` § 4.2). That list, and nothin
 else, decides when the loop stops.
 
 ```
-documentation/use-cases/uc07-mark-booking-completed.spec.md
+documentation/use-cases/uc07-<name>.spec.md
   ## 10. Definition of Done      ← authoritative
         │
         │ mirrored each iteration
@@ -56,7 +56,7 @@ one failure mode this playbook exists to prevent.
        │                                                          │
  3. INNER LOOP     execution.playbook.md § 3.4: RED → GREEN → REFACTOR
        │                                                          │
- 4. FAN OUT        ddd-hex-reviewer  ‖  spec-documenter           │
+ 4. FAN OUT        rms-architecture-reviewer ‖ spec-documenter     │
        │                                                          │
  5. RESOLVE        DRIFT? → finding becomes next iteration's work  │
        │                                                          │
@@ -86,11 +86,12 @@ Choose **exactly one** unmet criterion per iteration. Priority order:
 
 1. Any open `DRIFT` finding from the previous iteration — always first.
    Architecture debt compounds; behaviour debt does not.
-2. Domain-layer criteria (invariants, state transitions) — the inside-out
-   ordering of `tdd.definition.md` § 3.
-3. Use-case-layer criteria (orchestration, events, failure paths).
-4. Adapter and REST criteria.
-5. Gate-shaped criteria (`ddd-hex-reviewer: PASS`, build green) — these are
+2. Service-layer criteria (business rules, transition legality, rejection paths,
+   side effects) — the service-first ordering of `tdd.definition.md` § 3.
+3. Mapper and translation criteria (provider vocabulary, exhaustive enum coverage).
+4. Controller, authorization and API-contract criteria.
+5. Integration criteria (repository queries, migrations, outbox round-trips).
+6. Gate-shaped criteria (`rms-architecture-reviewer: PASS`, build green) — these are
    *consequences*, evaluated in step 6, never "worked on" directly.
 
 One criterion per iteration is a real constraint. Batching them reintroduces the
@@ -112,7 +113,7 @@ Dispatch both subagents **in parallel** on the working diff
 
 | Agent | Model | Returns |
 |-------|-------|---------|
-| `ddd-hex-reviewer` | opus | `PASS` or `DRIFT` + `file:line` findings |
+| `rms-architecture-reviewer` | opus | `PASS` or `DRIFT` + `file:line` findings |
 | `spec-documenter` | fable | reconciled specs, `rest/*.http`, scoreboard refresh |
 
 They are independent. Neither waits for the other.
@@ -145,9 +146,9 @@ detector (§ 4) needs it.
 The loop exits successfully only when **all three** hold simultaneously:
 
 1. **Every DoD box in the spec is ticked**, each with named evidence.
-2. **`ddd-hex-reviewer` returns `PASS`** on the final state.
-3. **The quality gates in `test.definition.md` § 7 pass** — the canonical list,
-   evaluated fresh, not remembered from an earlier iteration.
+2. **`rms-architecture-reviewer` returns `PASS`** on the final state.
+3. **The quality gates in `test.definition.md` § 7 pass** — all fifteen, the canonical
+   list, evaluated fresh, not remembered from an earlier iteration.
 
 Two of three is not done. In particular, green tests with an open `DRIFT` finding
 is not done, and a `PASS` verdict on an incomplete DoD is not done.
@@ -206,10 +207,10 @@ one tier wastes capability on bookkeeping or starves the reasoning that matters.
 |-------|-------|-----|
 | Gate read, scoreboard mirroring | fable | Mechanical parse-and-write |
 | Select | inherit | Small decision, needs loop context |
-| RED — designing the failing test | opus | The hardest step: what the domain *must* do |
-| GREEN — minimal implementation | opus | Domain modelling decisions |
+| RED — designing the failing test | opus | The hardest step: what the contract *must* require |
+| GREEN — minimal implementation | opus | Business-rule and transition decisions |
 | REFACTOR | inherit | |
-| `ddd-hex-reviewer` | opus | Adversarial judgement; anemic-model detection is not grep |
+| `rms-architecture-reviewer` | opus | Adversarial judgement; layering and provider-leak detection is not grep |
 | `spec-documenter` | fable | High-volume mechanical reconciliation |
 | Re-evaluate, hard-stop checks | inherit | Cheap; must not be delegated away from the loop driver |
 
