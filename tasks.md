@@ -1,257 +1,415 @@
-# Tasks – Clean Baseline
+# Tasks — Template transformation
 
-Derived from `plan.md`. Replaces the previous `tasks.md`, which was the completed
-ADR-0003 extraction checklist (51/51 ticked, four stale paths).
+Derived from `plan.md`. Replaces the previous `tasks.md`, which tracked Alpine
+Booking's remaining feature work and is preserved in git history.
 
-Governance: `execution.playbook.md` § 3 for each increment, `tdd.definition.md` for
-RED → GREEN → REFACTOR, `loop.playbook.md` for the outer loop.
+**Governance for this effort is deliberately split** (`plan.md` Phase 4 rationale):
+
+- The Kotlin port of the vertical slice is production code. It follows
+  `tdd.definition.md` — tests port first, RED before GREEN.
+- Document, ADR, `.claude/`, build and CI edits are scaffolding. They run as a
+  flat ordered checklist. No use-case spec is written for "turn this repository
+  into a template": it has no actor, no aggregate, no command and no
+  transaction boundary, and filling the ten sections of
+  `use-case.spec.template.md` would require inventing all ten.
 
 ---
 
-## DoD Scoreboard – Plan
+## DoD Scoreboard — Plan
 
 Mirrored from `plan.md` § "Definition of Done for this plan". The plan is
-authoritative; this is a scoreboard. **`plan.md` was rewritten** (it is now
-"Alpine Booking — remaining work", Phases 0–6); the previous clean-baseline plan's
-DoD closed 6/6 and is preserved in git history. Rebuilt against the new plan:
+authoritative; this is a scoreboard.
 
-- [ ] Phase 0 committed, working tree clean
-- [ ] `/loop-uc` has driven at least one increment end to end, defects fixed or written down
-- [ ] The no-progress detector and the ADR halt both observed firing
-- [ ] `ddd-hex-reviewer` returns `PASS` on the full tree with `Undocumented: none`
-- [ ] `spec-documenter` reports no `Gaps` and no unresolved `Conflicts`
-- [ ] `./gradlew clean test build` green; `app/data/` absent; every commit builds standalone
-- [ ] Every `Class.method` citation in `documentation/` resolves to a test that exists (scripted)
-
-## DoD Scoreboard – Implemented use cases
-
-Mirrored from each use case spec's `## 10. Definition of Done`, recomputed from the
-specs. Specs are authoritative.
-
-UC01–UC07 fully closed (the baseline's last twelve were gate-shaped — six
-`ddd-hex-reviewer: PASS` and six `Quality gates green` — and closed together at task 5.8
-on a witnessed `PASS` verdict and a witnessed green run, not on predicted ones). UC08's
-two remaining boxes are the same gate shape and close only on witnessed runs.
-
-| Use case | Ticked | Open |
-|----------|--------|------|
-| UC01 RequestTourBooking | **15/15** | — |
-| UC02 ConfirmTourBooking | **10/10** | — |
-| UC03 CancelTourBooking | **11/11** | — |
-| UC04 ChangeParticipants | **15/15** | — |
-| UC05 StartTour | **16/16** | — |
-| UC06 MarkBookingActive | **13/13** | — |
-| UC07 MarkBookingCompleted | **21/21** | — |
-| UC08 CancelBookingByUser | **24/26** | 2 — `ddd-hex-reviewer: PASS` and quality gates, both gate-shaped and awaiting a witnessed run |
-| UC09 MarkBookingCancelledByGuide | **24/26** | 2 — gate-shaped (`ddd-hex-reviewer: PASS` post-rework, quality gates), awaiting witnessed runs. The 3 UC12-blocked boxes closed with UC12; the inport was reworked per-tour (`tourId` in, `cancelledCount` out) in the same increment |
-| UC12 CancelTourByGuide | **22/24** | 2 — gate-shaped (`ddd-hex-reviewer: PASS`, quality gates), awaiting witnessed runs |
-
-UC07 (Phase 6 feature work) was added after the baseline paragraph above was written and
-is now closed at 21/21. Its two agent-reported contradictions were both real and were
-resolved in opposite directions — one by correcting the spec, one by correcting the code
-(UC07 § 10 Governance records which was which). Its `ddd-hex-reviewer: PASS` came on the
-second pass; the first returned `DRIFT`.
-
-**80/80.** Closed across the effort: UC01 AC-03/AC-04 REST boundary (3.2) · UC04 400 and
-502 (3.3), persistence (3.4) · UC05 driver test (3.1), domain spec (1.1), port specs
-(1.2, 1.3) · UC06 persistence (3.5), listener test (2.3) · and the twelve gate-shaped
-boxes at 5.8.
-
-Two of these were real bugs rather than coverage gaps: `TourBookingJooqRepository.update`
-wrote only `status`, silently discarding UC04's entire effect; and the controller tests
-booted the full application without the `test` profile, writing a file-based H2 database
-that leaked state between runs.
+- [ ] `publish-showcase.yml` gone; no workflow can push outside this repository
+- [ ] `./gradlew clean test build` green on JVM 17 / Gradle 8.14
+- [ ] Zero `.java` files under `app/src`
+- [ ] Three ArchUnit tests green, none containing a hardcoded package literal
+- [ ] `ContextRegistryTest` derives its context list from `architecture.definition.md` § 11
+- [ ] `./gradlew initService` produces a compiling, green service
+- [ ] UC01 reachable over both REST and GraphQL, with both `api/` files
+- [ ] UC06 has no `api/` file and its spec says so explicitly
+- [ ] UC02 makes `CONFIRMED` reachable, so UC06's happy path is reachable end to end
+- [ ] No document outside the example's own specs names a tour, a booking or a guide
+- [ ] `ddd-hex-reviewer` returns `PASS` on the full tree
+- [ ] `spec-documenter` reports no gaps and no unresolved conflicts
+- [ ] Four agents and six slash commands registered in `CLAUDE.md`, single-sourced
+- [ ] `plan.md` and `tasks.md` replaced by empty `*.template.md`
 
 ---
 
----
+## Phase 0 — Remove the external risk
 
-## Completed — the August 2026 modernization
+- [x] **0.1** Delete `.github/workflows/publish-showcase.yml`
+- [x] **0.2** Confirm no other workflow, script or git remote targets a repository outside this one
 
-The 51-task list that drove Phases 0–6 of the previous `plan.md` is complete and lives in
-git history (`git log --oneline main..HEAD`, 32 commits). Summarised rather than kept inline,
-because it is a record of finished work and the detail is in the commit messages:
+## Phase 1 — Delete what does not survive
 
-| Phase | What it did |
-|-------|-------------|
-| 0 Rulings | seven maintainer decisions, all obtained |
-| 1 Documentation | guide domain + port specs written; eight documented-but-unfollowed rules scoped |
-| 2 Architecture fixes | `AvailabilityUnavailableException` relocated; `shared.outport` adapters moved to `shared.outbound` with a new `SharedConfig` |
-| 3 Test gaps | five closed, two of which were real bugs — `update` writing only `status`, and controller tests leaking a file-based H2 |
-| 4 Naming | `GuideOperationsConfig`/`…ExceptionHandler` → `GuideConfig`/`GuideExceptionHandler`, per ADR-0003 |
-| 5 Mechanical rules | ArchUnit (30 rules, in CI), Spotless, `build.yml` pinned to Temurin 25 |
-| 6 Feature work | UC11, UC07, UC08, UC09, UC12 |
+- [x] **1.1** Delete the use-case specs that go: UC02, UC03, UC04, UC07, UC08, UC09, UC10, UC11, UC12. Keep UC01, UC05, UC06 and `use-case.spec.template.md`
+- [x] **1.2** Delete the port specs that go. Keep the two inport specs for UC01/UC05, both repository outports, `domain-event-publisher.outport.spec.md`, `clock.outport.spec.md`
+- [x] **1.3** Keep both aggregate specs (`TourBooking`, `GuideTour`) and `domain.spec.template.md`; prune references to deleted use cases
+- [x] **1.4** Delete the production and test sources of the dropped use cases (`Confirm*`, `Cancel*`, `ChangeParticipants*`, `Complete*`, `MarkBookingCompleted*`, `MarkBookingCancelledByGuide*`), including their commands, results, drivers, requests, responses and events
+- [x] **1.5** Delete the Flyway migrations for the dropped features; renumber to a clean V1/V2 pair
+- [x] **1.6** `git mv rest api`; delete the `.http` files of dropped use cases; keep `uc01` and `uc05`
+- [x] **1.7** Remove the jOOQ code-generation chain from `app/build.gradle.kts` (`flywayMigrate` → `jooqCodegen`, the H2 codegen database, the jOOQ version-forcing block) and its entries from `libs.versions.toml`
+- [x] **1.8** Delete the empty `documentation/integrations/`; empty `documentation/notes.md` to its heading
+- [~] **1.9** ~~Green build after the deletions, still on Java~~ — **unachievable, see Deviations**
 
----
+## Phase 2 — Move the platform
 
-## Phase 0: Publish to the public showcase
+- [x] **2.1** Gradle wrapper 9.3.1 → 8.14
+- [x] **2.2** `.sdkmanrc` → JDK 17; `libs.versions.toml` `java = "17"`; toolchain and Kotlin `jvmTarget = JVM_17`
+- [x] **2.3** Add the Kotlin plugins (`jvm`, `plugin.spring`, `plugin.jpa`) and Kotlin stdlib/reflect; keep Java compilation alive during the port
+- [x] **2.4** Swap jOOQ for Spring Data JPA; add `spring-boot-starter-data-jpa`, PostgreSQL driver, `flyway-database-postgresql`
+- [x] **2.5** Add Testcontainers (`spring-boot-testcontainers`, `testcontainers-postgresql`); remove H2 entirely
+- [x] **2.6** Add `docker-compose/docker-compose.yaml` with PostgreSQL for local development; point `application.yml` at it
+- [x] **2.7** Point `application-test.yml` at Testcontainers; every `*IT` runs against PostgreSQL
+- [x] **2.8** Re-enable the Gradle configuration cache in `gradle.properties` (the Flyway plugin that blocked it is gone)
+- [x] **2.9** Add detekt, ktlint and spotless for Kotlin; `allWarningsAsErrors = true`
+- [x] **2.10** Update `.github/workflows/build.yml`: JDK 17 pin, new gate commands
+- [x] **2.11** `./gradlew clean test build` green on JVM 17 / Gradle 8.14
 
-Mostly manual — the workflow exists, the setup does not. Blocks nothing else, but it is what
-makes the repository a showcase rather than a private project.
+## Phase 3 — Rename the class roles
 
-### 0.1 - Publish setup (manual, maintainer only)
-- [ ] **Task 0.1.1**: Create `github.com/dominikgaller/alpine-booking-reference`. The workflow does not create it.
-- [ ] **Task 0.1.2**: Create a **fine-grained** PAT, *Contents: read and write*, scoped to that repository only. Add it here as the Actions secret `SHOWCASE_PUBLISH_TOKEN`. Not a classic `repo` token — that grants write to every repository on the account in order to publish one.
-- [ ] **Task 0.1.3**: Run the workflow with `dry_run: true` via *workflow_dispatch*. It filters, verifies and builds without pushing. This is what turns the pipeline from reasoned into verified — the `git-filter-repo` step has never been executed.
-- [ ] **Task 0.1.4**: Read the dry-run log. Confirm the commit count is plausible and the guard reported clean.
-- [ ] **Task 0.1.5**: Re-run without `dry_run`. Confirm the public repository has history, not one squashed commit.
+- [x] **3.1** `coding-style.definition.md`: `*Controller` → `*RestController`; add the `*GraphQLAPI` / `*GraphQLController` roles
+- [x] **3.2** `ClassRoleRulesTest`: rename the REST rules, add the GraphQL role rules
+- [~] **3.3** Classes, tests and `architecture.definition.md` done. Port specs and use-case specs still name the old roles — folded into 6.9
+- [x] **3.4** `./gradlew clean test build` green
 
-### 0.2 - Make the force-push recoverable
-- [ ] **Task 0.2.1**: Decide whether to add a timestamped tag alongside `main` in `publish-showcase.yml`, so a bad-but-guard-passing filter is recoverable from the public side. Currently it is not.
-- [ ] **Task 0.2.2**: If yes: add the tag push, and re-run with `dry_run: true` first.
+## Phase 4 — Port to Kotlin, tests first
 
-### 0.3 - Dangling references in the published copy
-- [ ] **Task 0.3.1**: `CLAUDE.md` and `loop.playbook.md` reference `plan.md` and `tasks.md`, neither of which will exist publicly. Decide: reword the documents (recommended — they *are* private working material), strip references at publish time (fragile), or publish the two files after all.
-- [ ] **Task 0.3.2**: Apply the decision. If rewording, it is a doctrine change → own commit, before anything depending on it (`file-usage.definition.md` § 5.1).
+Per slice: port the tests (RED) → port the production code (GREEN) → dispatch
+`ddd-hex-reviewer` and `spec-documenter` in parallel → gates.
 
-### 0.4 - README for the public repository
-- [ ] **Task 0.4.1**: There is none. The showcase would land on an empty front page. Highest-value single thing to write before pointing anyone at the public repo — and it is the maintainer's voice, not an agent's.
+- [x] **4.1** `shared/`: `TourId`, `DomainEvent`, `TourStarted`, `ClockPort`, `SystemClockPort`, `DomainEventPublisher`, `LoggingDomainEventPublisher`
+- [x] **4.2** Slice UC01 `RequestTourBooking` — domain (`TourBooking` aggregate, value objects, exceptions, `TourBookingRequested`)
+- [x] **4.3** Slice UC01 — inport (command, result, use case), outport (repository, `AvailabilityChecker`), driver
+- [x] **4.3b** Slice UC02 `ConfirmTourBooking` — inport, driver (restored, see Deviations)
+- [x] **4.4** Slice UC01 — REST adapter: `TourBookingRestAPI`, `TourBookingRestController`, request/response, exception handler
+- [x] **4.5** Slice UC01 — **GraphQL adapter**: `TourBookingGraphQLAPI`, `TourBookingGraphQLController`, SDL in `src/main/resources/graphql/booking/`, `api/uc01-*.graphql`. New code, not a port
+- [x] **4.6** Slice UC01 — JPA adapter: `TourBookingJpaEntity` in `outbound/persistence`, mapper, repository. Domain stays unannotated
+- [x] **4.7** Slice UC05 `StartTour` — `guide` domain, inport, driver, REST adapter, JPA adapter
+- [x] **4.8** Slice UC06 `MarkBookingActive` — inport, driver, `TourStartedListener`. No API, no `api/` file
+- [x] **4.9** `bootstrap/`: application class and the three Spring configurations
+- [x] **4.10** Port the three ArchUnit tests
+- [x] **4.11** Delete `app/src/**/*.java`; confirm zero remain
+- [~] **4.12** Fast gates green (117 tests, detekt, ktlint). **`integrationTest` unverified — no Docker on this machine.** `ddd-hex-reviewer` not yet dispatched
 
----
+## Phase 5 — Remove the hardcoded identity
 
-## Phase 1: Finish what is in flight
+- [x] **5.1** Drop `scanBasePackages`; the bootstrap class's own package becomes the scan root
+- [x] **5.2** One shared test helper derives `ROOT` from the bootstrap class package; remove all three literals
+- [x] **5.3** `architecture.definition.md` § 11: prose → strict table, with the document/test contract written beside it
+- [x] **5.4** `ContextRegistryTest` parses § 11 and derives its expected context list
+- [x] **5.5** Record the procedure: registering a bounded context starts with the document, not the package
+- [x] **5.6** `initService` Gradle task — moves package directories, rewrites `package`/`import`, sets `rootProject.name` and `group`, swaps in `project.definition.template.md`
+- [x] **5.7** Rename the current identity to a neutral root (not `com.innowise.*`); verify `initService` on a throwaway copy
 
-The working tree carries UC12 plus the UC09 per-tour rework, **uncommitted**. Close this
-before starting anything else.
+## Phase 6 — Generalize the documents
 
-### 1.1 - Close the review loop
-- [ ] **Task 1.1.1**: Read the fourth `ddd-hex-reviewer` verdict on the increment. Passes one to three returned `DRIFT`; every finding is addressed.
-- [ ] **Task 1.1.2**: If `DRIFT`, fix and re-dispatch. If `PASS`, tick the `ddd-hex-reviewer: PASS` box in UC09 § 10 and UC12 § 10 — and only then.
-- [ ] **Task 1.1.3**: Run `./gradlew clean test` and `./gradlew build`; record the witnessed figure and tick both quality-gate boxes. Do not tick from a remembered run — UC09's previous tick predated the rework and had to be reverted.
+- [x] **6.1** `README.md` — what this repository is and how to start a service from it
+- [x] **6.2** `project.definition.md` — the example's definition, with explicit non-goals: no read side, no authentication, no PII, no optimistic locking
+- [x] **6.3** `project.definition.template.md` — the blank for a new service
+- [~] **6.4** `architecture.definition.md`, `coding-style.definition.md` and `technical.spec.md` done; `modelling.definition.md` (14 refs) and `test.definition.md` (12) still carry unlabelled domain examples
+- [x] **6.5** `use-case.spec.template.md`: `## 9. REST Contract` → `## 9. API Contract` covering REST and GraphQL; add the § 1 `Source` field
+- [x] **6.6** `file-naming.definition.md`: `rest/` → `api/`, both file kinds, the `uc<nn>` rule and max+1 assignment
+- [x] **6.7** `test.definition.md` § 7: gate 12 rewritten for `api/`; the review gate written per-axis (architecture and spec conformance block; logic and security are recorded)
+- [x] **6.8** Rebuild the ADR set — rewrite ADR-0006 as the JVM 17 baseline, delete ADR-0003 and ADR-0008, add the baseline ADRs (persistence rule, dual API, PostgreSQL/Testcontainers, quality tooling), mark all `Accepted (inherited from template)`
+- [x] **6.9** Update the three surviving use-case specs to the new § 9 shape; UC06 states explicitly that § 9 is not applicable
+- [~] **6.10** Not performed — `spec-documenter` was never dispatched. Carried to `documentation/notes.md`
 
-### 1.2 - Commit
-- [ ] **Task 1.2.1**: Split the commit. The `guide` `CancellationReason` fix is a domain change driven by a review finding; `publish-showcase.yml` is infrastructure; UC12 + the UC09 rework is the feature increment.
-- [ ] **Task 1.2.2**: For each commit, run `git diff --cached --name-only` before committing. One earlier commit bundled a staged deletion from an unrelated `git rm` and did not compile.
-- [ ] **Task 1.2.3**: Verify each commit builds standalone: `git stash -u && ./gradlew clean build && git stash pop` at each step.
-- [ ] **Task 1.2.4**: Tick the Phase 1 boxes in `plan.md`.
+## Phase 7 — The two new skills
 
----
+- [x] **7.1** Agent `spec-reviewer` — opus, `Read`/`Grep`/`Glob` only, no `Write`, no `Bash`. Five rejection rules; hunts claims without a source; `OPEN QUESTION` is a permitted end state
+- [x] **7.2** Agent `conformance-reviewer` — sonnet, read plus `Bash` for running tests. Matches § 7 criteria to tests and § 10 boxes to artifacts
+- [x] **7.3** Skill `.claude/skills/spec-create/SKILL.md` — Jira/Confluence read-only via MCP; one hop; later comments outrank the description but conflicts become `OPEN QUESTION`; unread attachments listed as `OPEN QUESTION`; decomposition proposed and confirmed before writing; `uc<nn>` max+1; ADR-trigger report; dispatches `spec-reviewer`
+- [x] **7.4** Skill `.claude/skills/code-review/SKILL.md` — four axes, split authority, `ReportFindings` for logic and security, no `--fix`, no `--comment`. Delegates architecture to `ddd-hex-reviewer`, conformance to `conformance-reviewer`, logic to `mattpocock-skills:code-review`, security to `security-review`
+- [x] **7.5** `loop.playbook.md` and `execution.playbook.md`: Review phase reaches the review skill; the blocking axes are named
+- [x] **7.6** `CLAUDE.md`: agent roster 2 → 4, slash commands 4 → 6, `rest/` section rewritten for `api/`. Both lists stay single-sourced
+- [x] **7.7** `sdd.playbook.md` § 6: confirm the ADR triggers `/spec-create` reports against are the canonical list, uncopied
 
-## Phase 2: Prove the harness actually runs
+## Phase 8 — Close out
 
-**Highest value in the plan.** `/loop-uc` has never driven an increment; every one so far was
-the inner loop by hand.
-
-### 2.1 - First real `/loop-uc` run
-- [ ] **Task 2.1.1**: Pick a small increment. Block 4.1 below is the best candidate — one ArchUnit rule, one plantable violation, exactly one RED → GREEN → REFACTOR turn.
-- [ ] **Task 2.1.2**: Write a use-case-shaped spec for it if the loop needs one to parse a DoD from. Finding out that it *does* is itself a result worth recording.
-- [ ] **Task 2.1.3**: Run `/loop-uc`. Do not intervene except to stop it.
-- [ ] **Task 2.1.4**: Write down every defect. A loop that has never run will have them; they are the deliverable of this phase, and each is a better demo artefact than a green run.
-- [ ] **Task 2.1.5**: Fix the defects, or record them in `loop.playbook.md` as known limits.
-
-### 2.2 - Prove the guards fire
-- [ ] **Task 2.2.1**: Point the loop at a deliberately unsatisfiable DoD criterion. Confirm it reports `BLOCKED` after two iterations instead of burning tokens. This is the guard that makes an autonomous loop safe to demo live and it has never been triggered.
-- [ ] **Task 2.2.2**: Give it an increment that trips an `sdd.playbook.md` § 6 ADR trigger. Confirm it halts and asks rather than deciding.
-- [ ] **Task 2.2.3**: Confirm the max-iterations stop works.
-
-### 2.3 - Decide what the talk claims
-- [ ] **Task 2.3.1**: Decide honestly whether `/loop-uc` earns its place, or whether the inner loop plus the two agents is the real story and the outer loop is scaffolding. Either answer is fine; an unexercised skill presented as working is not.
-- [ ] **Task 2.3.2**: Run `/uc-to-plan` and `/execute-task` once each, or delete them. A command that does not work is worse than no command. (`/plan-to-task` has been exercised.)
-
----
-
-## Phase 3: Doctrine debt
-
-Rules that have already governed increments while living only in a use-case spec. Each is a
-doctrine-only commit, landing **before** any code that relies on it.
-
-### 3.1 - Attribution in the event type
-- [ ] **Task 3.1.1**: Write the rule into `modelling.definition.md` § Domain Event: distinct event types per business fact rather than one event with a discriminator. Include the N=2-is-fine / revisit-at-N=3 note and `BookingCancelledByUser`/`ByGuide` as the worked example.
-- [ ] **Task 3.1.2**: Doctrine-only commit; verify it builds standalone.
-
-### 3.2 - When an aggregate method may branch on its caller
-- [ ] **Task 3.2.1**: `TourBooking.cancel` varies its state guard *and* its idempotency by `CancelledBy`; `GuideTour.cancel` is not idempotent while its booking-side counterpart is. Each is defensible and documented; no rule says when caller-dependent behaviour is modelling and when it is two methods wearing one name. Write it down.
-
-### 3.3 - Does § 11 rule 3 bind test code?
-- [ ] **Task 3.3.1**: `ContextRegistryTest` uses `DO_NOT_INCLUDE_TESTS`, encoding "production only", but nothing states it. `CancelTourByGuideIT` imports seven `booking` types from inside the `guide` package to seed fixtures, and could have gone through `booking`'s inport. Answer it in `architecture.definition.md` § 11 or `test.definition.md`.
-- [ ] **Task 3.3.2**: If tests are bound, rework `CancelTourByGuideIT`'s seeding through the inport. If not, say so explicitly so the next reviewer does not re-raise it.
-
-### 3.4 - Where an integration-failure exception lives
-- [ ] **Task 3.4.1**: `BookingCancellationFailedException` sits in `guide.core.domain.guidetour.exception`, which § 3 defines as "domain exceptions for this aggregate" — and it is not a `GuideTour` rule violation. The placement is forced, because § 6 rule 3 lets `inbound.rest` import only from that package. Doctrine leaves no compliant alternative, which is the gap.
-
-### 3.5 - Must a rule citation resolve?
-- [ ] **Task 3.5.1**: Six places cited `architecture.definition.md` § 6 rule 2 for a rule that section does not contain; the reasoning was right and the citation was not. Nothing requires a citation to resolve to the section it names. Decide whether that is a rule, and if so how it is checked.
-
-### 3.6 - Command timestamp modelling
-- [ ] **Task 3.6.1**: `guide`'s `StartTourCommand` and `CompleteTourCommand` use `Optional<Instant>`; every `booking` command uses a nullable `Instant` resolved at the driver. Both cannot be right. `coding-style.definition.md` § 1.4's exception argues for nullable.
-- [ ] **Task 3.6.2**: RED — a test asserting the chosen shape on one command. GREEN — conform the other context. REFACTOR.
-- [ ] **Task 3.6.3**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
-- [ ] **Task 3.6.4**: `./gradlew clean test` and `./gradlew build`.
-
-### 3.7 - Missing `@throws`
-- [ ] **Task 3.7.1**: `CancelTourBookingUseCase` omits `InvalidBookingRequestException` although `CancellationReason` throws it; `MarkBookingCancelledByGuideUseCase` inherited the omission (§ 7.1/§ 7.3).
+- [~] **8.1** `./gradlew clean build -x integrationTest` green — 123 tests in 20 classes, ktlint, detekt (both type-resolution variants), bootJar. **`integrationTest` and both agents not run** — carried to `documentation/notes.md`
+- [x] **8.2** Verify `initService` end to end on a throwaway copy: rename, build, tests green
+- [~] **8.3** Templates written (`plan.template.md`, `tasks.template.md`). **Replacement deliberately not performed — blocked on a commit.** See Deviations
 
 ---
 
-## Phase 4: Turn conventions into enforcement
+## Deviations from `plan.md`
 
-Rules the codebase follows with nothing stopping it from stopping. Each block is one
-ArchUnit rule with a plantable violation — the best `/loop-uc` candidates for Phase 2.
+Recorded as they happened. `plan.md` stays authoritative on intent; these are the places
+where reality forced a different route to the same end.
 
-### 4.1 - § 8.1's REST half
-- [ ] **Task 4.1.1**: RED — plant an `Instant` component on a command reachable from `inbound.rest` and confirm nothing fails today.
-- [ ] **Task 4.1.2**: GREEN — an ArchUnit rule: no command referenced from `inbound.rest` may declare an `Instant` component.
-- [ ] **Task 4.1.3**: REFACTOR — remove the planted violation; confirm the rule still passes and the suite is green.
-- [ ] **Task 4.1.4**: Dispatch `ddd-hex-reviewer` and `spec-documenter`.
-- [ ] **Task 4.1.5**: `./gradlew clean test` and `./gradlew build`.
+**1.9 dropped — a green Java baseline is unreachable on this machine.** The build needed
+Java 21+ (the jOOQ Gradle plugin refuses to resolve below it) and targeted Java 25, while
+the only locally installed JDK is Zulu 17 and sdkman is not present. So the pruned Java
+tree could never be compiled, let alone verified green. The first verifiable green build
+is therefore after Phase 2, not after Phase 1. This also settles Q23 after the fact: JVM
+17 was not a downgrade for its own sake, it is what the machine actually has.
 
-### 4.2 - `reconstitute` overload selection
-- [ ] **Task 4.2.1**: `ClassRoleRulesTest` constrains which *classes* may call `reconstitute`, not which *overload*, so a mapper could reach for the short form and silently drop cancellation attribution. Both aggregates' Javadoc says so honestly; the persistence ITs are what catch it. Decide: mechanise, or record as accepted with the ITs named as the control.
+**4.11 moved to the front of Phase 4.** Consequence of the above. With jOOQ removed the
+remaining Java could not compile, so keeping it around bought nothing and blocked every
+build. Deleting all of it first left an empty module that builds green, and each Kotlin
+slice now lands on a green baseline instead of into a long red stretch.
 
-### 4.3 - Cross-context propagation
-- [ ] **Task 4.3.1**: RED — set `MarkBookingCancelledByGuideDriver` to `REQUIRES_NEW` and confirm no test fails. This is § 10 condition 3 going unenforced.
-- [ ] **Task 4.3.2**: GREEN — an ArchUnit rule, or the Phase 5.4 test, whichever actually catches it.
-- [ ] **Task 4.3.3**: Dispatch both agents; run the gates.
+**5.7 done early — the neutral identity is already in place.** Package
+`com.example.service`, group `com.example`, `rootProject.name = "service-template"`. Doing
+this before writing ~35 Kotlin files avoids renaming all of them afterwards. `initService`
+(5.6) is still owed.
 
----
+**5.1 resolved by moving the entry point, not by configuring it.** `ServiceApplication`
+now sits in the **root** package rather than in `bootstrap`. That is what makes dropping
+`scanBasePackages` possible at all: Spring's default scan root is the application class's
+own package, so from `bootstrap` it would have missed every bounded context. Wiring stays
+in `bootstrap`. **Owed: `architecture.definition.md` § 4.9 still says the entry point lives
+in `bootstrap` — correct it in 6.4.**
 
-## Phase 5: Test-depth gaps
+**Two files added that the plan did not list.** `.editorconfig` (ktlint code style, line
+length, and one disabled rule with its reason) and `config/detekt/detekt.yml` (two
+deliberate departures, each with its reason). Both are template-level decisions rather
+than local fixes: `SpreadOperator` fires on Spring Boot's idiomatic Kotlin entry point, so
+every service built from this template would otherwise open with a suppression on its main
+function.
 
-### 5.1 - ADR-0002's guarantee is unverified
-- [ ] **Task 5.1.1**: No integration test asserts `@TransactionalEventListener(AFTER_COMMIT)` + `REQUIRES_NEW` for the UC06/UC07 listeners, so "a rollback cannot leak an event" is verified nowhere. Both listener tests document the omission honestly.
-- [ ] **Task 5.1.2**: RED — a `@SpringBootTest` that rolls back a guide-tour transaction and asserts no booking was activated. Use `CancelTourByGuideRollbackIT` as the template.
-- [ ] **Task 5.1.3**: GREEN if it fails; if it passes first try, mutation-verify before believing it.
-- [ ] **Task 5.1.4**: Dispatch both agents; run the gates.
+**Gap found, not yet closed.** UC06 `MarkBookingActive` has no inport spec — there never
+was one in `documentation/ports/`. Write it in Phase 6.
 
-### 5.2 - Context-loads smoke test
-- [ ] **Task 5.2.1**: `CancelTourByGuideIT` and `CancelTourByGuideRollbackIT` are the only tests that boot the whole application, so a broken bean graph is invisible outside them. Add one cheap `@SpringBootTest` that only asserts the context starts.
+**Scope note on 1.2.** Only one port spec was actually dropped
+(`mark-booking-cancelled-by-guide.inport.spec.md`); the rest all serve surviving use cases,
+including `availability-checker.outport.spec.md`, which UC01 needs.
 
-### 5.3 - Per-batch rollback
-- [ ] **Task 5.3.1**: Nothing proves booking 7 failing rolls back bookings 1–6 in UC09's fan-out. RED, then GREEN.
+**UC02 restored — the agreed three-use-case example had an unreachable happy path.**
+`TourBooking` runs `REQUESTED -> CONFIRMED -> ACTIVE`. UC01 creates `REQUESTED`, UC06
+requires `CONFIRMED`, and the only transition between them is UC02, which Phase 1 had
+deleted. Unit and driver tests would still have passed — they build state through
+`reconstitute` — but no booking created through the API could ever be activated, so one of
+the example's three use cases would have shipped with an unreachable happy path. Raised
+before writing the aggregate, since the answer decided whether `confirm()` existed at all.
+The example is now four use cases (UC01, UC02, UC05, UC06) and the lifecycle is a
+connected chain. Cost: one spec, one `api/` file, six Kotlin files, and one inport spec
+still owed in Phase 6.
 
-### 5.4 - The rollback IT's blind spot
-- [ ] **Task 5.4.1**: `CancelTourByGuideRollbackIT` mocks the booking inport, so it proves `guide`'s writes roll back but never `booking`'s. Switching the callee to `REQUIRES_NEW` would break § 10 condition 3 and **no test would fail**.
-- [ ] **Task 5.4.2**: RED — a test where the real callee succeeds on booking 1 and fails on booking 2, asserting booking 1 is still CONFIRMED. `ddd-hex-reviewer` called this the most valuable test left in the repository.
-- [ ] **Task 5.4.3**: Dispatch both agents; run the gates.
+**Detekt is pinned to a 2.0.0-alpha and its config schema has already moved.** The
+`complexity > LongParameterList > constructorThreshold` key exists in detekt 1.x and does
+not exist in 2.0.0-alpha.2, which fails the build on an unknown property rather than
+ignoring it. The alpha was inherited from the donor service, which needs it for Kotlin 2.3
+support. It works, but a template pinning an alpha whose configuration keys move between
+builds is carrying a maintenance cost that every generated service inherits. **Decide
+before Phase 8** whether to keep it or wait for a stable release. Recorded rather than
+worked around.
 
----
+**Two gate findings on the first Kotlin slice were kept, not silenced.** `SpreadOperator`
+on Spring Boot's Kotlin entry point became a configured departure with its reason, because
+every service hits it. `LongParameterList` on the aggregate became a class-level
+suppression with its reason in the KDoc, because an aggregate's parameter count is a
+property of its state and the alternatives are a parameter object nobody uses or setters,
+which are forbidden.
 
-## Phase 6: Domain gaps (deliberately last)
+**`coding-style.definition.md` was rewritten, not renamed.** Task 3.1 asked for a role
+rename inside it, but the document was titled "Coding Style Definition (Java)" and built on
+`record`, `sealed`, `strictfp` and JavaDoc. Renaming `*Controller` inside a Java style guide
+that has to be replaced anyway is wasted work, so 3.1 was merged with its share of 6.4. The
+hard-won rules were carried across by meaning rather than by text: § 1.4's `Optional` rule
+and its three-clause exception collapse to four lines, because that exception existed only
+to work around Java's inability to express a nullable field. Its surviving clause — absence
+must be a real business case, and documented — is the one that mattered.
 
-Real, documented, and not worth doing for the demo unless a specific talk needs them. Each
-is a Known Gap in the relevant port spec, which is itself the point.
+**The GraphQL contract split works — verified empirically, not assumed.** Spring MVC
+inherits `@RequestMapping` from an interface, but Spring for GraphQL's docs are ambiguous:
+its detector calls `MethodIntrospector.selectMethods`, which does walk interfaces, while a
+comment beside that code warns that `@SchemaMapping` must be on the target class rather
+than a proxy interface. So the pair was written with the annotations on
+`TourBookingGraphQLAPI` and the slice test was allowed to decide. It passes: `@QueryMapping`
+and `@MutationMapping` on the interface are found. `coding-style.definition.md` § 3.3 can
+therefore state the GraphQL split as a rule rather than an aspiration.
 
-### 6.1 - Optimistic locking
-- [ ] **Task 6.1.1**: Write the ADR (persistence strategy, `sdd.playbook.md` § 6 item 4) and **wait for approval**. This one would make a good ADR-writing demo in its own right.
-- [ ] **Task 6.1.2**: If approved: migration, version column, RED test proving the lost update first.
+**GraphQL's specification forces a `Query` root onto a service with no read side.** The
+first GraphQL slice test failed to boot with `A schema MUST have a 'query' operation
+defined` — the schema had only a `Mutation`. The template has no read side by decision (no
+query ports, no projections), so inventing a domain query to satisfy the parser would have
+shipped a read side that no spec asked for. The root now carries one infrastructure field,
+`apiVersion`, labelled in the schema, in the interface KDoc and in `api/uc01-*.graphql` as
+not a domain read, with a note telling the first real service to replace it.
 
-### 6.2 - Read side
-- [ ] **Task 6.2.1**: `outbound.persistence.read` is in the package ontology with nothing in it; every use case is a command, so half the CQRS structure the architecture describes is never exercised. One query use case would light it up. Spec first.
+**Detekt caught a rule violating the document that had just been written.** The web slice
+tests declared their injected collaborators as `lateinit var`, which `coding-style.definition.md`
+§ 5.2 — rewritten one step earlier — forbids. It is unavoidable: `@MockitoBean` and
+`@Autowired` field overrides do not accept `val`. Rather than suppress the finding, both
+sides were corrected: § 5.2 now scopes the rule to production code and names the exception,
+and `VarCouldBeVal` is excluded for test sources with the same reason recorded in
+`config/detekt/detekt.yml`. A rule and its enforcement disagreeing is worse than either one
+being wrong.
 
-### 6.3 - Outbox
-- [ ] **Task 6.3.1**: The UC06/UC07 fan-outs are single `REQUIRES_NEW` transactions with no retry. `architecture.definition.md` § 10 records this as accepted, with reasoning. Revisit only if a talk needs it.
+**Two test-only Spring configurations are no longer needed.** `WebTestApplication` and
+`PersistenceTestApplication` existed because `@WebMvcTest` searches *upwards* for a
+`@SpringBootConfiguration` and the entry point sat in `bootstrap`, a sibling of every
+context. With the entry point in the root package (see 5.1 above) the upward search finds
+it, so both classes are gone rather than ported. A second, unplanned benefit of that move.
 
-### 6.4 - Open note
-- [ ] **Task 6.4.1**: `notes.md` still asks whether an aggregate should hold its own `List<DomainEvent>`.
+**Gradle now has two test tasks, because one of them needs Docker.** `test.definition.md`
+already separated fast tests from adapter integration tests by name; the build did not.
+`test` runs everything except `*IT` and needs nothing installed; `integrationTest` runs the
+`*IT` classes against PostgreSQL via Testcontainers; `check` depends on both so CI cannot
+quietly skip either. Without the split, a developer with no Docker gets no fast feedback at
+all, and a gate that cannot be run locally is a gate discovered in CI.
 
----
+**The Testcontainers ITs are written but unverified.** The Docker daemon is not running on
+this machine, so `TourBookingJpaRepositoryIT` and `GuideTourJpaRepositoryIT` compile and are
+wired but have never executed. They are the only unverified code in the port. Everything
+else — 117 tests across domain, use case, web slice, GraphQL slice and architecture — runs
+green.
 
-## Sequencing
+**Spring Boot 4 split its test-slice annotations into per-module artifacts.**
+`@DataJpaTest` is not on the classpath from `spring-boot-starter-test`; it needs
+`spring-boot-data-jpa-test`, and `@AutoConfigureTestDatabase` needs `spring-boot-jdbc-test`.
+Both were added. Worth knowing before writing the first slice test of any kind in a service
+from this template — the failure mode is an unresolved import, not a helpful message.
 
-Phase 1 blocks everything — do not start new work on an uncommitted tree.
+**§ 11 is now parsed, and the gate was proven to fire.** `ContextRegistry` reads the
+registry table out of `architecture.definition.md`, and § 11 carries a written format
+contract stating the shape the parser depends on. Verified rather than assumed: adding an
+unregistered top-level package made the test fail with a message naming the document, and
+removing it made the test pass again. A registry gate that is green because it parsed zero
+rows is the exact failure this replaces, so the parser also fails loudly on an empty table.
 
-Phase 0 is independent and mostly manual; it can happen in parallel with anything.
+**`architecture.definition.md` § 4.9 corrected, closing the debt from 5.1.** It said the
+entry point lives in `bootstrap`; it now records where the entry point actually is, and why
+both Spring's component scan and `ArchitectureRoot` depend on that position. All references
+to the original author's package are gone from the document.
 
-Phase 2 depends on Phase 4.1 existing as a candidate increment, so read 4.1 before starting
-2.1. Everything in Phases 3–6 is independent of everything else, which is deliberate: after
-five months away, the useful property is being able to pick any single block and finish it.
+**Two detekt findings on the last slice, both fixed rather than suppressed.**
+`UtilityClassWithPublicConstructor` on the Testcontainers base class was right in substance
+— an abstract base only subclasses may construct should not expose a public constructor, so
+it became `protected constructor()`. The `VarCouldBeVal` case is recorded above.
+
+**`GuideTourStatus` lost two values.** `FINISHED` and `CANCELLED` belonged to the
+complete-tour and cancel-tour use cases, which are not in the example. Keeping them would
+force every exhaustive `when` to carry a branch nothing can reach, and
+`coding-style.definition.md` § 2.3 forbids the `else` that would otherwise hide it. Recorded
+in the enum's KDoc so a service adding those use cases knows to add the states with them.
+
+**The citation check became a test, and it immediately paid for itself twice.** The old
+`plan.md` carried a DoD item saying every `Class.method` citation in `documentation/` should
+resolve to a test that exists, "(scripted)". It is now `SpecCitationsTest`, because a script
+runs when somebody remembers — the failure mode ADR-0007 exists to end.
+
+What it found on first run: **66 of 69 citations across the four use-case specs were dead**,
+and the domain and port specs were worse. The Kotlin port renamed nearly every test method
+while every DoD box stayed ticked and every other gate stayed green. The specs read as
+complete and were describing tests that no longer existed.
+
+It also surfaced four genuine coverage gaps that the rename had hidden, all now closed with
+real tests rather than edited citations:
+
+- no driver-level test that an availability failure propagates and saves nothing (UC01 § 8,
+  the 502 path)
+- no test that activating a `CANCELLED` booking is rejected, at the aggregate or the driver
+- no test that a malformed identifier raises `IllegalArgumentException` at its **source**;
+  only the 400 at the boundary was asserted, which would pass even if the 400 came from
+  somewhere else
+
+Proven to fire: breaking one citation by hand failed the test with a message that says what
+to do — update the citation if the test was renamed, write the test if the coverage never
+existed, and do not delete the citation to go green.
+
+**Both aggregate specs and both repository port specs were rewritten, not patched.** They
+described cancellation, completion, participant changes and two query methods that the
+reduced example does not have — roughly 700 lines specifying absent code. Rewritten from
+the actual Kotlin, each carrying a "reduced for the template" note naming what was dropped
+and where the non-goal is recorded. The load-bearing rationale was carried across rather
+than summarised: § 2.3's standing obligation on `update` is still there, now with the
+observation that the JPA adapter closes that defect *by construction* while the obligation
+stays written down for the next adapter.
+
+**One gap is recorded rather than closed.** `findConfirmedByTourId` has no integration test
+of its own — it is exercised only through the listener's unit tests, and a status predicate
+is exactly the kind of thing that behaves differently against a real database. Written into
+the port spec as a gap, not a decision.
+
+**The ADR set was restructured into two tiers, not pruned to one.** Q7 said delete
+ADR-0003, on the correct grounds that "the `guide` context exists" is not a decision a new
+service inherits. Deleting it turned out to be impossible without doing damage: nine files
+cite it, including `architecture.definition.md` § 11's registry row, `sdd.playbook.md`
+pointing at it as *the precedent* for "a new bounded context requires an ADR", and — the
+part that settles it — **ADR-0005's own text**, which cannot be edited because an accepted
+ADR's text is immutable. Removing it would have left a rule with no worked example, which
+is the failure mode this whole effort keeps running into.
+
+So `documentation/adr/README.md` now declares two tiers: **Baseline (inherited from
+template)**, ten ADRs that hold for every service, and **Example**, which is ADR-0003 alone
+and gets deleted along with the tour domain. That serves Q7's intent — baseline means
+universal — without deleting a load-bearing precedent.
+
+**Superseding was done by status transition, not by rewriting.** ADR-0001 and ADR-0006 were
+marked superseded by new ADRs 0009 and 0010 rather than edited, because immutability is a
+rule this template teaches and breaking it here would have been the loudest possible
+example of not meaning it. ADR-0009 states which of ADR-0001's reasons survived and which
+were reconsidered — its outright ban on JPA is the one that was, and ADR-0011 argues on what
+grounds. ADR-0008 became **WITHDRAWN**, a status introduced for an ADR whose *subject* no
+longer exists: nothing replaced it, so "superseded" would have been a lie, and it is kept
+because its reasoning is the best worked example here of synchronous cross-context
+integration.
+
+Four new baseline ADRs: 0011 (persistence annotations stay out of the domain), 0012 (dual
+transports), 0013 (PostgreSQL and Testcontainers), 0014 (every rule class has an executable
+owner).
+
+**A second documentation gate was added, and it earned its place immediately.** Rebuilding
+the ADR set left exactly one dangling reference — in a file edited minutes earlier by the
+same hand that renumbered the ADR. Markdown links never fail, so nothing would have caught
+it. `DocumentationLinksTest` now checks every ADR reference in `documentation/` resolves.
+
+**`initService` was verified end to end, not just written.** On a throwaway copy it renamed
+`com.example.service` to `com.acme.riskmanagement`, rewrote 102 files, moved the package
+directories with no leftovers, set `rootProject.name` and `group`, repointed the datasource
+and the compose container, and installed the blank `project.definition.md`. The renamed
+service then built green with all 123 tests — including the ArchUnit suite, which derives
+its package root from the entry point, and both documentation gates.
+
+One defect found and fixed in the process: the task's helper functions were declared at the
+build script's top level, which Gradle cannot serialise into the configuration cache
+("cannot serialize Gradle script object references"). The task *ran* and then failed after
+doing its work — the worst shape of failure. Helpers are now local to `doLast`.
+
+**`technical.spec.md` was actively wrong and is rewritten.** It still specified jOOQ as
+"the only supported SQL access strategy", H2 as the database, and Java 25 — a profile
+document describing a stack that no longer exists anywhere in the repository. It now also
+records the two constraints that are *not* the project's to change: the persistence rule
+from ADR-0011, and `ddl-auto: validate`, which is the single setting that makes every
+integration test also a check that the migrations and the entity mapping agree.
+
+**Step 8.3 was not performed, and the plan was wrong to schedule it where it did.** The
+final step was to delete `plan.md` and `tasks.md`, replacing them with blank templates, on
+the reasoning that a template shipping with somebody's working checklist inside it is
+sloppy. That reasoning holds. The scheduling does not.
+
+Nothing had been committed. `HEAD` was still the pre-transformation commit with 231 files
+diverged, so "replace" would not have moved this record into git history — it would have
+destroyed it. Every deviation above, including the four coverage gaps the citation gate
+found and the reason JVM 17 turned out to be the only option on this machine, exists in
+exactly one place: this file, uncommitted.
+
+The plan should have made 8.3 depend on a commit. Committing is not mine to decide, so the
+templates are written and in place, the replacement is not done, and the live debts have
+been moved to `documentation/notes.md` — which survives the replacement — so that performing
+8.3 later loses only the narrative and none of the open work.
+
+**Phase 7 is complete: two agents and two skills.** `spec-reviewer` (opus, read-only) hunts
+invention in a freshly drafted spec; `conformance-reviewer` (sonnet, read plus `Bash` for
+running tests) hunts omission in code against a spec. They are separate agents rather than
+one with a mode flag because the two failure modes leave opposite traces — invention leaves
+a claim to read, omission leaves nothing and is found only by walking a list and asking what
+each item points at. `/spec-create` is read-only against Jira and Confluence; `/code-review`
+fans out to four axes with split authority and has neither `--fix` nor `--comment`.
+
+**Two detekt rules were found pulling the same class in opposite directions.**
+`UtilityClassWithPublicConstructor` objected that the Testcontainers base class exposed a
+public constructor, so it became `protected`; `AbstractClassCanBeInterface` then objected
+that a class with no concrete member should be an interface. It cannot be one — the shared
+container must be static, and Kotlin forbids `@JvmStatic` in an interface's companion. The
+second rule is suppressed with that reason written next to it. Neither rule was wrong about
+what it saw; both cannot be satisfied.
+
+Also worth noting how it surfaced: `:app:detekt` passed while `detektMain` and `detektTest`
+— the type-resolution variants that `check` actually depends on — failed. Running the
+convenience task is not running the gate.

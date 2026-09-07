@@ -1,7 +1,14 @@
 # ADR 0001 – Core Technical Stack
 
 ## Status
-Accepted
+
+**SUPERSEDED by ADR-0009.**
+
+The decision text below is left untouched, as an accepted ADR's text must be. What changed
+is the project: this repository became a Kotlin template, so the Java 21/jOOQ/H2 stack this
+recorded no longer describes anything here. ADR-0009 records the stack that does, and
+states which of the reasons below survived the change and which did not — the explicit
+rejection of JPA is the one that was reconsidered, and ADR-0011 explains on what grounds.
 
 ## Context
 

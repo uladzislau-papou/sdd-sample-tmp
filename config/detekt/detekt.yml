@@ -1,0 +1,32 @@
+# Detekt configuration for services built from this template.
+#
+# Layered on top of detekt's default rule set (`buildUponDefaultConfig = true`), so this
+# file contains only deliberate departures. Every entry states why, because a rule
+# switched off without a reason is indistinguishable from a rule nobody understood.
+#
+# Detekt and ArchUnit do not overlap: detekt sees defects inside a file — complexity,
+# swallowed exceptions, nullability leaks — and ArchUnit sees defects between files —
+# layering, dependency direction, class roles. Neither substitutes for the other.
+
+performance:
+  SpreadOperator:
+    active: false
+    # Spring Boot's Kotlin entry point is `runApplication<T>(*args)`. The spread is
+    # unavoidable there, it runs exactly once per process start, and the copy is of an
+    # argv array. Every service built from this template would otherwise open with a
+    # suppression on its main function.
+
+style:
+  MaxLineLength:
+    active: false
+    # Line length is already enforced by ktlint via .editorconfig (max_line_length).
+    # Two tools reporting the same violation means fixing one report and still failing
+    # the build, which teaches developers to distrust the gate.
+
+  VarCouldBeVal:
+    excludes: ['**/test/**']
+    # A Spring test declares its injected collaborators as `lateinit var` because that is
+    # the only form `@MockitoBean` and `@Autowired` field overrides accept — `val` does not
+    # compile there. The rule is right about production code and stays on for it;
+    # coding-style.definition.md § 5.2 names the same exception so the two agree.
+

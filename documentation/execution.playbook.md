@@ -194,18 +194,39 @@ own RED.
 
 After REFACTOR, dispatch both subagents **in parallel** on the working diff:
 
+Reach the review through **`/code-review --increment`**, which fans out to all four axes
+in one message. It is one entry point rather than four, so no axis is silently skipped, and
+it deduplicates a defect that surfaces on more than one.
+
+| Axis | Owner | Authority |
+|------|-------|-----------|
+| architecture drift | `ddd-hex-reviewer` | **blocks** |
+| conformance to the spec | `conformance-reviewer` | **blocks** |
+| logical correctness | the review skill's logic axis | reported |
+| security | the review skill's security axis | reported |
+
+Dispatched alongside it, not through it:
+
 | Agent | Returns |
 |-------|---------|
-| `ddd-hex-reviewer` | `PASS` or `DRIFT` + `file:line` findings |
-| `spec-documenter` | reconciled specs, `rest/*.http`, DoD scoreboard |
+| `spec-documenter` | reconciled specs, the files in `api/`, DoD scoreboard |
+
+`spec-documenter` is deliberately outside the review skill: it **writes**, and the review
+skill writes nothing. Keeping the reviewer read-only is what stops it becoming the acceptor
+of its own changes.
 
 Rules:
 
-- **A `DRIFT` verdict blocks the increment.** The finding is fixed through a new
-  RED → GREEN → REFACTOR cycle, not by editing the reviewer's checklist and not
-  by arguing with it in the report.
-- Drift is never traded away for progress, and a DoD box is never ticked while a
-  `DRIFT` finding touches it.
+- **A `DRIFT` or `UNMET` verdict blocks the increment.** The finding is fixed through a new
+  RED → GREEN → REFACTOR cycle, not by editing the reviewer's checklist and not by arguing
+  with it in the report.
+- Drift is never traded away for progress, and a DoD box is never ticked while a `DRIFT` or
+  `UNMET` finding touches it.
+- **Logic and security findings do not block, and are not optional either.** Each is fixed
+  or explicitly accepted with a reason before the increment closes. They report rather than
+  block because they are model judgement, where false positives are ordinary — and a
+  blocking gate that cries wolf gets switched off entirely, taking the two reliable axes
+  with it (`test.definition.md` § 7, gate 12).
 - `spec-documenter` never edits `app/src/**`. Where the code contradicts a spec
   it reports the contradiction; the agent driving the increment decides which
   side is wrong.

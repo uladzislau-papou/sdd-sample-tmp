@@ -1,348 +1,374 @@
-# Coding Style Definition (Java) --- AlpineBooking / SDD Reference
+# Coding Style Definition (Kotlin)
 
 ## Purpose
 
-This document defines the coding style for the project to ensure: -
-consistent readability and maintainability - predictable navigation
-(package / class roles) - consistent use of modern Java features
-(records, sealed, pattern matching) - consistent JavaDoc usage suitable
-for Spec Driven Development (SDD)
+This document defines the coding style for a service built from this template, so that:
 
-Scope: - Production code (domain, application/use-cases, adapters) -
-Tests (naming and structure)
+- readability and navigation are predictable — a class's role is legible from its name
+  and its package, before opening it;
+- Kotlin's own guarantees are used instead of re-implemented — nullability, immutability
+  and exhaustiveness are expressed in types, not in prose;
+- KDoc carries the link back to the spec that justifies the code (SDD).
 
-------------------------------------------------------------------------
+Scope: production code (domain, use cases, adapters) and tests (naming and structure).
+
+**This is a profile document.** It ranks third in `CLAUDE.md`'s authority order and it
+describes *this* project. A service adopting the template may take it as it stands — very
+little of it is domain-specific — but it owns the file and may replace it. Where a rule
+below names a tour, a booking or a guide, that is the example talking, not a requirement.
+
+**This document replaced a Java one.** The rules it inherited were kept whenever Kotlin
+still needs them and dropped whenever the language already enforces them. Each drop is
+recorded, because a rule that vanishes without explanation reads as an oversight.
+
+---
 
 ## 1. General Principles
 
-### 1.1 Explicit Roles over Cleverness
+### 1.1 Explicit roles over cleverness
 
--   Classes MUST communicate intent by name + package.
--   Prefer small, role-specific types over large "god classes".
+- A class MUST communicate intent by name plus package.
+- Prefer small, role-specific types over large classes that accumulate responsibilities.
 
-### 1.2 Immutability First
+### 1.2 Immutability first
 
--   Domain and DTO structures SHOULD be immutable.
--   Mutation is allowed only at boundaries (e.g., UI binding,
-    deserialization) and MUST be isolated.
+- Domain values and DTOs MUST be immutable: `val` properties, `data class`.
+- Mutation is allowed only where a lifecycle genuinely exists — aggregate state — and is
+  confined to the aggregate (see § 5.1).
 
-### 1.3 Always-Valid
+### 1.3 Always-valid
 
--   Domain objects MUST NOT be constructible in an invalid state.
--   Validation belongs to constructors/factories/value objects.
+- A domain object MUST NOT be constructible in an invalid state.
+- Validation belongs in `init` blocks, factory functions and value objects — never in a
+  separate validator that a caller may forget to run.
 
-### 1.4 Null Policy
+### 1.4 Null policy
 
--   Domain and application layer MUST NOT return null.
--   Use `Optional<T>` for absence, not null.
--   At boundaries (e.g., REST), nulls MUST be normalized immediately.
+- Absence is expressed by a **nullable type** (`T?`). Nothing else.
+- The domain and the use-case layer MUST NOT use a platform type — every declaration is
+  either `T` or `T?`, deliberately.
+- At an adapter boundary, incoming nulls MUST be normalized immediately, so that nothing
+  nullable travels further inward than the adapter unless the domain says absence is
+  meaningful.
+- A nullable property MUST document **what absence means**. `reason: String?` is
+  incomplete; "null when the guide gave no reason" is the rule satisfied.
 
-**Exception — record components of events and commands MAY be null.** The rule above
-governs *return values*. A record component is a field that happens to have an accessor,
-and Java's own guidance is against `Optional` fields: it adds a wrapper allocation per
-event, breaks serialisation for anything that inspects components reflectively, and makes
-pattern-matching deconstruction awkward. So an optional correlation id or an optional
-free-text field is declared as a plain nullable type.
+> **Two paragraphs of the Java original are deliberately gone.** It required `Optional<T>`
+> for absence and then needed a long, three-clause exception permitting nullable record
+> components, because `Optional` fields are bad practice in Java while nullable fields are
+> unrepresentable in its type system. Kotlin has one mechanism for both cases, so the rule
+> and its exception collapse into the four lines above. `Optional<T>` MUST NOT be used in
+> Kotlin code; it is a Java-interop type, and using it here would reintroduce exactly the
+> asymmetry the original had to apologise for.
+>
+> What survives from the original is the third clause, and it is the one that mattered:
+> absence must be a **real business case**, and it must be documented. "Not filled in yet"
+> is not a business case — that is a missing invariant wearing a null.
 
-Three constraints, which are the whole of the exception:
+---
 
-1.  **Scope.** It applies only to record components of **domain events and commands**. A
-    method — including an aggregate accessor over the same underlying field — still
-    returns `Optional`. `TourBooking.cancellationReason()` returns
-    `Optional<CancellationReason>` while `BookingCancelledByUser.reason()` is nullable,
-    and that asymmetry is the rule working as intended, not an inconsistency.
-2.  **Absence must be a real business case.** The component is nullable because *not
-    having one* is a legitimate state — a caller with no correlation id, a cancellation
-    with no reason given. "Not filled in yet" is not a business case; that is a missing
-    invariant wearing a null.
-3.  **The nullability MUST be documented**, either as an `@param` tag on the record or in
-    prose in the class Javadoc, and it MUST say what absence means. An undocumented
-    nullable component is a violation of this section, not an instance of its exception.
+## 2. Language level
 
-**This list of constraints is the rule. There is deliberately no list of permitted types**
-— an earlier revision of this section carried a table of the four records that relied on
-the exception, which would have needed an edit every time a fifth appeared and left the
-status of anything absent from it undefined. That is the same failure mode as enumerating
-the fields a repository's `update` must write (see
-`ports/tour-booking-repository.outport.spec.md` § 2.3): a list of instances goes stale, a
-stated criterion does not. `ddd-hex-reviewer` spotted the table one level down from the
-unenforceability it was written to fix.
+Target: **Kotlin 2.3 on JVM 17** (`adr/0010-jvm-17-baseline.adr.md`).
 
-Recorded because four production records already relied on this and the carve-out existed
-only in their own Javadoc — leaving § 1.4 reading as a prohibition on shipped, reviewed
-code. Found by `ddd-hex-reviewer` during the UC08 review, listed under `Undocumented`.
+Compiler settings are gates, not preferences (`app/build.gradle.kts`):
 
-------------------------------------------------------------------------
+| Setting | Why |
+|---|---|
+| `allWarningsAsErrors = true` | A warning nobody must fix is a warning nobody reads |
+| `-Xjsr305=strict` | Java-interop annotations become real nullability, not platform types — § 1.4 is otherwise unenforceable across a boundary |
 
-## 2. Language Level & Modern Java Policy
+### 2.1 `data class`
 
-Target: Java 25 (LTS baseline — `adr/0006-java-25-baseline.adr.md`)
+Use `data class` when the type is a data carrier, equality is structural, and there is no
+lifecycle. Validate invariants in `init`.
 
-### 2.1 record
+Do **not** use `data class` for an aggregate. Structural equality is wrong for an entity —
+two bookings with identical fields are not the same booking — and a generated `copy()`
+hands every caller a way around the aggregate's transition methods.
 
-Use record when: - the type is a pure data carrier - equality is
-structural - it has no lifecycle/state transitions
+### 2.2 `value class`
 
-Records MAY validate invariants in the canonical constructor.
+Permitted for a single-field wrapper with no validation. A value object that validates
+SHOULD be a plain `data class`: the allocation saved is not worth the constraints
+inline classes place on `init` and on interop.
 
-### 2.2 sealed / non-sealed
+### 2.3 `sealed`
 
-Use sealed hierarchies when: - the set of subtypes is closed and
-meaningful - you want exhaustive switch handling
+Use a sealed hierarchy when the set of subtypes is closed and meaningful, and exhaustive
+`when` handling is wanted. Prefer `sealed interface` for role and contract types.
 
-Rules: - A sealed root type MUST list permitted subtypes explicitly. -
-Subtypes SHOULD be final unless extensibility is deliberate. - Prefer
-sealed interface for role/contract types.
+An exhaustive `when` over a sealed type or an enum MUST NOT carry an `else` branch:
+`else` converts "the compiler will tell you when a case is added" into "the new case is
+silently swallowed", which is the whole reason for sealing the type.
 
-### 2.3 Pattern matching & switch expressions
+### 2.4 Expression bodies
 
--   Prefer switch expressions over cascaded if/else.
--   Use pattern matching for instanceof where it increases readability.
+Prefer an expression body when the function is a single expression. Declare the return
+type explicitly on anything public.
 
-### 2.4 strictfp
+### 2.5 Scope functions
 
--   strictfp MUST NOT be used by default.
--   Only allowed if deterministic floating-point behaviour is a business
-    requirement and documented via ADR.
+`let`, `also`, `apply`, `run` and `with` are permitted where they shorten a genuine
+sequence on one receiver. They MUST NOT be nested: two levels of implicit `it` is a
+readability defect, not a style preference.
 
-------------------------------------------------------------------------
+---
 
-## 3. Package & Layer Conventions (Hexagonal)
+## 3. Package and layer conventions (hexagonal)
 
 ### 3.1 Package naming
 
--   Base package:
-    com.dominikgaller.`<project>`{=html}.`<context>`{=html}
--   Packages MUST be lowercase.
--   No generic util dumping ground.
+- Base package: `com.<org>.<service>.<context>`
+- Packages MUST be lowercase and MUST NOT be a generic dumping ground (`util`, `common`,
+  `helpers`).
 
 ### 3.2 Layer naming
 
 **Defined in `architecture.definition.md` § 3 and § 4. Not restated here.**
 
-The ontology is `core` (`domain` / `inport` / `outport`) · `inbound`
-(`driver` / `listener` / `rest`) · `outbound` (`persistence` / `integration`) ·
+The ontology is `core` (`domain` / `inport` / `outport`) · `inbound` (`driver` /
+`listener` / `rest` / `graphql`) · `outbound` (`persistence` / `integration`) ·
 `bootstrap` · `shared`.
 
-This section previously described a different layering — `domain / application / in /
-out / adapter.*`, with direction `adapter → application → domain`. No code in the
-repository has ever followed it, and it contradicted the higher-ranked
-`architecture.definition.md`. It was dead text that would mislead anyone reading it as
-authoritative, so it is removed rather than reconciled
-(`file-usage.definition.md` § 4).
+> The Java original described a *different* layering here — `domain / application / in /
+> out / adapter.*` — that no code had ever followed and that contradicted the
+> higher-ranked `architecture.definition.md`. It was removed rather than reconciled
+> (`file-usage.definition.md` § 4). The lesson generalizes: this section states where the
+> ontology lives instead of copying it.
 
-### 3.3 REST split
+### 3.3 The delivery split
 
--   \*RestAPI = the HTTP contract: an interface carrying all Spring MVC annotations
--   \*Controller = the web adapter: implements \*RestAPI, carries no HTTP annotations
--   Controllers MUST only map, normalize, delegate, translate errors
--   Controllers depend on `core.inport` interfaces, never on drivers
+One inbound port, one or more delivery adapters. Each transport contributes a pair:
 
-Note on terminology: `*RestAPI` is **not** the inbound port. The inbound port is
-`core.inport.usecase.*UseCase`; `*RestAPI` is a delivery-side interface that exists so
-the HTTP contract sits in one place. See `architecture.definition.md` § 4.5.
+| Role | What it is |
+|---|---|
+| `*RestAPI` | the HTTP contract — an interface carrying **all** Spring MVC annotations |
+| `*RestController` | the REST adapter — implements `*RestAPI`, carries **no** HTTP annotations |
+| `*GraphQLAPI` | the GraphQL contract — an interface carrying all `@QueryMapping` / `@MutationMapping` annotations |
+| `*GraphQLController` | the GraphQL adapter — implements `*GraphQLAPI`, carries no GraphQL annotations |
 
-------------------------------------------------------------------------
+Rules that apply to every delivery adapter:
 
-## 4. Naming Conventions
+- It MUST only map, normalize, delegate and translate errors.
+- It MUST depend on `core.inport` interfaces, never on a driver.
+- It MUST NOT contain a business rule. If a check cannot be expressed as input validation,
+  it belongs in the domain.
+
+**Why `*RestController` and not `*Controller`.** Spring for GraphQL annotates its
+resolvers with `@Controller`. With the Java original's naming, a GraphQL resolver and a
+REST adapter would both have claimed the `*Controller` suffix, while `ClassRoleRulesTest`
+decides a class's role **by its name**. The gate would have had to either ignore GraphQL
+resolvers or misclassify them. Naming the transport explicitly keeps the rule decidable.
+
+**Terminology.** `*RestAPI` and `*GraphQLAPI` are **not** inbound ports. The inbound port
+is `core.inport.usecase.*UseCase`. These are delivery-side interfaces that exist so each
+transport's contract sits in one readable place — and so that the same use case reached
+over two transports demonstrably shares one core. See `architecture.definition.md` § 4.5.
+
+---
+
+## 4. Naming conventions
 
 ### 4.1 Types
 
--   \*Driver = application service
--   \*RestAPI = inbound contract
--   \*Controller = web adapter
--   \*Repository = outbound port
--   \*Mapper = pure mapping component
+| Suffix | Role |
+|---|---|
+| `*UseCase` | inbound port — the interface the core exposes |
+| `*Driver` | application service — the inbound port's implementation |
+| `*Command` / `*Result` | the inbound port's input and output |
+| `*RestAPI` / `*RestController` | REST contract and adapter (§ 3.3) |
+| `*GraphQLAPI` / `*GraphQLController` | GraphQL contract and adapter (§ 3.3) |
+| `*Repository` | outbound port |
+| `*JpaEntity` | persistence-layer row type — lives in `outbound.persistence`, never in `core` |
+| `*Mapper` | pure mapping component, no IO |
+| `*Listener` | inbound adapter driven by an event rather than a request |
 
-### 4.2 Methods
+### 4.2 Functions
 
--   Commands MUST be verbs
--   **Lookup** queries on a repository or port MUST start with `find*`, `get*` or `load*`
-    — e.g. `findById`, `findConfirmedByTourId`
--   **Accessors** are exempt and use the component-reader style: `status()`,
-    `bookingId()`, `value()`, `now()`
+- A command MUST be a verb: `confirm`, `markActive`, `start`.
+- A **lookup** on a repository or port MUST start with `find`, `get` or `load` —
+  `findById`, `findConfirmedByTourId`.
+- A **property read** is exempt and needs no prefix. In Kotlin it is usually not a function
+  at all: `val status`, `val bookingId`.
 
-The exemption is structural, not stylistic: records generate component accessors without a
-prefix, and § 2.1 mandates records for data carriers. A `get*` prefix on a record is not
-available, so a rule requiring it would forbid the construct the same document requires.
+> The Java original had to spell this exemption out at length, because records generate
+> unprefixed accessors while the rule demanded a `get` prefix — a rule forbidding the
+> construct the same document required. In Kotlin a property is a property, so the
+> exemption is a single line. Found originally by `ddd-hex-reviewer`, which flagged that
+> roughly forty domain accessors violated the unqualified version of the rule.
 
-> Previously an unqualified "Queries MUST start with get*, find*, load*", which roughly
-> forty domain accessors violated. Found by `ddd-hex-reviewer`, which flagged its own
-> uncertainty about whether the rule was ever meant to cover value accessors — it reads as
-> though it does, which is the problem.
+### 4.3 Declarations
 
-### 4.3 Variables
+- Prefer inferred types for locals when the type is obvious from the right-hand side.
+- Declare explicit types on anything public.
 
--   Prefer final var for locals when type is obvious
--   Prefer explicit types in public APIs
+---
 
-------------------------------------------------------------------------
+## 5. Structure and visibility
 
-## 5. Modifiers & Structure
+### 5.1 Visibility and mutability
 
-### 5.1 Visibility
+- Default to the most restrictive visibility. `internal` is preferred over `public` for
+  anything not part of a layer's contract.
+- Properties are `val` **except** aggregate and entity state that a transition method
+  mutates.
+- A mutable aggregate property MUST have a **private setter**:
+  `var status: BookingStatus = …; private set`.
+- There MUST be no setters on an aggregate beyond that, and no `copy()` — see § 2.1.
 
--   Default to most restrictive visibility
--   Fields MUST be `private`
--   Fields MUST additionally be `final` **except** aggregate and entity state that a
-    state-transition method mutates
+The mutability exception is not a concession, it is the point: an aggregate with a
+lifecycle cannot have all-immutable state. What the rule protects is preserved by other
+means — mutation happens only inside the aggregate, only through named transition methods
+that enforce the invariants, and `private set` makes that structural rather than
+conventional. ArchUnit enforces the absence of setters
+(`modelling.definition.md`, `sdd.playbook.md` § 8).
 
-The exception is not a concession, it is the point: an aggregate with a lifecycle cannot
-have an all-`final` state. `TourBooking.status`, `.participantCount`, `.availableCapacity`
-and `GuideTour.status`, `.startedAt` are mutated by `confirm`, `cancel`, `markActive`,
-`changeParticipants` and `start`. What the rule protects is preserved by other means:
-mutation happens only inside the aggregate, only through named transition methods that
-enforce the invariants, and there are no setters (`modelling.definition.md`,
-`sdd.playbook.md` § 8) — a rule ArchUnit enforces.
+> The Java original said "fields MUST be private final", which every aggregate in the
+> project violated. Same defect class as § 3.2's dead layering: a rule written as
+> aspiration and never true. Found by `ddd-hex-reviewer`. Kotlin's `private set` is what
+> makes the corrected rule enforceable instead of merely stated.
 
-Everything else stays `final`: value objects, records, DTOs, collaborator references in
-drivers, adapters and configs.
+### 5.2 Constructors and injection
 
-> Previously an unqualified "Fields MUST be private final", which every aggregate in the
-> project violated. Same defect class as § 3.2's dead layering and `test.definition.md`
-> § 5.1's unused naming style: a rule written as aspiration and never true.
-> Found by `ddd-hex-reviewer`.
+- Constructor injection only. No field injection, no `lateinit` for collaborators.
 
-### 5.2 final usage
+  **Scope: production code.** A Spring test declares injected collaborators as
+  `lateinit var`, because that is the only form `@MockitoBean` and `@Autowired` field
+  overrides accept — `val` does not compile there. Detekt's `VarCouldBeVal` is therefore
+  switched off for test sources and left on for production
+  (`config/detekt/detekt.yml`). The exception is named in both places rather than in one,
+  because a rule and its enforcement disagreeing is worse than either being wrong.
+- A class with a single constructor declares it in the class header.
+- No annotation processors and no code-generation plugins for boilerplate: Kotlin's
+  primary constructors and `data class` remove the need, and generated code is code that
+  no reviewer reads.
 
--   Parameters SHOULD be final consistently
--   Local variables SHOULD be final when meaningful
+---
 
-### 5.3 Constructors
+## 6. Error handling
 
--   Prefer constructor injection
--   Lombok allowed in adapters/application
--   Domain SHOULD avoid Lombok unless justified
+### 6.1 Use-case layer
 
-------------------------------------------------------------------------
-
-## 6. Error Handling
-
-### 6.1 Application Layer
-
--   MUST NOT return null
--   Use Optional for queries
--   Use explicit exceptions for command failures
+- MUST NOT return a sentinel to signal failure — no `null` for "it went wrong", no
+  boolean flag.
+- Absence in a *query* is a nullable return (§ 1.4).
+- Failure of a *command* is an explicit exception.
 
 ### 6.2 Exception taxonomy
 
--   NotFoundException -\> HTTP 404
--   ValidationException -\> HTTP 400
--   ConflictException -\> HTTP 409
+| Kind | HTTP |
+|---|---|
+| not-found | 404 |
+| validation | 400 |
+| conflict | 409 |
 
-Do NOT use IllegalArgumentException for business semantics.
+`IllegalArgumentException` MUST NOT carry business semantics. **The test is where the
+value comes from, not what validates it upstream:**
 
-**The test is where the value comes from, not what validates it upstream.**
+- A value object constructed from a **command** — data that entered through an inport —
+  MUST throw a **domain exception** when an invariant is violated. Boundary validation is
+  an adapter concern and is not part of the core's contract: the same use case may later be
+  driven by a message consumer or a scheduler with no Bean Validation in front of it, and
+  the value object is then the only guard. **The domain may not assume an adapter ran.**
+- A value object constructed only from an **internal or infrastructure source** MAY throw
+  `IllegalArgumentException`. Reaching it means a programmer error.
+- Null guards are out of scope — in Kotlin a non-nullable type is the guard.
 
-- A value object constructed from a **command** — i.e. from data that entered through an
-  inport — MUST throw a **domain exception** on an invariant violation. Boundary validation
-  is an adapter concern and is **not** part of the core's contract: the same use case may
-  later be driven by a message consumer or a scheduler with no Bean Validation in front of
-  it, and the value object is then the only guard. The domain may not assume an adapter
-  ran.
-- A value object constructed from an **internal or infrastructure source**, never from a
-  command, MAY throw `IllegalArgumentException` — reaching it means a programmer error.
-- `Objects.requireNonNull` for null guards is out of scope; nulls are always programmer
-  errors.
+Clause one triggers on **any** command construction site, so a type with mixed sites falls
+under it.
 
-Applied to the current value objects:
+### 6.3 Shared-kernel exemption
 
-| Type | Constructed from | Throws | Correct? |
-|------|------------------|--------|----------|
-| `ParticipantCount` | `RequestTourBookingCommand`, `ChangeParticipantsCommand`; also `TourBookingMapper` | `InvalidBookingRequestException` | **Yes** |
-| `ParticipantContact` | `RequestTourBookingCommand`; also `TourBookingMapper` | `InvalidBookingRequestException` | **Yes** — fixed |
-| `AvailableCapacity` | `AvailabilityChecker` outport, `TourBookingMapper` — never a command | `IllegalArgumentException` | **Yes** |
-| `TourId` | `RequestTourBookingCommand`; also both mappers | `IllegalArgumentException` | **Exempt** — see below |
+A value object in `shared.domain` **cannot** satisfy clause one: it has no domain exception
+available. `architecture.definition.md` § 9 forbids `shared` from depending on any bounded
+context, so `TourId` cannot reference a booking-context exception — and this is enforced,
+not merely agreed: attempting it fails `ContextRegistryTest`.
 
-### Shared-kernel exemption
+The options were to grow `shared` with its own exception package for one blank-string
+check, or to let the shared value object throw `IllegalArgumentException` and map it to 400
+at every boundary. The second was chosen, and it is more comfortable in Kotlin than it was
+in Java: `require(…)` throws exactly that, so the shared kernel's guard is idiomatic rather
+than a wart.
 
-A value object in `shared.domain` **cannot** satisfy clause A: it has no domain exception
-available to it. `architecture.definition.md` § 9 forbids `shared` from depending on any
-bounded context, so `TourId` cannot reference
-`booking.core.domain.tourbooking.exception.InvalidBookingRequestException` — and this is
-not a matter of taste, it is enforced. Attempting it fails
-`ContextRegistryTest.shared_dependsOnNoBoundedContext`, verified empirically.
+`IllegalArgumentException → 400` is therefore mapped in every `*ExceptionHandler`. That
+mapping is a backstop for two things — shared-kernel value objects and identifier parsing
+on a path variable — and it is **not** a licence for a context-owned value object to skip
+clause one. Those have a domain exception available; they must use it.
 
-The options were:
+> **This rule was wrong on its first two attempts**, and the record is kept because the
+> failure mode recurs. `ddd-hex-reviewer` first named the wrong outlier; the replacement
+> criterion — "reachability from a client" — then refuted its own conclusion, because every
+> field on a `@Valid` endpoint is equally unreachable, so the criterion cleared everything
+> including the case it was written to condemn. The discriminator that actually decides is
+> the **source of the value**, not the validation in front of it.
 
-1. Add a `shared.domain.exception` package with a shared invariant exception. Rejected —
-   it grows the shared kernel to serve one blank-string check, against § 9's "keep `shared`
-   minimal", and every context would then have to map a second exception type.
-2. Leave `IllegalArgumentException` and map it to 400 at the boundary. **Chosen.**
+---
 
-So `IllegalArgumentException` → 400 is mapped in both `*ExceptionHandler`s. That mapping is
-a backstop for exactly two things — shared-kernel value objects, and `UUID.fromString` on a
-path variable — and it is **not** a licence for a context-owned value object to skip clause
-A. Those have a domain exception available; they must use it.
-
-Clause A triggers on **any** command construction site, so a type with mixed sites falls
-under A. `TourDate`, `BookingId` and `GuideTourId` are out of scope: they carry null guards
-only.
-
-Note for the follow-up increment: the mappers are also construction sites, so giving
-`TourId` and `ParticipantContact` domain exceptions changes what reconstitution from a
-corrupt database row throws. That is arguably an improvement — a corrupt row is not a
-programmer error — but it is a second behaviour change in the same edit and needs its own
-assertion.
-
-> **This rule was wrong on its first attempt, twice over.** `ddd-hex-reviewer` first named
-> `ParticipantCount` as the outlier; I replaced that with a "reachability from a client"
-> criterion and named `TourId` instead. The reviewer then showed the criterion refuted its
-> own conclusion: `tourId`, `contactName`, `contactEmail` and `participantCount` all carry
-> Bean Validation on a `@Valid` endpoint, so all four were equally "unreachable" and the
-> criterion cleared everything — including the row it was written to condemn. The
-> discriminator above (source of the value, not upstream validation) is the one that
-> actually decides the four rows, and it makes **two** of them wrong rather than one.
-
-Fixing `TourId` and `ParticipantContact` changes exception types, which is behaviour
-change: `IllegalArgumentException` is currently unmapped and surfaces as 500, while a
-domain exception maps to 400. It needs its own RED and its own increment — the same
-increment as the unmapped `IllegalArgumentException` from `UUID.fromString` recorded in
-`ports/start-tour.inport.spec.md` § 7, since both are the same defect.
-
-------------------------------------------------------------------------
-
-## 7. JavaDoc Standard
+## 7. KDoc standard
 
 ### 7.1 Required
 
--   public types in domain, application, in, out
--   public methods on ports and drivers
+- Public types in `core.domain`, `core.inport`, `core.outport`.
+- Public functions on ports and drivers.
+- Every nullable property, stating what absence means (§ 1.4).
 
-### 7.2 Template --- Type
+### 7.2 Type template
 
-/\*\* \* One sentence purpose. * * Details about invariants and
-semantics. * * SDD: Reference to spec. \*/
+```kotlin
+/**
+ * One sentence of purpose.
+ *
+ * Details about invariants and semantics.
+ *
+ * SDD: see `documentation/<path-to-spec>.md`.
+ */
+```
 
-### 7.3 Template --- Method
+### 7.3 Function template
 
-/\*\* \* Verb phrase description. * * @param name Meaning and
-constraints \* @return Meaning (never null) \* @throws Exception when
-condition \*/
+```kotlin
+/**
+ * Verb phrase describing the effect.
+ *
+ * @param name meaning and constraints
+ * @return meaning
+ * @throws SomeException when the condition holds
+ */
+```
 
-------------------------------------------------------------------------
+The `SDD:` line is not decoration. It is the only mechanical link from code back to the
+spec that justifies it, and `conformance-reviewer` follows it.
 
-## 8. Boundary Mutation Rules
+---
 
--   Mutation MAY happen in UI binding layer.
--   MUST rebuild immutable domain instances before propagation.
--   MUST NOT leak partially mutated domain objects.
+## 8. Code hygiene
 
-------------------------------------------------------------------------
+- A long-living `TODO` MUST reference a ticket or an ADR. An unattributed `TODO` is
+  deleted, not kept.
+- Use interfaces in signatures and concrete types at construction sites.
+- Use sequences and collection operations where they clarify intent; a `for` loop that
+  reads better stays a `for` loop.
+- No wildcard imports.
+- `!!` MUST NOT appear in `core`. In an adapter it requires a comment saying why the value
+  cannot be null — and that comment is usually the discovery that the type is wrong.
 
-## 9. Code Hygiene
+---
 
--   Long-living TODOs MUST reference ticket or ADR.
--   Use interfaces in signatures, concrete types in construction.
--   Use streams when they clarify intent.
+## 9. Enforcement
 
-------------------------------------------------------------------------
+Prose that nothing checks decays. Each rule class has an owner:
 
-## 10. Enforcement
+| Rules | Enforced by |
+|---|---|
+| formatting, imports, line length | ktlint via spotless (`.editorconfig`) |
+| complexity, swallowed exceptions, nullability leaks | detekt (`config/detekt/detekt.yml`) |
+| layering, dependency direction, class roles (§ 3.3, § 4.1) | ArchUnit — `DependencyRulesTest`, `ClassRoleRulesTest`, `ContextRegistryTest` |
+| everything else in this document | `ddd-hex-reviewer`, and human review |
 
-Recommended: - Spotless (formatter) - Checkstyle or ErrorProne -
-ArchUnit for dependency rules
+The last row is an admission, not a boast: a rule in that row is a rule that can rot
+unnoticed. When one does, the fix is to move it up a row, not to restate it more firmly.
 
-------------------------------------------------------------------------
+---
 
 End of document.

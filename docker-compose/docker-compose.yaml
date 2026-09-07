@@ -1,0 +1,23 @@
+# PostgreSQL for local development. Integration tests do not use this file — they
+# start their own container through Testcontainers, so a developer's running stack can
+# never leak state into a test run (test.definition.md, Integration Tests).
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: service-template-db
+    environment:
+      POSTGRES_DB: service_template
+      POSTGRES_USER: service
+      POSTGRES_PASSWORD: service
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U service -d service_template"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

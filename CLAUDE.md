@@ -1,9 +1,12 @@
-# CLAUDE.md – Alpine Booking
+# CLAUDE.md
 
 ## Project
 
-Alpine Booking is a reference-grade Tour Booking backend.
-See [`documentation/project.definition.md`](documentation/project.definition.md) for vision, purpose, and non-goals.
+A spec-driven service template, carrying a small working Tour Booking example that proves
+the template compiles and its gates fire. See [`README.md`](README.md) for what the
+repository is, and
+[`documentation/project.definition.md`](documentation/project.definition.md) for the
+example's vision and — importantly — its non-goals.
 
 ---
 
@@ -36,12 +39,19 @@ Rules are defined in the following files, ordered by precedence (highest first):
 
 Higher documents override lower ones. Templates do not override definitions.
 
-Two lists are **single-sourced** and must not be copied anywhere else:
+Three lists are **single-sourced** and must not be copied anywhere else:
 
-| List | Canonical location |
-|------|--------------------|
-| ADR triggers | [`sdd.playbook.md`](documentation/sdd.playbook.md) § 6 |
-| Quality gates (merge blockers) | [`test.definition.md`](documentation/test.definition.md) § 7 |
+| List | Canonical location | Enforced by |
+|------|--------------------|-------------|
+| ADR triggers | [`sdd.playbook.md`](documentation/sdd.playbook.md) § 6 | review |
+| Quality gates (merge blockers) | [`test.definition.md`](documentation/test.definition.md) § 7 | review |
+| Registered bounded contexts | [`architecture.definition.md`](documentation/architecture.definition.md) § 11 | **`ContextRegistryTest` parses it** |
+
+The third was added because it was already being copied — as prose in the document and as a
+string literal in a test — so adding a context meant editing both, and the test would have
+kept passing against the stale list. It is now parsed, and § 11 carries a written format
+contract stating the shape the parser depends on. ADR-0014 records the generalisation: when
+a rule rots, give it an executable owner rather than restating it.
 
 ---
 
@@ -88,28 +98,49 @@ before writing any code, regardless of the task scope:
 
 ## Agent Roster
 
-Two subagents enforce what prose cannot. Both are defined in `.claude/agents/`
-and are dispatched **in parallel** at the Review & Document Phase of every
-increment.
+Four subagents enforce what prose cannot. All are defined in `.claude/agents/`.
 
 | Agent | Model | Access | Fires when | Produces |
 |-------|-------|--------|-----------|----------|
 | [`ddd-hex-reviewer`](.claude/agents/ddd-hex-reviewer.md) | opus | read-only | after every GREEN step | `PASS` or `DRIFT` + `file:line` findings |
-| [`spec-documenter`](.claude/agents/spec-documenter.md) | fable | docs only, never `app/src/**` | after every GREEN step | reconciled specs, `rest/*.http`, DoD scoreboard |
+| [`conformance-reviewer`](.claude/agents/conformance-reviewer.md) | sonnet | read + `Bash` to run tests | after every GREEN step | `PASS` or `UNMET` — § 7 criteria matched to tests, § 10 boxes to artifacts |
+| [`spec-documenter`](.claude/agents/spec-documenter.md) | fable | docs only, never `app/src/**` | after every GREEN step | reconciled specs, the files in `api/`, DoD scoreboard |
+| [`spec-reviewer`](.claude/agents/spec-reviewer.md) | opus | read-only | after a spec is drafted from a ticket | `PASS` or `GAPS` — hunts claims with no source |
 
 Rules:
 
-- `ddd-hex-reviewer` **reports**; it never edits. A `DRIFT` verdict blocks the
-  increment — drift is never traded away for progress.
-- `spec-documenter` edits documentation only. Where code contradicts a spec it
-  reports the contradiction upward rather than rewriting either side.
-- Neither agent may weaken a test or mask a failing build. `spec-documenter`
-  has no `Bash` access for exactly this reason.
+- A reviewer **reports**; it never edits. `ddd-hex-reviewer` and `conformance-reviewer` both
+  block the increment — drift and unmet criteria are never traded away for progress.
+- `spec-documenter` edits documentation only. Where code contradicts a spec it reports the
+  contradiction upward rather than rewriting either side.
+- No agent may weaken a test or mask a failing build. `spec-documenter` and `spec-reviewer`
+  have no `Bash` for exactly this reason; `conformance-reviewer` has it only to run tests,
+  because a verdict built on predicting a test result is a guess wearing a verdict's
+  clothes.
+
+**Why two spec reviewers and not one with a mode flag.** `spec-reviewer` compares a spec to
+its **sources** and hunts *invention*. `conformance-reviewer` compares **code** to a spec
+and hunts *omission*. The two failure modes leave opposite traces: invention leaves a claim
+in the text, which is something to read; omission leaves nothing, and is visible only by
+walking a list and asking what each item points at. One agent holding both instructions
+would need every rule qualified by mode, and the qualification is where precision goes.
 
 ### Slash commands
 
 | Command | Purpose |
 |---------|---------|
+| `/spec-create <TICKET>` | Jira/Confluence ticket → use-case spec(s), decomposition confirmed first |
+| `/uc-to-plan <ucNN>` | use case spec → `plan.md` |
+| `/plan-to-task` | `plan.md` → phased checkbox `tasks.md` |
+| `/execute-task <N.M>` | implement one task block, TDD-first |
+| `/loop-uc <UCNN>` | run the outer loop until the use case's DoD is met |
+| `/code-review [--increment\|--pr N\|--branch B]` | four-axis review with split authority |
+
+`/code-review` deliberately **shadows the built-in skill of the same name**. The consequence
+is accepted: its logic axis runs through `mattpocock-skills:code-review`, which keeps its own
+namespace. The built-in stays available to a human invoking it directly.
+
+---------|---------|
 | `/uc-to-plan <ucNN>` | use case spec → `plan.md` |
 | `/plan-to-task` | `plan.md` → phased checkbox `tasks.md` |
 | `/execute-task <N.M>` | implement one task block, TDD-first |
@@ -117,12 +148,23 @@ Rules:
 
 ---
 
-## REST Endpoint Documentation
+## API Contract Documentation
 
-Every implemented REST endpoint **must** have a corresponding JetBrains HTTP Client file in `rest/`.
+Every use case exposed over a transport **must** have a matching executable request file in
+`api/`.
 
-- One file per use case, named `uc<nn>-<use-case-name>.http`
-- Each file must cover: the happy-path request, and one request per documented error case (400, 409, 502, etc.)
-- Files are updated as part of the **Implement Phase** — not as an afterthought.
-  `spec-documenter` verifies this on every increment.
-- The `rest/` folder is the living contract between the backend and any HTTP client (Postman, IntelliJ, curl)
+- `api/uc<nn>-<use-case-name>.http` for REST
+- `api/uc<nn>-<use-case-name>.graphql` for GraphQL
+- One file **per transport the use case actually uses**, and **none** for a use case with no
+  external API — a listener-driven use case says so in its § 9. UC06 is the worked example.
+- Each file covers the happy path plus one request per documented status or error
+  classification.
+- Files are written in the **Implement Phase**, not afterwards. `spec-documenter` verifies
+  them on every increment.
+
+The folder is `api/`, not `rest/`: the stack carries two transports, and a folder named
+after one of them left the other's contract nowhere to live (ADR-0012).
+
+These files are the living contract between the backend and any client. They are also the
+cheapest available check that a spec's § 9 and the code still agree, which is why they are
+verified rather than treated as documentation.

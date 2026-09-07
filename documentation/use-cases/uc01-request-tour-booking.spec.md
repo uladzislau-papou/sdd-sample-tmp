@@ -13,6 +13,8 @@ Create a new tour booking request.
 
 ## 1. Intent
 
+**Source:** `n/a — example use case, written to demonstrate the method`
+
 Creates a TourBooking in REQUESTED state after validating availability.
 
 
@@ -110,7 +112,7 @@ Then HTTP 502 is returned and no booking is persisted
 - External availability failure → `AvailabilityUnavailableException`
 
 
-## 9. REST Contract
+## 9. API Contract
 
 **Endpoint:** `POST /api/v1/bookings`
 
@@ -151,29 +153,29 @@ HTTP status mapping:
 ## 10. Definition of Done
 
 ### Behaviour
-- [x] AC-01 covered by `TourBookingTest.requestSetsStatusToRequested`,
-      `TourBookingTest.requestStoresAllFieldsCorrectly`,
-      `RequestTourBookingDriverTest.happyPath_returnsNonNullBookingIdAndStatusRequested`,
-      `TourBookingControllerTest.postWithValidBody_returns201WithBookingIdAndStatus`
-- [x] AC-02 covered by `TourBookingTest.participantCountExceedingCapacityThrowsCapacityExceededException`,
-      `RequestTourBookingDriverTest.capacityExceeded_throwsCapacityExceededExceptionAndSaveNotCalled`,
-      `TourBookingControllerTest.postWithCapacityExceeded_returns409`
-- [x] AC-03 covered by `ParticipantCountTest.value0Throws`, `ParticipantCountTest.negativeValueThrows`
-- [x] AC-04 covered by `TourBookingTest.pastTourDateThrowsInvalidBookingRequestException`,
-      `TourDateTest.isInFutureReturnsFalseForYesterday`, `TourDateTest.isInFutureReturnsFalseForToday`
-- [x] AC-05 covered by `RequestTourBookingDriverTest.availabilityFailure_propagatesExceptionAndSaveNotCalled`,
-      `TourBookingControllerTest.postWithAvailabilityFailure_returns502`
+- [x] AC-01 covered by `TourBookingTest.request_setsStatus_toRequested`,
+      `TourBookingTest.request_storesAllFields_asGiven`,
+      `RequestTourBookingDriverTest.request_returnsGeneratedIdAndRequestedStatus`,
+      `TourBookingRestControllerTest.request_returns201_withBookingIdAndStatus`
+- [x] AC-02 covered by `TourBookingTest.request_throwsCapacityExceededException_whenCountExceedsCapacity`,
+      `RequestTourBookingDriverTest.request_propagatesCapacityExceededException_andSavesNothing`,
+      `TourBookingRestControllerTest.request_returns409_whenCapacityIsExceeded`
+- [x] AC-03 covered by `ParticipantCountTest.construction_throwsInvalidBookingRequestException_whenCountIsZero`, `ParticipantCountTest.construction_throwsInvalidBookingRequestException_whenCountIsNegative`
+- [x] AC-04 covered by `TourBookingTest.request_throwsInvalidBookingRequestException_whenTourDateIsNotInFuture`,
+      `TourDateTest.isInFuture_isFalse_forAPastDate`, `TourDateTest.isInFuture_isFalse_forTheSameDay`
+- [x] AC-05 covered by `RequestTourBookingDriverTest.request_propagatesAvailabilityUnavailableException_andSavesNothing`,
+      `TourBookingRestControllerTest.request_returns502_whenAvailabilityIsUnreachable`
 - [x] `TourBooking` invariants covered by `TourBookingTest`; value object invariants by
       `BookingIdTest`, `ParticipantContactTest`, `ParticipantCountTest`, `TourDateTest`
 - [x] `TourBookingRequested` emission covered by
-      `TourBookingTest.pullDomainEventsReturnsExactlyOneTourBookingRequested`,
-      `TourBookingTest.pullDomainEventsCalledTwiceReturnsEmptyListOnSecondCall`,
-      `RequestTourBookingDriverTest.happyPath_publisherReceivesExactlyOneTourBookingRequested`
+      `TourBookingTest.request_recordsExactlyOneEvent_tourBookingRequested`,
+      `TourBookingTest.pullDomainEvents_returnsEmpty_onSecondCall`,
+      `RequestTourBookingDriverTest.request_publishesExactlyOneEvent`
 - [x] AC-03 rejected at the REST boundary with 400 —
-      `TourBookingControllerTest.postWithParticipantCountBelowMinimum_returns400`
+      `TourBookingRestControllerTest.request_returns400_whenParticipantCountIsBelowOne`
       (Bean Validation `@Min(1)`, a syntactic rule at the boundary)
 - [x] AC-04 mapping covered by
-      `TourBookingControllerTest.postWithInvalidBookingRequestFromDomain_returns400`.
+      `TourBookingRestControllerTest.request_returns400_whenTheDomainRejectsTheRequest`.
       "Tour date must be in the future" is **semantic** — it depends on the current
       time — so the domain owns it (`TourDate` + `ClockPort`) and there is deliberately
       no `@Future` on the request DTO, which would duplicate the rule outside the
@@ -181,14 +183,14 @@ HTTP status mapping:
       mapping, which is what this test asserts
 
 ### Contracts
-- [x] `rest/uc01-request-tour-booking.http` has a request per status in § 9 — 201, 400
+- [x] `api/uc01-request-tour-booking.http` has a request per status in § 9 — 201, 400
       (three variants), 409 and 502. **Two are annotated as not locally reproducible**,
       both because of `StubAvailabilityChecker`: it never fails (so 502 is unreachable)
       and it returns `AvailableCapacity(Integer.MAX_VALUE)` (so no `participantCount`
       can exceed it and 409 is unreachable). Both are reachable only by binding a
       different `AvailabilityChecker` in `bootstrap/BookingConfig`; both are covered by
       unit and web tests
-- [x] Persistence roundtrip covered by `TourBookingJooqRepositoryIT.save_persistsAllFields`,
+- [x] Persistence roundtrip covered by `TourBookingJpaRepositoryIT.save_thenFindById_roundTripsEveryField`,
       `.findById_returnsAggregate_afterSave`, `.save_duplicateId_throwsDuplicateKeyException`
 - [x] Port specs `ports/availability-checker.outport.spec.md`,
       `ports/tour-booking-repository.outport.spec.md`,

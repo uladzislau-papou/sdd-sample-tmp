@@ -1,9 +1,13 @@
 # ADR 0006 – Java 25 Baseline
 
 ## Status
-Accepted
 
-Supersedes the `### Java 21` decision in
+**SUPERSEDED by ADR-0010.**
+
+The baseline moved from Java 25 to JVM 17 with Kotlin 2.3. ADR-0010 records that decision
+and, honestly, that it was a *downgrade* from what this repository already ran.
+
+### Java 21` decision in
 `adr/0001-technical-stack.adr.md`. ADR 0001 remains immutable and unedited;
 this ADR replaces that one section of it.
 

@@ -25,7 +25,7 @@ objectively checkable criteria (`sdd.playbook.md` § 4.2). That list, and nothin
 else, decides when the loop stops.
 
 ```
-documentation/use-cases/uc07-mark-booking-completed.spec.md
+documentation/use-cases/uc06-mark-booking-active.spec.md
   ## 10. Definition of Done      ← authoritative
         │
         │ mirrored each iteration
@@ -110,18 +110,24 @@ loop **halts** and asks the user. It does not decide architecture on its own.
 Dispatch both subagents **in parallel** on the working diff
 (`execution.playbook.md` § 3.5):
 
-| Agent | Model | Returns |
-|-------|-------|---------|
-| `ddd-hex-reviewer` | opus | `PASS` or `DRIFT` + `file:line` findings |
-| `spec-documenter` | fable | reconciled specs, `rest/*.http`, scoreboard refresh |
+| What | Returns |
+|------|---------|
+| `/code-review --increment` | one verdict per axis: architecture and conformance **block**; logic and security report |
+| `spec-documenter` | reconciled specs, the files in `api/`, scoreboard refresh |
 
 They are independent. Neither waits for the other.
 
+`spec-documenter` stays outside the review skill because it writes and the reviewers do
+not.
+
 ## 2.5 Resolve
 
-- **`PASS`** → the criterion may be ticked, if its evidence exists.
-- **`DRIFT`** → the criterion is **not** ticked, even if the behaviour works.
+- **`PASS` on both blocking axes** → the criterion may be ticked, if its evidence exists.
+- **`DRIFT` or `UNMET`** → the criterion is **not** ticked, even if the behaviour works.
   Each finding becomes a work item at the front of the next iteration's queue.
+- **Logic or security findings** → recorded on the criterion, then fixed or explicitly
+  accepted with a reason. They do not block the tick, and they do not disappear either. An
+  accepted finding says who accepted it and why.
 - **`Conflicts` from `spec-documenter`** (code contradicts spec) → resolve
   explicitly before ticking anything the conflict touches. Decide which side is
   wrong and fix that side. Never resolve it by editing the spec to match code

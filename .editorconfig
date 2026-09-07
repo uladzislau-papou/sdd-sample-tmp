@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{kt,kts}]
+ktlint_code_style = ktlint_official
+max_line_length = 120
+
+# Disabled deliberately. The rule breaks any two-call chain across four lines, which
+# makes short, obviously-correct expressions harder to read than the violation it
+# reports. Wrapping is left to max_line_length, which measures the actual problem.
+ktlint_standard_chain-method-continuation = disabled

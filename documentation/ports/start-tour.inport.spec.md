@@ -130,6 +130,8 @@ Found by `ddd-hex-reviewer`. The mapping also covers shared-kernel value objects
 cannot throw a domain exception at all — see `coding-style.definition.md` § 6.2, "Shared-
 kernel exemption".
 
-Covered by `TourBookingControllerTest.confirmWithIllegalArgument_returns400` (the mapping)
-and `ConfirmTourBookingDriverTest.confirm_throwsIllegalArgumentException_whenBookingIdIsMalformed`
-(the source).
+Covered by `TourBookingRestControllerTest.confirm_returns400_whenTheIdentifierIsNotAUuid`
+(the mapping) and
+`ConfirmTourBookingDriverTest.confirm_throwsIllegalArgumentException_whenBookingIdIsMalformed`
+(the source). Both, because the exception has to be raised before it can be mapped, and
+asserting only the status would pass even if the 400 came from somewhere else.

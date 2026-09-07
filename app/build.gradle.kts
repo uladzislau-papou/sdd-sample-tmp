@@ -1,26 +1,16 @@
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath(libs.h2)
-    }
-}
-
 plugins {
-    java
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.plugin.spring)
+    alias(libs.plugins.kotlin.plugin.jpa)
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependency.management.plugin)
-    alias(libs.plugins.flyway.plugin)
-    alias(libs.plugins.jooq.codegen.gradle)
     alias(libs.plugins.spotless)
+    alias(libs.plugins.detekt)
 }
 
-val javaVersion = JavaLanguageVersion.of(libs.versions.java.get().toInt())
+group = "com.example"
 
-springBoot {
-    mainClass.set("com.dominikgaller.alpinebooking.bootstrap.AlpineBookingApplication")
-}
+val javaVersion = libs.versions.java.get().toInt()
 
 repositories {
     mavenCentral()
@@ -28,116 +18,105 @@ repositories {
 
 dependencies {
     implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.graphql)
     implementation(libs.spring.boot.starter.validation)
-    implementation(libs.spring.boot.starter.jooq)
+    implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.core)
-    runtimeOnly(libs.h2)
+    implementation(libs.flyway.database.postgresql)
+    implementation(libs.kotlin.reflect)
+    implementation(libs.jackson.module.kotlin)
+
+    runtimeOnly(libs.postgresql)
 
     testImplementation(libs.spring.boot.starter.test)
+    testImplementation(libs.spring.boot.starter.graphql.test)
     testImplementation(libs.spring.boot.webmvc.test)
+    testImplementation(libs.spring.boot.data.jpa.test)
+    testImplementation(libs.spring.boot.jdbc.test)
     testImplementation(libs.spring.boot.resttestclient)
-
+    testImplementation(libs.spring.boot.testcontainers)
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.mockito.kotlin)
     testImplementation(libs.assertj.core)
     testImplementation(libs.archunit.junit5)
-
-    jooqCodegen(libs.h2)
-    jooqCodegen(libs.jooq.meta)
-    runtimeOnly(libs.jooq.codegen)
 }
 
-// Toolchain is the single authoritative Java version declaration (ADR 0006).
-// The vendor is pinned so the build is reproducible: without it, Gradle's
-// auto-detection matches any locally installed JDK reporting language version 25 —
-// including early-access builds — so the selected JDK would depend on the machine.
-// foojay-resolver (see settings.gradle.kts) provisions Temurin if it is absent.
-java {
-    toolchain {
-        languageVersion.set(javaVersion)
-        vendor.set(JvmVendorSpec.ADOPTIUM)
+// The toolchain is the single authoritative Java version declaration (ADR 0006).
+// The vendor is deliberately not pinned: the baseline is an LTS release, so the
+// early-access ambiguity that justified pinning a vendor for Java 25 no longer
+// applies, and pinning would force a second JDK download on machines that already
+// have a matching one.
+kotlin {
+    jvmToolchain(javaVersion)
+    compilerOptions {
+        freeCompilerArgs.addAll("-Xjsr305=strict")
+        allWarningsAsErrors.set(true)
     }
 }
 
-// H2 file-based database for jOOQ code generation – persists across Flyway and jOOQ tasks
-// even if they run in separate JVM processes. Deleted by `./gradlew clean`.
-val codegenDbPath = "${layout.buildDirectory.get().asFile.absolutePath}/jooq-codegen-db/codegen"
-val codegenDbUrl = "jdbc:h2:file:$codegenDbPath"
-val codegenDbUser = "sa"
-val codegenDbPassword = ""
-
-flyway {
-    url = codegenDbUrl
-    user = codegenDbUser
-    password = codegenDbPassword
-    cleanDisabled = false
-    locations = arrayOf("filesystem:${projectDir}/src/main/resources/db/migration")
-}
-
-jooq {
-    configuration {
-        jdbc {
-            driver = "org.h2.Driver"
-            url = codegenDbUrl
-            user = codegenDbUser
-            password = codegenDbPassword
-        }
-        generator {
-            database {
-                name = "org.jooq.meta.h2.H2Database"
-                includes = ".*"
-                excludes = "flyway_schema_history"
-                inputSchema = "PUBLIC"
-            }
-            generate {}
-            target {
-                packageName = "com.dominikgaller.alpinebooking.jooq"
-                directory = "build/generated-src/jooq/main"
-            }
-        }
-    }
-}
-
-tasks.named("compileJava") {
-    dependsOn(tasks.named("jooqCodegen"))
-}
-
-tasks.named("jooqCodegen") {
-    dependsOn(tasks.named("flywayMigrate"))
-    inputs.files(fileTree("src/main/resources/db/migration"))
-}
-
+// `test.definition.md` already separates fast tests from adapter integration tests by
+// name. The build now separates them too, because one Gradle task that needs Docker gives
+// a developer without Docker no fast feedback at all — and a gate that cannot be run
+// locally is a gate that gets discovered in CI.
+//
+// `test`            — domain, use case and slice tests. No Docker, seconds.
+// `integrationTest` — every `*IT`. Starts PostgreSQL through Testcontainers.
+// `check`           — depends on both, so nothing is quietly skipped in CI.
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    filter { excludeTestsMatching("*IT") }
+}
+
+val integrationTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Runs adapter integration tests (*IT) against real infrastructure. Requires Docker."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("*IT") }
+    shouldRunAfter(tasks.named("test"))
 }
 
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     workingDir = rootProject.projectDir
 }
 
-// Spring Boot 4.0.1 BOM pins jOOQ to 3.19.x; force runtime to 3.20.x to match codegen.
-val jooqVersion = libs.versions.jooq.get()
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "org.jooq") {
-            useVersion(jooqVersion)
-        }
-    }
-}
 // Formatting gate (technical.spec.md, Build & Quality Gates).
-// Deliberately hygiene-only: no formatter is applied, because restyling 90 hand-written
-// files would bury every future diff and this project's coding style is documented prose
-// rather than a formatter config (coding-style.definition.md). These rules catch the
-// mechanical defects a reviewer should never have to mention.
+// Unlike the Java baseline this replaces, ktlint *does* apply a format: Kotlin has one
+// community style and no hand-written house style to preserve, so there is nothing to
+// bury. `spotlessApply` is the fix; `spotlessCheck` is the gate.
 spotless {
-    java {
-        target("src/**/*.java")
-        targetExclude("**/build/generated-src/**")
-        removeUnusedImports()
-        trimTrailingWhitespace()
-        endWithNewline()
+    val excluded = listOf("**/build/**", "**/.gradle/**")
+
+    kotlin {
+        target("src/**/*.kt")
+        targetExclude(excluded)
+        ktlint(libs.versions.ktlint.get())
+    }
+    kotlinGradle {
+        target("*.kts")
+        targetExclude(excluded)
+        ktlint(libs.versions.ktlint.get())
     }
 }
 
+// Static analysis gate. Detekt catches the defect classes ArchUnit cannot see —
+// complexity, swallowed exceptions, platform-type leaks — and ArchUnit catches the
+// ones detekt cannot: layering and dependency direction. Neither replaces the other.
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom(files(rootProject.file("config/detekt/detekt.yml")))
+}
+
+// Both gates are wired explicitly rather than relying on either plugin's defaults:
+// `./gradlew build` must fail on a style or static-analysis violation, and a plugin
+// that silently stops contributing to `check` is a gate that silently disappears.
 tasks.named("check") {
+    dependsOn(integrationTest)
     dependsOn(tasks.named("spotlessCheck"))
+    dependsOn(tasks.withType<dev.detekt.gradle.Detekt>())
 }

@@ -1,177 +1,77 @@
-# Port Specification – GuideTourRepository (Outport)
+# Outbound Port Specification – GuideTourRepository
 
 ## Purpose
 
-Write-side persistence boundary for the `GuideTour` aggregate.
+The `guide` context's write-side persistence contract for the `GuideTour` aggregate.
 
-The `guide` core owns this abstraction; `outbound.persistence.write` provides the
-implementation (`architecture.definition.md` § 4.3, § 4.6). The core never learns
-that persistence is jOOQ over H2.
-
-SDD: `documentation/domain/aggregate-guide-tour.spec.md`,
-`documentation/use-cases/uc05-start-tour.spec.md`,
-`documentation/use-cases/uc11-complete-tour.spec.md`,
-`documentation/use-cases/uc12-cancel-tour-by-guide.spec.md`.
+Declared in `guide.core.outport`, implemented in `guide.outbound.persistence`. Mirrors
+`tour-booking-repository.outport.spec.md` in shape and obligations — deliberately, since a
+second context inventing its own persistence idiom is how "every context follows the same
+ontology" (`architecture.definition.md` § 11 rule 5) stops being true.
 
 
 ## 1. Interface
 
+```kotlin
+interface GuideTourRepository {
+    fun save(guideTour: GuideTour)
+    fun findById(guideTourId: GuideTourId): GuideTour?
+    fun update(guideTour: GuideTour)
+}
 ```
-guide.core.outport.GuideTourRepository
-```
 
-Framework-free. Exposes only domain types — `GuideTour`, `GuideTourId`,
-`java.util.Optional`. No jOOQ record or generated type appears in any signature
-(`architecture.definition.md` § 6 rule 6).
+No query method: nothing in this context fans out over guide tours. The booking side has
+`findConfirmedByTourId` because UC06 activates many bookings for one tour; the reverse
+relationship does not exist.
 
 
-## 2. Method Contracts
+## 2. Operations
 
 ### 2.1 save
 
-```
-void save(GuideTour guideTour)
-```
+Persists a newly scheduled tour. Every field is written, including a null `started_at` — a
+tour that has not started must stay distinguishable from one that started at the epoch.
 
-**Responsibility:** Insert a new guide tour.
-
-**Preconditions:**
-- `guideTour` must be non-null and valid (Always-Valid — it cannot exist otherwise).
-- No row may already exist for `guideTour.id()`.
-
-**Postconditions:**
-- One row exists in `guide_tour` carrying `id`, `tour_id`, `scheduled_start`,
-  `status`, `started_at`, `completed_at`, `cancelled_at` and `cancellation_reason`.
-  The last four are null for a tour created by `GuideTour.schedule(...)`.
-- Domain events are **not** published here — the driver drains
-  `pullDomainEvents()` and publishes via `DomainEventPublisher` (ADR-0002).
-
-**Exceptions:** a duplicate id surfaces as Spring's `DuplicateKeyException`
-translated from the H2 constraint violation. The port does not declare it; callers
-treat it as an infrastructure failure, not a domain outcome.
+Used by: fixtures and integration tests. **The example has no use case that schedules a
+tour**; a tour arrives in the database already scheduled. That is a boundary of the
+example, recorded here rather than left to be discovered.
 
 ### 2.2 findById
 
-```
-Optional<GuideTour> findById(GuideTourId guideTourId)
-```
+Loads one aggregate by identity, reconstituted with no pending events, or `null` when no row
+matches.
 
-**Responsibility:** Load a guide tour by identity, reconstituted as a full aggregate.
-
-**Preconditions:** `guideTourId` non-null.
-
-**Postconditions:**
-- `Optional.empty()` when no row matches — **not** an exception. Translating absence
-  into `GuideTourNotFoundException` is the driver's job, because "not found" is a
-  use case outcome (a 404) rather than a persistence failure.
-- When present, the aggregate is rebuilt via `GuideTour.reconstitute(...)` — the full
-  8-argument overload, so the two nullable cancellation fields (`cancelledAt`,
-  `cancellationReason`, UC12) survive the round trip. A 6-argument convenience overload
-  exists for the tests only; the mapper must not use it. Reconstitution deliberately
-  skips creation-time invariant checks (`modelling.definition.md` § Rehydration Rule).
-- The returned aggregate has **no pending domain events**.
+Used by: UC05.
 
 ### 2.3 update
 
-```
-void update(GuideTour guideTour)
-```
+Persists state changes. **Every mutable field is written** — today `status` and
+`started_at` — for the reason recorded in the booking-side port § 2.3, where the original
+defect occurred. The current adapter closes it by construction, since JPA's merge writes
+the whole entity.
 
-**Responsibility:** Persist state changes to an existing guide tour.
-
-**Preconditions:**
-- A row must already exist for `guideTour.id()`.
-- Called inside the driver's transaction.
-
-**Postconditions:**
-- **Every mutable field of the aggregate is written.** Currently `status`,
-  `started_at`, `completed_at`, `cancelled_at` and `cancellation_reason`. The
-  cancellation columns are written as null for a live tour, so a tour that was never
-  cancelled is distinguishable from one cancelled without a reason.
-- `id`, `tour_id` and `scheduled_start` are immutable in the domain, so an update
-  must not change them.
-
-> **Standing obligation, not a field list.** Adding a mutable field to `GuideTour`
-> obliges you to add it to the `update` statement *and* to an
-> `IT.update_changes*_inDatabase` assertion in the same increment. This is not
-> hypothetical: `TourBookingJooqRepository.update` listed only `status`, so UC04's
-> participant-count and capacity changes were silently discarded for months while
-> its tests passed. `completed_at` was added to this contract when UC11 landed.
-> UC12 conformed by extending it: two new mutable fields, two new columns in the
-> `update` statement, pinned by
-> `GuideTourJooqRepositoryIT.update_changesStatus_toCancelled`,
-> `.cancellationFields_areEmpty_forATourThatWasNeverCancelled` and
-> `.update_persistsCancellation_withoutReason`. The next mutable field must extend
-> all three places again.
-
-**Exceptions:** `IllegalStateException` if the update did not affect exactly one row.
-The implementation checks the affected row count, so updating a tour that no longer
-exists fails loudly rather than silently no-opping
-(`GuideTourJooqRepository.update`).
+Used by: UC05.
 
 
-## 3. Transaction Boundary
+## 3. Timestamp handling
 
-The port does **not** own transactions. The calling drivers — `StartTourDriver`
-(UC05), `CompleteTourDriver` (UC11) and `CancelTourByGuideDriver` (UC12) — are
-annotated `@Transactional` and own the boundary (`architecture.definition.md` § 4.4,
-§ 4.6). Implementations must join the caller's transaction, never open their own.
-UC12's transaction additionally spans the synchronous call into `booking`, so a
-booking-side failure rolls back the `update` made through this port — pinned by
-`CancelTourByGuideRollbackIT`.
+`Instant` is converted to and from `LocalDateTime` at **UTC** by `GuideTourMapper`, because
+the columns are `TIMESTAMP` without a zone. Storing local time would make the stored value
+depend on the server's timezone, turning a deployment detail into data corruption. The
+booking side follows the same rule.
 
-Event publication is deferred to after commit by the `DomainEventPublisher` adapter
-(ADR-0002), so a rollback cannot leak a `TourStarted` for a tour that never started,
-a `TourCompleted` for one that never finished, nor a `TourCancelledByGuide` for one
-that is still scheduled.
+A null `started_at` maps to a null `startedAt` and back. This is asserted separately,
+because a careless default in the conversion would silently invent a start time and satisfy
+the aggregate's I-04 in letter while breaking it in fact.
 
 
-## 4. Reference Implementation
+## 4. Test Requirements
 
-`guide.outbound.persistence.write.GuideTourJooqRepository`, with mapping in
-`GuideTourMapper`.
+| Operation | Test |
+|-----------|------|
+| save + findById roundtrip, including UTC conversion | `GuideTourJpaRepositoryIT.save_thenFindById_roundTripsEveryField` |
+| findById on a missing row | `GuideTourJpaRepositoryIT.findById_returnsNull_whenNoTourHasThatIdentity` |
+| update persists the transition and the start time | `GuideTourJpaRepositoryIT.update_persistsTheTransition_andTheStartTime` |
+| a never-started tour keeps a null start time | `GuideTourJpaRepositoryIT.startedAt_staysNull_forATourThatWasNeverStarted` |
 
-Mapping notes that matter to the domain:
-
-- `Instant` ↔ `TIMESTAMP` goes through `LocalDateTime` at `ZoneOffset.UTC` in both
-  directions. Storing local time here would make `scheduledStart` comparisons — and
-  therefore invariant I-03 (`start` not before `scheduledStart`) — depend on the
-  server's zone. Pinned by
-  `GuideTourJooqRepositoryIT.save_persistsScheduledStart_asUtcLocalDateTime`.
-- `startedAt`, `completedAt` and `cancelledAt` are all nullable, all go through the
-  same UTC conversion, and all map to/from `Optional` accessors on the aggregate.
-- `cancellationReason` ↔ `cancellation_reason VARCHAR(400)` — the width matches
-  `booking`'s `CancellationReason.MAX_LENGTH` without sharing the value object; the
-  `guide.core.domain.guidetour.CancellationReason` enforces the ceiling — the domain, not
-  the driver — and the column is the backstop. The two are pinned equal by
-  `GuideTourJooqRepositoryIT.cancellationReasonColumnWidth_matchesTheDomainCeiling`.
-- `GuideTourId` ↔ `UUID` column; `TourId` ↔ `VARCHAR`.
-- Schema: `V2__DDL_create_guide_tour.sql`, then
-  `V3__DDL_add_guide_tour_completed_at.sql` (UC11), then
-  `V5__DDL_add_guide_tour_cancellation.sql` (UC12, adding `cancelled_at` and
-  `cancellation_reason`). Each added as a separate migration rather than by editing
-  V2 — applied migrations are immutable.
-
-
-## 5. Constraints
-
-- MUST NOT contain business logic. Status transitions belong to the aggregate.
-- MUST NOT publish domain events.
-- MUST NOT expose persistence types into the core.
-- MUST NOT open or commit transactions.
-- MUST return `Optional.empty()` rather than throwing for a missing row.
-- Implementations MAY depend on `core.domain` and `core.outport` only, never on
-  `inbound.*` (`architecture.definition.md` § 6 rule 5).
-
-
-## 6. Known Gaps
-
-- **No optimistic locking.** Two concurrent `start(...)` calls on the same tour can
-  both read `SCHEDULED` and both write `RUNNING`; the second wins and two
-  `TourStarted` events are published. `complete(...)` has the identical race, and
-  its consequence is larger: two `TourCompleted` events fan out to every ACTIVE
-  booking twice (UC07). `TourBooking.markCompleted` is idempotent, so the duplicate
-  is absorbed — the aggregate guard is what currently contains this, not the
-  persistence layer. No version column exists in the schema. Introducing one would
-  be an ADR (persistence strategy, `sdd.playbook.md` § 6 item 4).
-- **No `delete`.** Deliberate — tours are cancelled (UC12), never removed.
+Run against PostgreSQL via Testcontainers, in the `integrationTest` Gradle task.

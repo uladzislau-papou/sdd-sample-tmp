@@ -1,4 +1,4 @@
-# TDD Definition – Alpine Booking (`tdd.definition.md`)
+# TDD Definition (`tdd.definition.md`)
 
 ## Purpose
 
@@ -81,9 +81,9 @@ Required evidence, quoted from the real run:
 - the assertion message or exception, verbatim
 
 ```
-> ./gradlew :app:test --tests '*TourBookingTest.should_reject_completion_when_not_active'
+> ./gradlew :app:test --tests '*TourBookingTest.markActive_throwsInvalidBookingStateException_whenStillRequested'
 
-TourBookingTest > should_reject_completion_when_not_active FAILED
+TourBookingTest > markActive_throwsInvalidBookingStateException_whenStillRequested FAILED
     java.lang.AssertionError:
     Expecting code to raise a throwable.
 ```
@@ -152,7 +152,7 @@ Work **inside-out**: the domain first, then outward through the ports.
 |------|------------------------------------|-------------------|
 | 1 | Domain test (§ 2.1) — invariants, state transitions, negative cases | `<context>.core.domain.<aggregate>` |
 | 2 | Use case test (§ 2.2) — orchestration, events, failure paths, ports stubbed | `<context>.inbound.driver` + the `core.inport` triple |
-| 3 | API/web test (§ 2.4) — status mapping, validation, error contract | `<context>.inbound.rest` **and** `rest/uc<nn>-*.http` |
+| 3 | API/web test (§ 2.4) — status mapping, validation, error contract | `<context>.inbound.rest` or `<context>.inbound.graphql`, **and** the matching file in `api/` |
 | 4 | Adapter integration test `*IT` (§ 2.3) — roundtrip, query semantics | `<context>.outbound.persistence` |
 
 Why inside-out rather than outside-in: in this architecture the invariants *are*

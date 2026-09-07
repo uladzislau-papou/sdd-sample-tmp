@@ -35,6 +35,6 @@ Rules:
   `## DoD Scoreboard – UC<nn>` section at the top of `tasks.md`. The spec is
   authoritative; this is a scoreboard (`loop.playbook.md` § 1).
 - Verification tasks use the real commands: `./gradlew clean test`,
-  `./gradlew build`. This is a Java/Gradle project.
+  `./gradlew build`. This is a Kotlin/Gradle project.
 
 Wait until I explicitly ask you to do something.

@@ -16,6 +16,8 @@ tour execution. If a booking is already ACTIVE the call is a no-op (idempotent).
 
 ## 1. Intent
 
+**Source:** `n/a — example use case, written to demonstrate the method`
+
 Keep booking state consistent with tour execution without coupling the contexts:
 `booking` reacts to a guide-side fact rather than being commanded by `guide`.
 
@@ -133,35 +135,35 @@ Then `BookingNotFoundException` is thrown and nothing is persisted
 | Booking CANCELLED or COMPLETED | `InvalidBookingStateException` | filtered out before processing; not activated |
 
 
-## 9. REST Contract
+## 9. API Contract
 
 `Not applicable — event-driven.`
 
 Triggered exclusively by `shared.domain.event.TourStarted`, published after the
 guide tour's transaction commits (see UC05 and ADR-0002). Deliberately has no
-endpoint, therefore no `rest/uc06-*.http` file is required.
+endpoint, therefore no `api/uc06-*.http` file is required.
 
 
 ## 10. Definition of Done
 
 ### Behaviour
-- [x] AC-01 covered by `TourBookingTest.markActive_happyPath_transitionsToActive`,
-      `MarkBookingActiveDriverTest.markActive_happyPath_returnsActiveStatus`,
-      `MarkBookingActiveDriverTest.markActive_happyPath_callsUpdateOnRepository`
-- [x] AC-02 covered by `TourBookingTest.markActive_idempotent_whenAlreadyActive_noEventEmitted`,
-      `TourBookingTest.markActive_idempotent_whenAlreadyActive_statusRemainsActive`,
-      `MarkBookingActiveDriverTest.markActive_idempotent_whenAlreadyActive_doesNotPublishEvent`,
-      `MarkBookingActiveDriverTest.markActive_idempotent_whenAlreadyActive_doesNotCallUpdate`,
-      `MarkBookingActiveDriverTest.markActive_idempotent_whenAlreadyActive_returnsActiveStatus`
-- [x] AC-03 covered by `MarkBookingActiveDriverTest.markActive_usesClockPort_whenStartedAtIsNull`,
-      `MarkBookingActiveDriverTest.markActive_usesProvidedStartedAt_whenNotNull`
+- [x] AC-01 covered by `TourBookingTest.markActive_transitionsStatus_toActive`,
+      `MarkBookingActiveDriverTest.markActive_returnsActiveStatus`,
+      `MarkBookingActiveDriverTest.markActive_updatesTheAggregate`
+- [x] AC-02 covered by `TourBookingTest.markActive_isIdempotentNoOp_whenAlreadyActive`,
+      `TourBookingTest.markActive_isIdempotentNoOp_whenAlreadyActive`,
+      `MarkBookingActiveDriverTest.markActive_isIdempotent_persistsAndPublishesNothing_whenAlreadyActive`,
+      `MarkBookingActiveDriverTest.markActive_isIdempotent_persistsAndPublishesNothing_whenAlreadyActive`,
+      `MarkBookingActiveDriverTest.markActive_isIdempotent_persistsAndPublishesNothing_whenAlreadyActive`
+- [x] AC-03 covered by `MarkBookingActiveDriverTest.markActive_usesClockPort_whenTheCommandCarriesNoTimestamp`,
+      `MarkBookingActiveDriverTest.markActive_prefersTheCommandTimestamp_overTheClock`
 - [x] AC-04 covered by `TourBookingTest.markActive_throwsInvalidBookingStateException_whenCancelled`,
       `TourBookingTest.markActive_throwsInvalidBookingStateException_whenCompleted`,
-      `MarkBookingActiveDriverTest.markActive_throwsInvalidBookingStateException_whenCancelled`
-- [x] AC-05 covered by `MarkBookingActiveDriverTest.markActive_throwsBookingNotFoundException_whenNotFound`
+      `MarkBookingActiveDriverTest.markActive_propagatesInvalidBookingStateException_whenCancelled`
+- [x] AC-05 covered by `MarkBookingActiveDriverTest.markActive_throwsBookingNotFoundException_whenNoBookingHasThatIdentity`
 - [x] `BookingActivated` emission covered by
-      `TourBookingTest.markActive_happyPath_recordsBookingActivatedEvent`,
-      `MarkBookingActiveDriverTest.markActive_happyPath_publishesBookingActivatedEvent`
+      `TourBookingTest.markActive_recordsBookingActivatedEvent_carryingTheGuideTourId`,
+      `MarkBookingActiveDriverTest.markActive_prefersTheCommandTimestamp_overTheClock`
 - [x] `TourStartedListener` covered by `TourStartedListenerTest` — 9 tests: the fan-out
       across multiple CONFIRMED bookings, event-payload propagation, each of the four
       non-CONFIRMED statuses left alone, mixed statuses, other tours ignored, and the
@@ -175,9 +177,9 @@ endpoint, therefore no `rest/uc06-*.http` file is required.
       spec never had). The same gap applies to UC07's `TourCompletedListener`
 
 ### Contracts
-- [x] No `rest/` file required — § 9 is not applicable
+- [x] No `api/` file required — § 9 is not applicable
 - [x] Persistence roundtrip for the ACTIVE transition covered by
-      `TourBookingJooqRepositoryIT.update_changesStatus_toActive_afterMarkActive`.
+      `TourBookingJpaRepositoryIT.update_persistsTheStatusTransition`.
       **Correcting an earlier error in this spec:** a previous revision of this item
       claimed `started_at` and `guide_tour_id` persistence was unverified. In fact
       `TourBooking` holds **no such fields** — `markActive(Instant, String)` takes both

@@ -1,0 +1,38 @@
+# GraphQL schema for the `booking` bounded context.
+#
+# Schema-first: this file is the contract, and the resolver signatures are checked against
+# it at startup. It carries the same use case as the REST contract in
+# `booking/inbound/rest/TourBookingRestAPI.kt` — one core, two transports.
+#
+# SDD: see documentation/use-cases/uc01-request-tour-booking.spec.md § 9.
+
+# The GraphQL specification requires a schema to declare a `Query` root, even when the
+# service exposes nothing to read. This template deliberately has no read side — no query
+# ports, no projections (see project.definition.md, non-goals) — so the root carries one
+# infrastructure field rather than a domain read. Inventing a domain query here would ship
+# a read side that no spec asked for and no use case owns.
+#
+# A service built from this template should replace this field with its first real query.
+type Query {
+    "Version of this API. Not a domain read."
+    apiVersion: String!
+}
+
+type Mutation {
+    "UC01 — request a tour booking."
+    requestTourBooking(input: RequestTourBookingInput!): RequestTourBookingPayload!
+}
+
+input RequestTourBookingInput {
+    tourId: String!
+    "ISO-8601 calendar date, e.g. 2026-06-15."
+    tourDate: String!
+    participantCount: Int!
+    contactName: String!
+    contactEmail: String!
+}
+
+type RequestTourBookingPayload {
+    bookingId: ID!
+    status: String!
+}

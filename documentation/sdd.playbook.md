@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines how Spec-Driven Development (SDD) operates in Alpine Booking.
+This document defines how Spec-Driven Development (SDD) operates in this project.
 
 SDD is not documentation overhead.
 It is an enforcement mechanism.
@@ -108,6 +108,10 @@ exit conditions, which is why it must exist in exactly one place.
 supersedes the divergent copies that previously lived in `execution.playbook.md`
 § 3.2.4 and § 4.
 
+**This is the canonical list.** No other document restates it — `CLAUDE.md` names it as
+single-sourced, and `/spec-create` reports fired triggers by reading *this* section rather
+than a copy.
+
 An ADR is mandatory when:
 
 1. Changing architectural layering or dependency rules
@@ -124,7 +128,12 @@ An ADR is mandatory when:
 10. Changing the cross-context interaction model
 11. Introducing caching or another cross-cutting concern
 12. Changing API versioning strategy
-13. Raising the Java toolchain or framework baseline
+13. Raising the JVM toolchain, the Kotlin version or the framework baseline
+14. Adding a delivery transport, or exposing a use case over a second one — see
+    `adr/0012-dual-delivery-transports.adr.md`
+15. Introducing a read side: query ports, projections or CQRS. The template ships
+    without one deliberately (`project.definition.md`, non-goals), so the first service
+    that needs reads is deciding a pattern for everything after it
 
 Architectural decisions must never be implicit.
 
@@ -167,7 +176,7 @@ Violations invalidate the change.
 
 # 9. Non-Goals
 
-Alpine Booking does not aim to:
+This project does not aim to:
 - Demonstrate framework tricks
 - Maximize feature count
 - Optimize prematurely

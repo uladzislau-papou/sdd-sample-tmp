@@ -1,286 +1,110 @@
-# Port Specification – TourBookingRepository (Outport)
+# Outbound Port Specification – TourBookingRepository
 
 ## Purpose
 
-Defines the persistence boundary for the `TourBooking` aggregate on the write side.
-This outport abstracts the storage mechanism from the domain and application layer.
+The `booking` context's write-side persistence contract for the `TourBooking` aggregate.
 
-SDD: See `documentation/domain/aggregate-tour-booking.spec.md`
-
-> This spec was written for UC01 and stated "Only `save` is required". Four more use
-> cases have since been implemented and the interface grew to four methods, but the
-> spec was never updated — so it documented a `save`-only port while five use cases
-> depended on `findById`, `update` and `findByTourId`. Found by `spec-documenter`.
+Declared in `booking.core.outport`, implemented in `booking.outbound.persistence`. The
+core names what it needs; the adapter decides how. `DependencyRulesTest` enforces the
+direction, and `ClassRoleRulesTest.repositoryOutportsExposeNoPersistenceType` enforces that
+the contract stays in the core's vocabulary — a port returning an entity or a `Page` has
+already leaked the adapter it was meant to hide.
 
 
 ## 1. Interface
 
+```kotlin
+interface TourBookingRepository {
+    fun save(booking: TourBooking)
+    fun findById(bookingId: BookingId): TourBooking?
+    fun findConfirmedByTourId(tourId: TourId): List<TourBooking>
+    fun update(booking: TourBooking)
+}
 ```
-booking.core.outport.TourBookingRepository
-```
 
-Framework-free. Exposes only domain types plus `Optional` and `List`. No jOOQ record
-or generated `com.dominikgaller.alpinebooking.jooq.*` type appears in any signature
-(`architecture.definition.md` § 6 rule 6).
+Absence is a nullable return, not `Optional` (`coding-style.definition.md` § 1.4).
 
 
-## 2. Method Contracts
+## 2. Operations
 
 ### 2.1 save
 
-```
-void save(TourBooking booking)
-```
+**Responsibility:** Persist a newly created aggregate.
 
-**Responsibility:** Persist a new `TourBooking` aggregate atomically.
+**Preconditions:** no row exists for that identity; called inside the driver's transaction.
 
-**Preconditions:**
-- `booking` must be non-null and in a valid, always-valid state.
-- No row may already exist for `booking.bookingId()`.
+**Postconditions:** every field of the aggregate is written.
 
-**Postconditions:**
-- All fields of the aggregate are durably persisted.
-- The operation is atomic — either all fields are written or none are.
-
-**Exceptions:** a duplicate id surfaces as Spring's `DuplicateKeyException`, translated
-from the H2 constraint violation. Pinned by
-`TourBookingJooqRepositoryIT.save_duplicateId_throwsDuplicateKeyException`.
-
-**Idempotency:** Not required. Saving a duplicate `bookingId` is a programming error —
-`BookingId` is generated before `save` is called.
-
-Used by: UC01 (`RequestTourBookingDriver`).
+Used by: UC01.
 
 ### 2.2 findById
 
-```
-Optional<TourBooking> findById(BookingId bookingId)
-```
+**Responsibility:** Load one aggregate by identity.
 
-**Responsibility:** Load one aggregate by identity, fully reconstituted.
+**Postconditions:** returns a reconstituted aggregate with **no pending events**, or `null`
+when no row matches. Reconstitution re-checks no invariants — the row was valid when
+written.
 
-**Preconditions:** `bookingId` non-null.
-
-**Postconditions:**
-- `Optional.empty()` when no row matches — **not** an exception. Translating absence
-  into `BookingNotFoundException` is the driver's job, because "not found" is a use
-  case outcome (a 404) rather than a persistence failure.
-- When present, rebuilt via `TourBooking.reconstitute(...)` — the full 10-argument
-  overload, so the three nullable cancellation fields (`cancelledAt`, `cancelledBy`,
-  `cancellationReason`, UC08) survive the round trip — which deliberately skips
-  creation-time invariant checks (`modelling.definition.md` § Rehydration Rule).
-- The returned aggregate has **no pending domain events**.
-
-Used by: UC02, UC03/UC08, UC04, UC06, UC07. (UC09 used it while the inport was
-per-booking; the per-tour rework moved it to `findCancellableByTourId`, § 2.7.)
+Used by: UC02, UC06.
 
 ### 2.3 update
 
-```
-void update(TourBooking booking)
-```
-
 **Responsibility:** Persist state changes to an existing aggregate.
 
-**Preconditions:**
-- A row must already exist for `booking.bookingId()`.
-- Called inside the driver's transaction.
+**Postconditions:** **every mutable field is written** — today `status`,
+`participant_count` and `available_capacity`. Immutable fields (`id`, `tour_id`,
+`tour_date`, contact) are set once by `save` and must not change.
 
-**Postconditions:**
-- **Every mutable field is written**: `status`, `participant_count`,
-  `available_capacity`, and — since UC08 — `cancelled_at`, `cancelled_by` and
-  `cancellation_reason`. The cancellation columns are written as null for a live
-  booking, so a booking that was never cancelled is distinguishable from one cancelled
-  without a reason.
-- Immutable fields (`id`, `tour_id`, `tour_date`, contact) are set once by `save` and
-  must not change.
+> **This contract is load-bearing, and it is stated as a standing obligation rather than a
+> field list.** The original implementation wrote only `status`, so an entire use case's
+> effect on the participant count was silently discarded — while its own tests stayed
+> green, because each asserted only the field it cared about. **Any new mutable field on
+> the aggregate must be written by `update` and asserted in the same increment.**
+>
+> The current adapter closes this defect *by construction* rather than by discipline: JPA's
+> merge writes the whole entity, so the update cannot be partially forgotten. That is a
+> property of this adapter, not of the port — the obligation stays written down here,
+> because the next adapter may be hand-written SQL again. It is pinned by
+> `TourBookingJpaRepositoryIT.update_writesEveryMutableField_notOnlyTheOneTheUseCaseChanged`,
+> which asserts every field after changing one, precisely because asserting one field per
+> test is what let the original defect through.
 
-> **This contract is load-bearing — a standing obligation, not a field list.** The
-> implementation previously wrote only `status`, so UC04's participant-count and
-> capacity changes were silently discarded. Two integration tests now pin it —
-> `TourBookingJooqRepositoryIT.update_changesParticipantCount_inDatabase` and
-> `.update_changesAvailableCapacity_inDatabase`. **Any new mutable field on the
-> aggregate must be added to the `update` statement *and* to an
-> `IT.update_changes*_inDatabase` assertion in the same increment**, or it will not
-> survive a write. UC07 conformed without extending it: `markCompleted` mutates only
-> `status`, and `completedAt` is event payload, not aggregate state. UC08 is the first
-> increment to extend it — three new mutable fields, three new columns in the `update`
-> statement, pinned by `TourBookingJooqRepositoryIT.update_persistsCancellationAttribution`,
-> `.update_persistsCancellation_withoutReason` and
-> `.update_persistsCancelledAt_asUtcLocalDateTime`. UC09 conformed without extending
-> it: guide cancellation reuses the three UC08 columns, and `guideTourId` is
-> `BookingCancelledByGuide` payload, not aggregate state — pinned by
-> `TourBookingJooqRepositoryIT.update_persistsGuideCancellationAttribution` and
-> `.update_persistsCancelledBy_asTheEnumName`. The guide-side
-> port carries the same obligation
-> (`ports/guide-tour-repository.outport.spec.md` § update) — this port is where the
-> original defect occurred.
+**Idempotency:** idempotent for identical aggregate state. It is **not** a no-op guard —
+the aggregate decides whether a transition happens. UC06's driver relies on that: when
+`markActive` no-ops on an already-active booking, no event is recorded, and the driver
+skips `update` entirely.
 
-**Exceptions:** `IllegalStateException` if the update did not affect exactly one row.
-Updating a booking that no longer exists fails loudly rather than silently no-opping.
-
-**Idempotency:** Idempotent for identical aggregate state — the same `update` applied
-twice produces the same row. It is not a no-op guard: the aggregate decides whether a
-transition should happen (e.g. `markActive` returns early when already ACTIVE, so the
-driver never calls `update`). UC09's driver relies on exactly that: it skips `update`
-altogether when the aggregate's guide-cancel no-op produced no event.
-
-Used by: UC02, UC03/UC08, UC04, UC06, UC07, UC09.
+Used by: UC02, UC06.
 
 ### 2.4 findConfirmedByTourId
 
-```
-List<TourBooking> findConfirmedByTourId(TourId tourId)
-```
-
 **Responsibility:** Return the bookings for a tour that are eligible for activation.
 
-**Postconditions:** an empty list when none qualify, never null; each element fully
-reconstituted with no pending events; no ordering guaranteed.
+**Postconditions:** every booking for that tour whose status is `CONFIRMED`, reconstituted
+with no pending events. Empty list when none match — never null.
 
-Used by: UC06 (`TourStartedListener`).
+The filter is on `CONFIRMED` specifically, not "not cancelled": a `REQUESTED` booking that
+nobody confirmed must not be activated by a tour starting (see I-06 in the aggregate spec).
 
-> **Why the criterion lives here.** A `status() == CONFIRMED` filter in the listener is
-> business logic in an inbound adapter (`architecture.definition.md` § 4.8). It is also
-> load-bearing: the listener runs one `REQUIRES_NEW` transaction for the whole fan-out and
-> `markActive` throws for CANCELLED or COMPLETED, so removing the filter and relying on
-> the aggregate guard would let one ineligible booking roll back the entire batch. Making
-> it a query keeps the adapter free of conditionals without weakening the domain guard.
-
-### 2.5 findActiveByTourId
-
-```
-List<TourBooking> findActiveByTourId(TourId tourId)
-```
-
-**Responsibility:** Return the bookings for a tour that are eligible for completion.
-
-**Postconditions:** an empty list when none qualify, never null; each element fully
-reconstituted with no pending events; no ordering guaranteed.
-
-Used by: UC07 (`TourCompletedListener`).
-
-> Mirrors § 2.4 for the completion side, for the same two reasons: a status filter in
-> `TourCompletedListener` would be business logic in an inbound adapter
-> (`architecture.definition.md` § 4.8), and `markCompleted` throws for REQUESTED,
-> CONFIRMED and CANCELLED, so relying on the aggregate guard alone would let one
-> ineligible booking roll back the entire `REQUIRES_NEW` fan-out. The jOOQ predicate
-> (`tour_id` **and** `status = 'ACTIVE'`) is pinned by
-> `TourBookingJooqRepositoryIT.findActiveByTourId_returnsOnlyActiveBookingsForThatTour`
-> and `.findActiveByTourId_returnsEmpty_whenNoActiveBookingsExist` — the listener's
-> stub cannot catch a wrong column or literal in the generated SQL.
-
-### ~~2.6 findByTourId~~ — removed
-
-`List<TourBooking> findByTourId(TourId tourId)` returned every booking for a tour
-regardless of status. Its only caller was `TourStartedListener`, which moved to
-`findConfirmedByTourId` so the status criterion would not sit in an inbound adapter
-(§ 2.4). That left it with **no caller and no test**.
-
-Removed rather than kept "in case". An unused method on a port is a liability: it has to
-be implemented by every adapter and every test stub — five stubs in this codebase — and
-it invites a future caller to load aggregates it does not need. `git` preserves it if a
-genuine caller appears, and by then the right shape may well be a read-side projection
-(`architecture.definition.md` § 4.6) rather than a write-side aggregate load.
-
-### 2.7 findCancellableByTourId
-
-```
-List<TourBooking> findCancellableByTourId(TourId tourId)
-```
-
-**Responsibility:** Return the bookings for a tour that a guide may still cancel —
-every **non-terminal** state (`REQUESTED`, `CONFIRMED`, `ACTIVE`).
-
-**Preconditions:** `tourId` non-null.
-
-**Postconditions:** an empty list when none qualify, never null; each element fully
-reconstituted with no pending events; no ordering guaranteed. `CANCELLED` and
-`COMPLETED` bookings are excluded by the query, so UC09's fan-out never asks the
-aggregate to do something it would reject or no-op.
-
-Used by: UC09 (`MarkBookingCancelledByGuideDriver`).
-
-> Mirrors § 2.4/§ 2.5 for the guide-cancellation side, and the criterion matters *more*
-> here than anywhere else: the ultimate caller is the `guide` context (via `booking`'s
-> inport). If "which bookings are affected" lived in the caller, `guide` would have to
-> know `TourBooking`'s state model and the context boundary would be gone
-> (`architecture.definition.md` § 4.6). The jOOQ predicate is pinned like § 2.4's and
-> § 2.5's, by
-> `TourBookingJooqRepositoryIT.findCancellableByTourId_returnsEveryNonTerminalBookingForThatTour`
-> and `.findCancellableByTourId_returnsEmpty_whenEveryBookingIsTerminal`, plus end to end by
-> `CancelTourByGuideIT.cancel_skipsTerminalBookings_andStillCancelsTheTour`.
->
-> The criterion is written as `NOT IN (CANCELLED, COMPLETED)` rather than `IN (...)` on
-> purpose: a new non-terminal status added to `TourBookingStatus` is then cancellable by
-> default, which is the safer direction to be wrong in. Listing the cancellable states would
-> silently exclude it and leave those bookings live after their tour was called off. It also
-> makes the pinning test matter more than for § 2.4/§ 2.5 — a mistake here over-selects.
+Used by: UC06, from `TourStartedListener`.
 
 
-## 3. Transaction Boundary
+## 3. Test Requirements
 
-The transaction is owned by the calling driver, never by the repository. The
-implementation MUST NOT start its own transaction; it participates in the active one
-(`architecture.definition.md` § 4.4, § 4.6).
+| Operation | Test |
+|-----------|------|
+| save + findById roundtrip | `TourBookingJpaRepositoryIT.save_thenFindById_roundTripsEveryField` |
+| findById on a missing row | `TourBookingJpaRepositoryIT.findById_returnsNull_whenNoBookingHasThatIdentity` |
+| update persists a transition | `TourBookingJpaRepositoryIT.update_persistsTheStatusTransition` |
+| update writes every mutable field | `TourBookingJpaRepositoryIT.update_writesEveryMutableField_notOnlyTheOneTheUseCaseChanged` |
 
-Owners: `RequestTourBookingDriver`, `ConfirmTourBookingDriver`,
-`CancelTourBookingDriver`, `ChangeParticipantsDriver`, `MarkBookingActiveDriver`,
-`MarkBookingCompletedDriver`, `MarkBookingCancelledByGuideDriver` (UC09 — a special
-case in the other direction: `@Transactional` with default `REQUIRED`, so it *joins*
-the guide caller's transaction rather than owning one; see
-`ports/mark-booking-cancelled-by-guide.inport.spec.md` § 4).
+`findConfirmedByTourId` is exercised at the use-case level by
+`TourStartedListenerTest.onTourStarted_activatesEveryConfirmedBookingForThatTour` and
+`TourStartedListenerTest.onTourStarted_doesNothing_whenNoBookingIsConfirmed`. **It has no
+integration test of its own, and that is a gap, not a decision** — the status filter is
+exactly the kind of predicate that behaves differently against a real database than against
+a mock. A service adopting this template should close it.
 
-`TourStartedListener` and `TourCompletedListener` are a special case: each runs
-`AFTER_COMMIT` of the guide transaction in a **new** transaction (`REQUIRES_NEW`),
-per ADR-0002. The drivers they call join that transaction.
-
-Event publication is deferred to after commit by the `DomainEventPublisher` adapter,
-so a rollback cannot leak an event for a change that never landed.
-
-
-## 4. Reference Implementation
-
-`booking.outbound.persistence.write.TourBookingJooqRepository`, with mapping in
-`TourBookingMapper`.
-
-Technology: jOOQ over H2. Schema managed by Flyway
-(`V1__DDL_create_tour_booking.sql`, extended by
-`V4__DDL_add_tour_booking_cancellation.sql`).
-
-Mapping notes:
-- `BookingId` ↔ `VARCHAR(36)`; `TourId` ↔ `VARCHAR(255)`; `TourDate` ↔ `DATE`.
-- `ParticipantContact` flattens to `contact_name` / `contact_email`.
-- `TourBookingStatus` ↔ `VARCHAR(50)` via `name()`.
-- UC08 cancellation attribution, all three columns nullable:
-  `cancelledAt` ↔ `cancelled_at TIMESTAMP` as UTC `LocalDateTime`
-  (`ZoneOffset.UTC`, matching the guide side — pinned by
-  `TourBookingJooqRepositoryIT.update_persistsCancelledAt_asUtcLocalDateTime`);
-  `CancelledBy` ↔ `cancelled_by VARCHAR(10)` via `name()`;
-  `CancellationReason` ↔ `cancellation_reason VARCHAR(400)`, the width matching
-  `CancellationReason.MAX_LENGTH` as a backstop — the value object is the enforcing side.
-- There are no `started_at` or `guide_tour_id` columns, and correctly so: `TourBooking`
-  holds no such fields. `markActive(Instant, String)` takes both purely as
-  `BookingActivated` event payload.
-
-
-## 5. Constraints
-
-- MUST NOT expose jOOQ records, JPA entities, or any persistence type through this interface.
-- MUST NOT load partial aggregates.
-- Parameters and return types MUST be domain types only.
-- MUST NOT contain business logic — status transitions belong to the aggregate.
-- MUST NOT publish domain events.
-- MUST NOT open or commit transactions.
-- MUST return `Optional.empty()` / an empty list rather than throwing for absence.
-- MAY depend on `core.domain` and `core.outport` only, never on `inbound.*`
-  (`architecture.definition.md` § 6 rule 5).
-
-
-## 6. Known Gaps
-
-- **No optimistic locking.** Two concurrent updates to the same booking can both read
-  the same state and both write; the second wins. No version column exists in
-  `V1__DDL_create_tour_booking.sql`. Adding one is an ADR (persistence strategy,
-  `sdd.playbook.md` § 6 item 4).
-- **No `delete`.** Deliberate — bookings are cancelled, never removed.
+These integration tests run against PostgreSQL via Testcontainers, in the `integrationTest`
+Gradle task. They also prove the Flyway migrations and the JPA mapping agree, since the
+schema comes from the migrations and `ddl-auto` is `validate`.

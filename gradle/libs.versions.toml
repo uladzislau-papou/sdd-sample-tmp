@@ -1,32 +1,51 @@
 [versions]
-java = "25"
-spring-boot = "4.0.1"
+# JVM 17 is the baseline (ADR 0006). Spring Boot 4 accepts 17 as its minimum.
+java = "17"
+kotlin = "2.3.0"
+spring-boot = "4.0.3"
 spring-dependency-management = "1.1.7"
-jooq = "3.20.0"
+# Flyway's core and the Gradle plugin are no longer coupled: the plugin existed only
+# to migrate a codegen database for jOOQ, and jOOQ is gone (ADR 0001, revised).
 flyway = "11.11.0"
-h2 = "2.3.232"
+testcontainers = "1.20.6"
 spotless = "8.3.0"
+ktlint = "1.5.0"
+detekt = "2.0.0-alpha.2"
 archunit = "1.4.1"
+mockito-kotlin = "5.2.1"
 
 [libraries]
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
-spring-boot-starter-jooq = { module = "org.springframework.boot:spring-boot-starter-jooq" }
-spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+spring-boot-starter-graphql = { module = "org.springframework.boot:spring-boot-starter-graphql" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
-spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
-spring-boot-webmvc-test = { module = "org.springframework.boot:spring-boot-webmvc-test" }
-spring-boot-resttestclient = { module = "org.springframework.boot:spring-boot-resttestclient" }
+spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
+spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
 flyway-core = { module = "org.flywaydb:flyway-core" }
-h2 = { module = "com.h2database:h2", version.ref = "h2" }
+flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+postgresql = { module = "org.postgresql:postgresql" }
+
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
+jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
+
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+spring-boot-starter-graphql-test = { module = "org.springframework.boot:spring-boot-starter-graphql-test" }
+spring-boot-webmvc-test = { module = "org.springframework.boot:spring-boot-webmvc-test" }
+spring-boot-data-jpa-test = { module = "org.springframework.boot:spring-boot-data-jpa-test" }
+spring-boot-jdbc-test = { module = "org.springframework.boot:spring-boot-jdbc-test" }
+spring-boot-resttestclient = { module = "org.springframework.boot:spring-boot-resttestclient" }
+spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
+kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockito-kotlin" }
 assertj-core = { module = "org.assertj:assertj-core" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
-jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
-jooq-meta = { module = "org.jooq:jooq-meta", version.ref = "jooq" }
-jooq-codegen = { module = "org.jooq:jooq-codegen", version.ref = "jooq" }
 
 [plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-plugin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+kotlin-plugin-jpa = { id = "org.jetbrains.kotlin.plugin.jpa", version.ref = "kotlin" }
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 spring-dependency-management-plugin = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
-flyway-plugin = { id = "org.flywaydb.flyway", version.ref = "flyway" }
-jooq-codegen-gradle = { id = "org.jooq.jooq-codegen-gradle", version.ref = "jooq" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }

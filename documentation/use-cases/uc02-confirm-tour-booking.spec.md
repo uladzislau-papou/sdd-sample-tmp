@@ -13,6 +13,8 @@ Confirm an existing tour booking.
 
 ## 1. Intent
 
+**Source:** `n/a — example use case, written to demonstrate the method`
+
 Transition booking from REQUESTED to CONFIRMED.
 
 
@@ -96,7 +98,7 @@ Then HTTP 409 is returned and the status is unchanged
 | Booking exists but is not in REQUESTED state (e.g. already CONFIRMED) | `InvalidBookingStateException` | 409 |
 
 
-## 9. REST Contract
+## 9. API Contract
 
 Endpoint:
 ```
@@ -120,24 +122,24 @@ HTTP status mapping:
 ## 10. Definition of Done
 
 ### Behaviour
-- [x] AC-01 covered by `TourBookingTest.confirm_transitionsStatusToConfirmed`,
-      `ConfirmTourBookingDriverTest.confirm_happyPath_returnsConfirmedStatus`,
-      `ConfirmTourBookingDriverTest.confirm_happyPath_callsUpdateOnRepository`,
-      `TourBookingControllerTest.confirmBooking_returns200_withConfirmedStatus`
-- [x] AC-02 covered by `ConfirmTourBookingDriverTest.confirm_throwsBookingNotFoundException_whenNotFound`,
-      `TourBookingControllerTest.confirmBooking_returns404_whenNotFound`
+- [x] AC-01 covered by `TourBookingTest.confirm_transitionsStatus_toConfirmed`,
+      `ConfirmTourBookingDriverTest.confirm_returnsConfirmedStatus`,
+      `ConfirmTourBookingDriverTest.confirm_updatesTheAggregate`,
+      `TourBookingRestControllerTest.confirm_returns200_withConfirmedStatus`
+- [x] AC-02 covered by `ConfirmTourBookingDriverTest.confirm_throwsBookingNotFoundException_whenNoBookingHasThatIdentity`,
+      `TourBookingRestControllerTest.confirm_returns404_whenTheBookingDoesNotExist`
 - [x] AC-03 covered by `TourBookingTest.confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed`,
-      `ConfirmTourBookingDriverTest.confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed`,
-      `ConfirmTourBookingDriverTest.confirm_doesNotCallUpdate_whenStateInvalid`,
-      `TourBookingControllerTest.confirmBooking_returns409_whenInvalidState`
+      `ConfirmTourBookingDriverTest.confirm_propagatesInvalidBookingStateException_andUpdatesNothing`,
+      `ConfirmTourBookingDriverTest.confirm_propagatesInvalidBookingStateException_andUpdatesNothing`,
+      `TourBookingRestControllerTest.confirm_returns409_whenTheBookingIsNotRequested`
 - [x] `TourBookingConfirmed` emission covered by
-      `TourBookingTest.confirm_publishesTourBookingConfirmedEvent`,
-      `TourBookingTest.pullDomainEvents_returnsOnlyConfirmedEvent_afterPullingRequestedAndCallingConfirm`,
-      `ConfirmTourBookingDriverTest.confirm_happyPath_publishesTourBookingConfirmedEvent`
+      `TourBookingTest.confirm_recordsTourBookingConfirmedEvent`,
+      `TourBookingTest.confirm_recordsTourBookingConfirmedEvent`,
+      `ConfirmTourBookingDriverTest.confirm_usesClockPort_forTheEventTimestamp`
 
 ### Contracts
-- [x] `rest/uc02-confirm-tour-booking.http` covers 200, 404 and 409
-- [x] Persistence roundtrip covered by `TourBookingJooqRepositoryIT.update_changesStatus_inDatabase`
+- [x] `api/uc02-confirm-tour-booking.http` covers 200, 404 and 409
+- [x] Persistence roundtrip covered by `TourBookingJpaRepositoryIT.update_persistsTheStatusTransition`
 - [x] Port specs `ports/tour-booking-repository.outport.spec.md` and
       `ports/domain-event-publisher.outport.spec.md` reflect the ports as implemented
 

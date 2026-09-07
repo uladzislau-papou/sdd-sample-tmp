@@ -215,25 +215,34 @@ Worked both ways, because the rule is not "prefer events":
 
 | Field | Stored? | The observer |
 |-------|---------|--------------|
-| `TourBooking.cancelledAt` / `cancelledBy` / `cancellationReason` | **yes** | UC08 AC-06 must prove a pre-existing attribution survived a *rejected* second cancellation. The attempt throws, so no event is emitted and there is nothing but aggregate state to assert against |
-| `BookingActivated.guideTourId`, `BookingCompleted.guideTourId`, `BookingCancelledByGuide.guideTourId` | no | nothing queries which guide tour caused a transition; no invariant guards on it |
-| `startedAt` on `TourBooking` (UC06), `completedAt` on `TourBooking` (UC07) | no | another context's fact, relayed. No booking invariant compares against it |
-| `GuideTour.startedAt` | **yes** | invariant I-07 compares `completedAt` against it |
+| `GuideTour.startedAt` | **yes** | invariant I-04 states that it is absent exactly while the tour is `SCHEDULED`, so the aggregate has to be able to answer the question |
+| `TourBooking.availableCapacity` | **yes** | the capacity observed when the decision was made. A later decision has to be judgeable against what was actually seen, not against a fresh reading |
+| `BookingActivated.guideTourId` | no | nothing queries which guide tour caused a transition, and no invariant guards on it. It rides the event |
+| `startedAt` on `TourBooking` | no | another context's fact, relayed. No booking invariant compares against it, so it is event payload and the booking stores only that it *is* active |
 
-The temptation this rule resists is storing a value because it was passed in and looks
-like data. A column nothing reads still has to be migrated, mapped, round-tripped and
-tested, and it invites a later reader to treat it as authoritative when the event was.
+Note the asymmetry between the last two rows and `GuideTour.startedAt`: the *same value*
+is state in one aggregate and event payload in another, because the observer differs. That
+is the rule working, not an inconsistency — consistency between aggregates is not the
+criterion.
+
+The temptation this rule resists is storing a value because it was passed in and looks like
+data. A column nothing reads still has to be migrated, mapped, round-tripped and tested,
+and it invites a later reader to treat it as authoritative when the event was.
 
 The temptation it also resists is the opposite one — dropping a field for symmetry with a
-neighbouring use case. `TourBooking` stores its cancellation timestamp while discarding its
-completion timestamp, and that asymmetry is correct: the two have different observers.
-Consistency between use cases is not the criterion; the observer is.
+neighbouring use case.
 
-Recorded after `ddd-hex-reviewer` observed that this criterion had decided UC06, UC07,
-UC08 and UC09 while existing only in a use-case spec and a domain spec — authority levels
-14 and 16 — which made the precedent unappealable and unenforceable. Same defect class
-`architecture.definition.md` § 4.6 fixed for write-side query criteria.
-
+> Recorded after `ddd-hex-reviewer` observed that this criterion had decided four use cases
+> while existing only in a use-case spec and a domain spec — authority levels 14 and 16 —
+> which made the precedent unappealable and unenforceable. Same defect class
+> `architecture.definition.md` § 4.6 fixed for write-side query criteria.
+>
+> The examples above were rewritten when the template's example was reduced; the original
+> table's clearest row concerned a cancellation attribution that had to survive a *rejected*
+> second cancellation — no event is emitted by a rejected transition, so aggregate state was
+> the only thing an acceptance criterion could assert against. That use case is not part of
+> the example any more, but it remains the sharpest illustration of the rule: **a transition
+> that throws emits nothing, so anything a test must observe about it has to be state.**
 
 ## Aggregate Root
 
@@ -305,7 +314,8 @@ All factories MUST ensure the object is valid upon creation.
 *Definition:* Repositories abstract persistence for aggregates.
 
 *Rules:*
-- Repositories return and persist aggregate roots, not JPA entities.
+- Repositories return and persist aggregate roots, never persistence entities. Enforced:
+  `ClassRoleRulesTest.repositoryOutportsExposeNoPersistenceType`.
 - Keep method names in domain language: findBy(OrderId), save(Order).
 - MUST load, update, save, delete complete aggregates
 - MUST delete complete aggregates with all attached entities and value objects.
@@ -313,8 +323,10 @@ All factories MUST ensure the object is valid upon creation.
 - MUST NOT expose partial modification methods.
 
 *Constraints:*
-- Repository interface lives in the domain (or application core).
-- Implementation lives in the infrastructure adapter (Spring Data / JPA / jOOQ).
+- The repository interface lives in `core.outport`.
+- Implementation lives in an outbound adapter. Which persistence technology is a project
+  choice (`technical.spec.md`); that no persistence type reaches the core is not
+  (ADR-0011).
 
 ## Domain Event
 

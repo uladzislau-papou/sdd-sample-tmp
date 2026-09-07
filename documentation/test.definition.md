@@ -1,14 +1,14 @@
-# Test Definition – Alpine Booking (`test.definition.md`)
+# Test Definition (`test.definition.md`)
 
 ## Purpose
 
-This document defines the testing strategy, rules, and quality gates for Alpine Booking.
+This document defines the testing strategy, rules, and quality gates.
 
 Tests are not optional. They are the enforcement mechanism for:
 - Always-Valid domain invariants
 - Use case behavior
 - Hexagonal architecture boundaries
-- Persistence correctness (Flyway + jOOQ)
+- Persistence correctness (Flyway + the persistence adapter)
 
 
 # 0. Scope of This Document
@@ -40,38 +40,50 @@ other.
 Domain tests SHOULD NOT require Spring.
 
 ## 1.3 Database for Tests
-- **H2** is the default database for tests.
-- **Flyway** MUST run migrations for any test that touches persistence.
-- **jOOQ** is used to read/write database state in persistence adapter tests (no JPA/Hibernate).
+
+- **PostgreSQL** is the only database, in every profile
+  (`adr/0013-postgresql-and-testcontainers.adr.md`).
+- Integration tests start their **own** container through **Testcontainers**, pinned to an
+  explicit image tag, from the shared `PostgresIntegrationTest` base class.
+- **Flyway** MUST run migrations for any test that touches persistence. With
+  `ddl-auto: validate`, that also makes every such test a check that the migrations and the
+  entity mapping agree.
+- The persistence adapter's own API — JPA here — is used to read and write state in adapter
+  tests. Which ORM that is remains a project choice; what does not move is that no
+  persistence type reaches the core (`adr/0011-...`).
+
+### No in-memory database, for any purpose
+
+The previous baseline used H2, on the grounds that it was fast and sufficient. It is neither
+safe nor sufficient for a template real services start from: H2's dialect and PostgreSQL's
+diverge, so a migration that applies on H2 can fail on PostgreSQL, and JPA behaves
+differently over key generation, types and nulls in unique indexes. A suite that proves a
+migration works on H2 has proved something about H2.
+
+`technical.spec.md` used to carry a warning that Flyway's H2 support lagged and needed
+version pinning. That warning was the symptom: the schema tooling and the test database were
+drifting apart, and the code under test was not the code that would run.
 
 ### No test may create a file-based database
 
-`application-test.yml` (in-memory H2) is **profile-specific**: it loads only when the
-`test` profile is active. A test that boots a Spring context without activating it
-falls back to `application.yml` — the *production* datasource, `jdbc:h2:file:./data/…`
-— and writes a real database file relative to the test JVM's working directory
-(`app/`, for a Gradle `Test` task).
+The rule is kept, generalised, because the defect it came from is about **profiles**, not
+about H2.
 
-That file survives across runs, and `./gradlew clean` does not remove it, so run *n+1*
-inherits run *n*'s state. This is order-dependence (§ 8) and latent flakiness (§ 7)
-arriving through configuration rather than through test code.
+A profile-specific `application-test.yml` loads only when the `test` profile is active. A
+test that boots a Spring context without activating it falls back to `application.yml` — the
+*production* datasource. Under H2 that silently wrote a database file under `app/`, which
+survived across runs and which `./gradlew clean` did not remove, so run *n+1* inherited run
+*n*'s state. That is order-dependence (§ 8) and latent flakiness (§ 7) arriving through
+configuration rather than through test code.
 
-Therefore:
+Under PostgreSQL the same mistake fails differently — a connection refused, or worse, a
+test writing to a developer's local database. Therefore:
 
-- Any test that starts a Spring context and genuinely needs a database MUST declare
-  `@ActiveProfiles("test")`.
-- A test that does **not** need a database MUST NOT start one — use a slice
-  (§ 2.4), which auto-configures no DataSource at all.
-- `app/data/` must never appear after `./gradlew clean test`. If it does, a test is
-  running against the production datasource.
-
-Because `bootstrap` sits outside every bounded-context package
-(`architecture.definition.md` § 4.9), `@WebMvcTest` and `@SpringBootTest` cannot find
-`AlpineBookingApplication` by searching upwards. Each slice therefore supplies its own
-minimal `@SpringBootApplication` in its own test package — `WebTestApplication`,
-`GuideWebTestApplication`, `PersistenceTestApplication`, `GuidePersistenceTestApplication`.
-Follow that pattern rather than widening a slice to the whole application.
-
+- A test that boots a Spring context MUST scope it: a slice annotation, or an explicit
+  profile.
+- An integration test MUST take its connection from Testcontainers, never from
+  `application.yml`.
+- No test may write to a database the developer also uses.
 
 # 2. Test Taxonomy (Required Types)
 
@@ -107,7 +119,7 @@ Rules:
 ## 2.3 Adapter Integration Tests (Mandatory when adapter changes)
 **Scope:** Persistence adapters and infrastructure adapters.
 
-For persistence (Flyway + jOOQ + H2):
+For persistence (Flyway + the persistence adapter + a real PostgreSQL container):
 - MUST run Flyway migrations.
 - MUST verify roundtrip correctness:
     - write → read → domain equivalence (where mapping exists)
@@ -201,10 +213,14 @@ Examples, in the actual ontology (`architecture.definition.md` § 3):
 - `booking.core.domain.tourbooking` → `TourBookingTest`, `ParticipantCountTest`
 - `booking.inbound.driver` → `ConfirmTourBookingDriverTest`
 - `booking.inbound.listener` → `TourStartedListenerTest`
-- `booking.inbound.rest` → `TourBookingControllerTest`
-- `booking.outbound.persistence.write` → `TourBookingJooqRepositoryIT`
-- `com.dominikgaller.alpinebooking.architecture` → the ArchUnit suite (ADR 0007), which
-  mirrors no production package because it is about the tree as a whole
+- `booking.inbound.rest` → `TourBookingRestControllerTest`
+- `booking.inbound.graphql` → `TourBookingGraphQLControllerTest`
+- `booking.outbound.persistence` → `TourBookingJpaRepositoryIT`
+- `<root>.architecture` → the enforcement suite (ADR 0007, ADR 0014), which mirrors no
+  production package because it is about the tree as a whole. Two of its tests read
+  `documentation/` rather than the code: `ContextRegistryTest` and `SpecCitationsTest`
+- `<root>.support` → shared test infrastructure, e.g. the Testcontainers base class. Not a
+  bounded context, which is why the architecture tests import production classes only
 
 > This section previously illustrated mirroring with `...application...`,
 > `...adapters.persistence...` and `...adapters.inbound.rest...` — packages that do not
@@ -251,21 +267,43 @@ supersedes the copies that previously lived in `sdd.playbook.md` § 5 and
 
 A change MUST NOT be considered complete unless:
 
-1. `./gradlew clean test` succeeds
-2. `./gradlew build` succeeds
-3. `./gradlew spotlessCheck` succeeds (wired into `check`, so `build` covers it)
-4. The ArchUnit suite in `app/src/test/.../architecture/` passes (ADR 0007)
-5. All new/changed behavior is test-covered according to this definition
-6. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2),
+1. `./gradlew clean test` succeeds — the fast suite: domain, use case and slice tests
+2. `./gradlew integrationTest` succeeds — every `*IT`, against real infrastructure via
+   Testcontainers. A separate task because it needs Docker, and a gate that cannot be
+   run locally is a gate discovered in CI. `check` depends on both, so neither can be
+   quietly skipped
+3. `./gradlew build` succeeds
+4. `./gradlew spotlessCheck` and `./gradlew detekt` succeed (both wired into `check`,
+   so `build` covers them)
+5. The ArchUnit suite in `app/src/test/.../architecture/` passes (ADR 0007). Note that
+   `ContextRegistryTest` reads its registry from `architecture.definition.md` § 11, so
+   this gate also fails when the document and the packages disagree
+6. All new/changed behaviour is test-covered according to this definition
+7. Every new behaviour was driven by a quoted RED failure (`tdd.definition.md` § 2),
    or is a behaviour-preserving change meeting § 2.1's evidence requirement
-7. No ignored/disabled tests are introduced
-8. No flaky tests are introduced
-9. No test was weakened, loosened, or deleted to reach green
-10. No architecture rule was weakened to reach green. Rules are enforcement; the
+8. No ignored/disabled tests are introduced
+9. No flaky tests are introduced
+10. No test was weakened, loosened, or deleted to reach green
+11. No architecture rule was weakened to reach green. Rules are enforcement; the
     definition they cite is authoritative, so a failing rule means the code is wrong
     unless the *definition* changed first (`file-usage.definition.md` § 5.1)
-11. `ddd-hex-reviewer` returns `PASS`
-12. Specs, port specs and `rest/*.http` reflect the code as built
+12. **Review returns `PASS` on the blocking axes**, and the reporting axes are addressed:
+
+    | Axis | Owner | Authority |
+    |------|-------|-----------|
+    | architecture drift | `ddd-hex-reviewer` | **blocks** |
+    | conformance to the spec (§ 7 criteria, § 10 boxes) | `conformance-reviewer` | **blocks** |
+    | logical correctness | the review skill's logic axis | reported |
+    | security | the review skill's security axis | reported |
+
+    The split is deliberate, and it is what keeps this gate usable. The two blocking axes
+    rest on executable rules and on list-matching, so they are near-deterministic. The two
+    reporting axes are model judgement, where false positives are ordinary — and a
+    blocking gate that cries wolf gets switched off entirely, taking the reliable axes with
+    it. "Addressed" means each finding is either fixed or explicitly accepted with a
+    reason; "zero security findings" is not an achievable merge condition and stating it as
+    one would make the gate a lie.
+13. Specs, port specs and the files in `api/` reflect the code as built
 
 Gates are merge blockers, not advisories — see `sdd.playbook.md` § 5 for the
 principle. There is no partial credit.
@@ -293,7 +331,8 @@ Minimum traceability for tests:
 - Domain Test ↔ Domain Spec / invariant reference
 - Use Case Test ↔ Use Case Spec `AC-NN` (cite the identifier, not the prose)
 - Adapter Integration Test ↔ Port specification / adapter contract
-- API / Web Test ↔ Use Case Spec REST section + the matching `rest/uc<nn>-*.http` request
+- API / Web Test ↔ Use Case Spec § 9 + the matching request in `api/uc<nn>-*.http` or
+  `api/uc<nn>-*.graphql`
 
 If a test cannot be traced to a spec, the spec is missing or the test is noise.
 

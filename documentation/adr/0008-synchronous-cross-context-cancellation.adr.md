@@ -1,14 +1,19 @@
 # ADR 0008 – Synchronous Cross-Context Cancellation
 
 ## Status
-Rejected
 
-Rejected by the maintainer, on the grounds that it recorded a decision that did not need
-making. Kept because the *rejection* is the useful part: it documents why the outport
-approach was considered and why plain orchestration is preferred.
+**WITHDRAWN — the subject no longer exists.**
 
-The rule this ADR would have established now lives in `architecture.definition.md` § 11
-rule 3, as doctrine rather than as a decision record.
+This ADR governed how UC12 cancelled the bookings of a tour it was calling off. Neither use
+case is part of the template's example (`project.definition.md`, non-goals), so there is no
+code for this decision to constrain.
+
+Withdrawn rather than superseded: nothing replaced it, and rather than deleted, because the
+reasoning about synchronous cross-context calls is the best worked example this repository
+has of the second sanctioned integration form in `architecture.definition.md` § 11 rule 3.
+A service that needs that form should read this first.
+
+`documentation/adr/README.md` records the two tiers and what withdrawal means.
 
 ## Context
 

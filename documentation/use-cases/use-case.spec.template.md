@@ -30,6 +30,15 @@ Describe orchestration logic.
 
 ## 1. Intent
 
+**Source:** `<TICKET-KEY>` | `n/a — example use case`
+
+The ticket or document this specification was derived from. `/spec-create` fills it; a
+spec written by hand still needs it, or `n/a` with a reason.
+
+It is not bookkeeping. The conformance axis of `/code-review` follows this field back to
+the original request to answer "did we build what was asked" — without it, that check can
+only compare the code against the spec, which verifies the spec against itself.
+
 What business outcome does this use case produce?
 
 
@@ -103,9 +112,18 @@ invariant enforcement. Technical implementation details are not criteria.
 - External dependency failure
 
 
-## 9. REST Contract
+## 9. API Contract
 
-For non-REST use cases: `Not applicable — <event-driven | outport-triggered>.`
+For a use case with no external API: `Not applicable — <event-driven | outport-triggered>.`
+UC06 in this repository is the worked example of that answer; a use case whose only
+trigger is a domain event has no endpoint, and inventing one to fill this section is worse
+than leaving it empty.
+
+List **every** transport the use case is exposed over. A use case may be exposed over one,
+both or neither — the core does not know which, and that is the point
+(`coding-style.definition.md` § 3.3).
+
+### REST
 
 Endpoint:
 ```
@@ -127,9 +145,35 @@ HTTP status mapping:
 - `400 Bad Request` – <validation failure>
 - `404 Not Found` – <missing aggregate>
 - `409 Conflict` – <invalid state transition>
+- `502 Bad Gateway` – <a dependency failed>
 
-Every status listed here MUST have a matching request in
-`rest/uc<nn>-<use-case-name>.http` (`CLAUDE.md`, REST Endpoint Documentation).
+### GraphQL
+
+Operation:
+```graphql
+<query | mutation> <name>(input: <InputType>!): <PayloadType>!
+```
+
+Error classification:
+- `BAD_REQUEST` – <validation failure and, since GraphQL has no conflict type, state conflicts>
+- `NOT_FOUND` – <missing aggregate>
+- `INTERNAL_ERROR` – <a dependency failed>
+
+GraphQL's error vocabulary is coarser than HTTP's. Where two HTTP statuses collapse into
+one classification, **say so here** — a client author will hit that asymmetry, and the
+place to learn about it is the contract, not a support conversation.
+
+### Executable requests
+
+Every status and every error classification listed above MUST have a matching request in
+`api/`:
+
+- `api/uc<nn>-<use-case-name>.http` for REST
+- `api/uc<nn>-<use-case-name>.graphql` for GraphQL
+
+Only for the transports this use case actually uses. These files are the cheap check that
+this section and the code still agree, and `spec-documenter` verifies they exist
+(`CLAUDE.md`, API Contract Documentation).
 
 
 ## 10. Definition of Done
@@ -153,11 +197,13 @@ Rules for writing items:
 - [ ] Every failure scenario in § 8 has a negative test
 
 ### Contracts
-- [ ] `rest/uc<nn>-<use-case-name>.http` covers every status in § 9
-- [ ] Persistence roundtrip covered by `<Aggregate>JooqRepositoryIT` (if persistence changed)
+- [ ] `api/uc<nn>-<use-case-name>.http` covers every status in § 9 (or § 9 says REST is not applicable)
+- [ ] `api/uc<nn>-<use-case-name>.graphql` covers every classification in § 9 (or § 9 says GraphQL is not applicable)
+- [ ] Persistence roundtrip covered by `<Aggregate>JpaRepositoryIT` (if persistence changed)
 - [ ] Port specs in `documentation/ports/` reflect the ports as implemented
 
 ### Governance
 - [ ] This spec reconciled against the code by `spec-documenter`
-- [ ] `ddd-hex-reviewer` returns `PASS`
+- [ ] `ddd-hex-reviewer` returns `PASS` on the architecture axis
+- [ ] `conformance-reviewer` matches every § 7 criterion to a test and every § 10 box to an artifact
 - [ ] Quality gates green (`test.definition.md` § 7)

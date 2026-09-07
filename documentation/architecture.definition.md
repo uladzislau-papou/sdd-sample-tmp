@@ -30,9 +30,9 @@ Pragmatic stance:
 ## 3. Package Structure
 
 ```
-com.dominikgaller.alpinebooking              ← shared root
+com.<org>.<service>                          ← shared root
+├── ServiceApplication                       ← entry point; see § 4.9 for why it is here
 ├── bootstrap                                ← composition root (cross-context)
-│   ├── AlpineBookingApplication
 │   └── <ContextName>Config
 ├── shared                                   ← shared kernel (cross-context building blocks)
 │   ├── domain                               ← see § 9
@@ -278,16 +278,30 @@ Rules:
 - If a listener triggers business behaviour, it should call an inport (not a concrete use case class).
 - Must not access `outbound.*` implementations directly.
 
-### 4.9 `bootstrap`
+### 4.9 `bootstrap` and the entry point
 
-Composition root and wiring. Lives at the **shared root level** (`com.dominikgaller.alpinebooking.bootstrap`),
-**outside any bounded-context package**. This reflects that bootstrap is not aligned to any single context —
-it wires the whole application.
+Composition root and wiring. Lives at the **shared root level**, **outside any
+bounded-context package**. This reflects that bootstrap is not aligned to any single
+context — it wires the whole application.
 
 Contains:
-- Spring Boot main class (`AlpineBookingApplication`)
 - Per-context configuration classes (e.g. `BookingConfig`)
 - Bean wiring
+
+**The Spring Boot entry point is not in `bootstrap`. It sits in the root package itself**,
+and two rules depend on that:
+
+- Spring's component scan defaults to the entry point's own package. From `bootstrap` —
+  a *sibling* of every context — the default scan would find no context at all, which is
+  why the earlier layout needed an explicit `scanBasePackages` literal to keep in sync.
+- The architecture tests derive their package root from this class
+  (`ArchitectureRoot`), so a package rename cannot leave a stale string behind. Three
+  tests previously repeated the root as a literal; a rename would have left three copies
+  that still compiled and still passed, checking nothing.
+
+Wiring stays in `bootstrap`, so the composition root is still one identifiable place. The
+entry point is not wiring — it is the position the framework and the gates both read the
+package root from.
 
 Rules:
 
@@ -295,7 +309,9 @@ Rules:
 - No business logic.
 - No domain logic.
 - Only wiring and configuration.
-- The main class scans `com.dominikgaller.alpinebooking` (the shared root) to discover all bounded contexts automatically.
+- The entry point needs no `scanBasePackages`: sitting in the shared root, Spring's
+  default scan discovers every bounded context. A literal here is a second source of
+  truth for something the class's own position already states.
 
 ## 5. Command vs. Query in SDD Terms
 
@@ -526,17 +542,34 @@ widening the transaction.
 
 ## 11. Registered Bounded Contexts
 
-This table is the **authoritative registry** of top-level packages under
-`com.dominikgaller.alpinebooking`. It exists so that context boundaries are a
-checkable fact rather than a matter of opinion: `ddd-hex-reviewer` enumerates the
-top-level packages on disk and diffs them against this table on every increment.
+This table is the **authoritative registry** of top-level packages under the service's
+root package. It exists so that context boundaries are a checkable fact rather than a
+matter of opinion.
+
+**It is parsed.** `ContextRegistryTest` reads this table and diffs it against the
+top-level packages on disk, so the two cannot disagree silently. That means registering a
+context **starts here**, not with a `mkdir`: create the package first and the test fails
+with an unregistered package; add the row first and it fails with a registered package
+that does not exist. Either way the gap is named.
+
+**Format contract — the test depends on this shape, so do not restyle it.**
+
+- The first markdown table after this heading is the registry.
+- Column 1 is the package name in backticks, and it is a single path segment.
+- Column 2 is the kind: exactly `Bounded Context`, `Shared Kernel` or `Composition Root`.
+- One row per top-level package. No row may be added without an ADR (see Rules below).
 
 | Package | Kind | Owns | ADR |
 |---------|------|------|-----|
-| `booking` | Bounded Context | `TourBooking` aggregate — request, confirm, cancel, change participants, activate, complete | — (original context) |
-| `guide` | Bounded Context | `GuideTour` aggregate — guide-side tour lifecycle (start, complete, cancel-by-guide) | `adr/0003-separate-guide-bounded-context.adr.md` |
+| `booking` | Bounded Context | `TourBooking` aggregate — request, confirm, activate | — (original context) |
+| `guide` | Bounded Context | `GuideTour` aggregate — guide-side tour lifecycle (start) | `adr/0003-separate-guide-bounded-context.adr.md` |
 | `shared` | Shared Kernel | Cross-context building blocks only (`TourId`, `DomainEvent`, cross-context events, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | `adr/0003-…` (`TourId` extraction) |
 | `bootstrap` | Composition Root | Wiring only. Not a context. See § 4.9. | — |
+
+The service's entry point deliberately sits in the **root** package rather than in
+`bootstrap`, so it is not a row here. Two things depend on that position: Spring's
+component scan defaults to it, and `ArchitectureRoot` derives the package root from it
+instead of repeating a string literal in three tests.
 
 ### Rules
 

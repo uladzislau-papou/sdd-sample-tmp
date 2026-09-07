@@ -1,7 +1,7 @@
 ---
 name: loop-uc
 description: Run the outer loop-driven-development cycle on one use case until its Definition of Done is met. Iterates RED → GREEN → REFACTOR → drift review → document, re-reading the spec's DoD each pass, and stops on DoD-complete, BLOCKED (no progress), max-iterations, or an ADR trigger. Use when asked to implement or finish a use case end-to-end.
-argument-hint: UC07 [--max-iterations=10] [--dry-run]
+argument-hint: UC06 [--max-iterations=10] [--dry-run]
 ---
 
 # Loop-Driven Development on a Use Case
@@ -17,7 +17,7 @@ stopping decision.
 
 | Argument | Default | Meaning |
 |----------|---------|---------|
-| `UC<nn>` | required | Use case to drive, e.g. `UC07` |
+| `UC<nn>` | required | Use case to drive, e.g. `UC06` |
 | `--max-iterations=<n>` | `10` | Hard ceiling (`loop.playbook.md` § 4.1) |
 | `--dry-run` | off | Do steps 0–2 and step 6's evaluation, then stop and report the plan. Writes the scoreboard; writes no code. |
 
@@ -66,15 +66,15 @@ authoritative (`loop.playbook.md` § 1).
 Rebuild the mirror in `tasks.md`:
 
 ```markdown
-## DoD Scoreboard – UC07 (iteration 3/10)
+## DoD Scoreboard – UC06 (iteration 3/10)
 
-Mirrored from documentation/use-cases/uc07-mark-booking-completed.spec.md § 10.
+Mirrored from documentation/use-cases/uc06-mark-booking-active.spec.md § 10.
 Authoritative source is the spec; this table is rebuilt each iteration.
 
 - [x] AC-01 covered by TourBookingTest.should_complete_when_active
 - [x] AC-02 covered by TourBookingTest.should_reject_completion_when_not_active
 - [ ] MarkBookingCompletedDriver orchestration covered by MarkBookingCompletedDriverTest
-- [ ] rest/uc07-mark-booking-completed.http covers 200, 404, 409
+- [ ] api/uc02-confirm-tour-booking.http covers 200, 404, 409
 - [ ] ddd-hex-reviewer: PASS
 - [ ] Quality gates (test.definition.md § 7) green
 ```
@@ -151,7 +151,7 @@ Agent(subagent_type: "ddd-hex-reviewer",
 
 Agent(subagent_type: "spec-documenter",
       prompt: "Document UC<nn> iteration <n>. Criterion completed: <criterion>.
-               Files changed: <paths>. Reconcile specs, rest/*.http, and the
+               Files changed: <paths>. Reconcile specs, the files in api/, and the
                tasks.md DoD scoreboard.")
 ```
 
@@ -229,11 +229,11 @@ Verification   RED: MarkBookingCompletedDriverTest.should_publish_event_on_compl
                     → java.lang.AssertionError: Expecting actual not to be empty
                GREEN: 47 tests passed
                Gates: ./gradlew clean test OK, ./gradlew build OK
-Specs touched  uc07-mark-booking-completed.spec.md (§ 3, § 10),
+Specs touched  uc06-mark-booking-active.spec.md (§ 3, § 10),
                aggregate-tour-booking.spec.md (§ 4)
 Drift review   PASS
 DoD delta      2/6 → 3/6 (driver orchestration closed)
-Next step      rest/uc07-*.http coverage for 200/404/409
+Next step      api/uc02-*.http coverage for 200/404/409
 ```
 
 Final report adds the terminal state, the full scoreboard, and the last verdict.

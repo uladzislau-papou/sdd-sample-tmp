@@ -1,11 +1,16 @@
 # ADR 0007 – ArchUnit Boundary Enforcement
 
 ## Status
-Accepted
 
-Confirmed by the maintainer. `sdd.playbook.md` § 6 item 2 (new external dependency)
-fired and implementation waited for this confirmation, per `execution.playbook.md`
-§ 3.2.4.
+Accepted (inherited from template)
+
+**Note on the examples below.** The decision stands unchanged and its text is untouched, as
+an accepted ADR's text must be. The class names it cites — `GuideTourJooqRepository` and
+others — belong to the Java implementation this template was extracted from and no longer
+exist. The rules they illustrate do, and they grew: `ContextRegistryTest` now parses the
+registry out of `architecture.definition.md` § 11 instead of restating it, and
+`SpecCitationsTest` extends the same principle to the specs' Definition of Done. ADR-0014
+records that generalisation.
 
 ## Context
 

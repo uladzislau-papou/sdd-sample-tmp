@@ -1,0 +1,76 @@
+# UC01 — RequestTourBooking over GraphQL.
+#
+# The same use case as `uc01-request-tour-booking.http`, reached through the other
+# transport. Both files drive one inbound port
+# (`core.inport.usecase.RequestTourBookingUseCase`); if the two ever disagree about what
+# the use case accepts or returns, one of the adapters has grown a rule of its own.
+#
+# Run against http://localhost:8080/graphql — GraphiQL is enabled in development at
+# http://localhost:8080/graphiql
+#
+# SDD: documentation/use-cases/uc01-request-tour-booking.spec.md § 9
+
+# --- Happy path: 201-equivalent. Returns the new identity and REQUESTED. ---
+mutation RequestTourBooking {
+  requestTourBooking(input: {
+    tourId: "TOUR-42"
+    tourDate: "2026-06-15"
+    participantCount: 3
+    contactName: "Alice"
+    contactEmail: "alice@example.com"
+  }) {
+    bookingId
+    status
+  }
+}
+
+# --- Error: BAD_REQUEST — tour date is not in the future (§ 3, 400 over REST). ---
+mutation RequestTourBookingPastDate {
+  requestTourBooking(input: {
+    tourId: "TOUR-42"
+    tourDate: "2020-01-01"
+    participantCount: 3
+    contactName: "Alice"
+    contactEmail: "alice@example.com"
+  }) {
+    bookingId
+    status
+  }
+}
+
+# --- Error: BAD_REQUEST — participant count below one (§ 3, 400 over REST). ---
+mutation RequestTourBookingZeroParticipants {
+  requestTourBooking(input: {
+    tourId: "TOUR-42"
+    tourDate: "2026-06-15"
+    participantCount: 0
+    contactName: "Alice"
+    contactEmail: "alice@example.com"
+  }) {
+    bookingId
+    status
+  }
+}
+
+# --- Error: BAD_REQUEST — count exceeds available capacity (§ 3, 409 over REST). ---
+# GraphQL's error vocabulary is coarser than HTTP's: there is no CONFLICT classification,
+# so a capacity clash and a malformed request share BAD_REQUEST. The message distinguishes
+# them. Recorded here because the asymmetry between the two transports is real and a
+# client author will hit it.
+mutation RequestTourBookingOverCapacity {
+  requestTourBooking(input: {
+    tourId: "TOUR-FULL"
+    tourDate: "2026-06-15"
+    participantCount: 999
+    contactName: "Alice"
+    contactEmail: "alice@example.com"
+  }) {
+    bookingId
+    status
+  }
+}
+
+# --- The schema's mandatory Query root. Not a domain read — see booking.graphqls. ---
+query ApiVersion {
+  apiVersion
+}

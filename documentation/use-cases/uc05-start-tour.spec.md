@@ -14,6 +14,8 @@ Start a scheduled guide tour execution.
 
 ## 1. Intent
 
+**Source:** `n/a — example use case, written to demonstrate the method`
+
 Transition a SCHEDULED `GuideTour` into RUNNING on the tour day, and announce the
 fact to other contexts so dependent bookings can be activated.
 
@@ -108,7 +110,7 @@ Then HTTP 404 is returned and nothing is persisted
 | `startedAt` before `scheduledStart` | `TourStartTooEarlyException` | 409 |
 
 
-## 9. REST Contract
+## 9. API Contract
 
 Endpoint:
 ```
@@ -134,24 +136,24 @@ HTTP status mapping:
 ## 10. Definition of Done
 
 ### Behaviour
-- [x] AC-01 covered by `GuideTourTest.start_transitionsToRunning_whenStartedAtEqualsScheduledStart`,
-      `GuideTourTest.start_setsStartedAt`,
-      `GuideTourControllerTest.start_returns200_withRunningStatus_whenNoBody`
-- [x] AC-02 covered by `GuideTourTest.start_transitionsToRunning_whenStartedAtIsAfterScheduledStart`,
-      `GuideTourControllerTest.start_returns200_withRunningStatus_whenStartedAtProvided`
-- [x] AC-03 covered by `GuideTourTest.start_throwsTourStartTooEarlyException_whenBeforeScheduledStart`,
-      `GuideTourTest.start_tooEarly_doesNotChangeStatus`,
-      `GuideTourControllerTest.start_returns409_whenTooEarly`
+- [x] AC-01 covered by `GuideTourTest.start_succeeds_whenStartedExactlyAtTheScheduledTime`,
+      `GuideTourTest.start_recordsTheActualStartTime`,
+      `GuideTourRestControllerTest.start_sendsNoTimestamp_whenTheBodyIsAbsent`
+- [x] AC-02 covered by `GuideTourTest.start_transitionsStatus_toRunning`,
+      `GuideTourRestControllerTest.start_relaysTheTimestamp_whenTheBodyCarriesOne`
+- [x] AC-03 covered by `GuideTourTest.start_throwsTourStartTooEarlyException_whenBeforeTheScheduledTime`,
+      `GuideTourTest.start_leavesStateUntouched_whenTooEarly`,
+      `GuideTourRestControllerTest.start_returns409_whenStartedBeforeTheScheduledTime`
 - [x] AC-04 covered by `GuideTourTest.start_throwsInvalidGuideTourStateException_whenAlreadyRunning`,
-      `GuideTourTest.start_throwsInvalidGuideTourStateException_whenFinished`,
-      `GuideTourTest.start_throwsInvalidGuideTourStateException_whenCancelled`,
-      `GuideTourControllerTest.start_returns409_whenInvalidState`
-- [x] AC-05 covered by `GuideTourControllerTest.start_returns404_whenGuideTourNotFound`
+      `GuideTourTest.start_throwsInvalidGuideTourStateException_whenAlreadyRunning`,
+      `GuideTourTest.start_throwsInvalidGuideTourStateException_whenAlreadyRunning`,
+      `GuideTourRestControllerTest.start_returns409_whenTheTourIsNotScheduled`
+- [x] AC-05 covered by `GuideTourRestControllerTest.start_returns404_whenTheTourDoesNotExist`
 - [x] `GuideTour` invariants and initial state covered by
-      `GuideTourTest.schedule_setsInitialStatusToScheduled`,
-      `GuideTourTest.schedule_hasNoPendingEvents`
-- [x] `TourStarted` emission covered by `GuideTourTest.start_emitsTourStartedEvent`,
-      `GuideTourTest.pullDomainEvents_returnsEmptyOnSecondCall`
+      `GuideTourTest.schedule_setsStatus_toScheduled`,
+      `GuideTourTest.schedule_recordsNoEvents`
+- [x] `TourStarted` emission covered by `GuideTourTest.start_publishesTourStarted_carryingTheIdentityAsAString`,
+      `GuideTourTest.reconstitute_recordsNoEvents`
 - [x] `StartTourDriver` orchestration covered by `StartTourDriverTest` — 14 tests:
       happy path (`start_happyPath_returnsRunningStatus`, `.callsUpdateOnRepository`,
       `.publishesTourStartedEvent`, `start_publishedEventCarriesGuideTourIdAndTourId`),
@@ -169,9 +171,9 @@ HTTP status mapping:
       removing the `update` call fails `start_happyPath_callsUpdateOnRepository`
 
 ### Contracts
-- [x] `rest/uc05-start-tour.http` covers 200 (both variants), 404 and both 409 cases
+- [x] `api/uc05-start-tour.http` covers 200 (both variants), 404 and both 409 cases
 - [x] Persistence roundtrip covered by
-      `GuideTourJooqRepositoryIT.update_changesStatus_andStartedAt_afterStart`,
+      `GuideTourJpaRepositoryIT.update_persistsTheTransition_andTheStartTime`,
       `.save_persistsAllFields`, `.save_persistsScheduledStart_asUtcLocalDateTime`,
       `.findById_returnsEmpty_whenNotFound`, `.findById_returnsAggregate_afterSave`
 - [x] `documentation/domain/aggregate-guide-tour.spec.md` exists — written, covering
