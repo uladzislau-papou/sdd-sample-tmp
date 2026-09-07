@@ -110,7 +110,7 @@ Pick the layer from `tdd.definition.md` § 3 (inside-out: domain → driver → 
 → persistence). Write **one** test. Run it:
 
 ```bash
-./gradlew :app:test --tests '*<TestClass>.<method>'
+./gradlew test --tests '*<TestClass>.<method>'
 ```
 
 **Quote the actual failure output** — command, test name, assertion message.
@@ -127,7 +127,7 @@ Least production code that passes that one test. Nothing more — do not impleme
 criteria that are not currently red.
 
 ```bash
-./gradlew :app:test
+./gradlew test
 ```
 
 Exit: new test passes, nothing previously green broke.

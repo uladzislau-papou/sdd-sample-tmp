@@ -65,7 +65,7 @@ class SpecCitationsTest {
 
     private fun declaredTestMethods(): Map<String, Set<String>> {
         val pattern = Regex("fun ([A-Za-z0-9_]+)\\(")
-        return kotlinFiles(repoRoot().resolve(Paths.get("app", "src", "test", "kotlin")))
+        return kotlinFiles(repoRoot().resolve(Paths.get("src", "test", "kotlin")))
             .associate { file ->
                 file.name.removeSuffix(".kt") to
                     pattern.findAll(file.readText()).map { it.groupValues[1] }.toSet()

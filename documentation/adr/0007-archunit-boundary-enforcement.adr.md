@@ -40,7 +40,7 @@ and broke four tests. A structural rule would have failed the build immediately.
 ## Decision
 
 Add **ArchUnit** as a test-scope dependency and encode the enforceable rules as tests in
-`app/src/test/.../architecture/`.
+`src/test/.../architecture/`.
 
 In scope:
 
@@ -106,7 +106,7 @@ output.
 
 ### Why test scope rather than a separate module?
 
-The project is a single `app` module. A separate architecture module would be more
+The project is a single-module build. A separate architecture module would be more
 isolated but adds a Gradle subproject to a two-file build for no gain at this size.
 
 ## Consequences

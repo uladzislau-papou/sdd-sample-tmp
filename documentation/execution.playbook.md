@@ -227,7 +227,7 @@ Rules:
   block because they are model judgement, where false positives are ordinary — and a
   blocking gate that cries wolf gets switched off entirely, taking the two reliable axes
   with it (`test.definition.md` § 7, gate 12).
-- `spec-documenter` never edits `app/src/**`. Where the code contradicts a spec
+- `spec-documenter` never edits `src/**`. Where the code contradicts a spec
   it reports the contradiction; the agent driving the increment decides which
   side is wrong.
 - Documentation is part of the increment, not a follow-up. An increment whose

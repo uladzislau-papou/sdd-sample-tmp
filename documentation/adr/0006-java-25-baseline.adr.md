@@ -48,7 +48,7 @@ The project baseline is **Java 25**.
 - `libs.versions.toml` `java = "25"` — the Gradle toolchain, which is the single
   authoritative declaration. Everything else follows it.
 - **The toolchain vendor is pinned to Temurin** (`JvmVendorSpec.ADOPTIUM` in
-  `app/build.gradle.kts`). Distribution choice is part of the baseline, not an
+  `build.gradle.kts`). Distribution choice is part of the baseline, not an
   environment detail — see *Why pin the vendor* below.
 - `technical.spec.md`, `coding-style.definition.md` and
   `execution.playbook.md` § 3.4 are updated to say 25.

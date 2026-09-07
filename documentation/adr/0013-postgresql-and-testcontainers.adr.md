@@ -37,7 +37,7 @@ for a template that real services start from, it ships a false green.
 developer happened to have running, and state leaks between runs. This repository has
 already been bitten by that class of bug in a smaller form: the controller tests once
 booted the full application without the `test` profile and wrote a *file-based* H2 database
-under `app/data/`, leaking state between runs. `test.definition.md` gained a rule from it —
+under `data/`, leaking state between runs. `test.definition.md` gained a rule from it —
 "no test may create a file-based database".
 
 **Why the second Gradle task.** `test.definition.md` already separated fast tests from

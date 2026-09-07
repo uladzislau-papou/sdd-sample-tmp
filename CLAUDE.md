@@ -104,7 +104,7 @@ Four subagents enforce what prose cannot. All are defined in `.claude/agents/`.
 |-------|-------|--------|-----------|----------|
 | [`ddd-hex-reviewer`](.claude/agents/ddd-hex-reviewer.md) | opus | read-only | after every GREEN step | `PASS` or `DRIFT` + `file:line` findings |
 | [`conformance-reviewer`](.claude/agents/conformance-reviewer.md) | sonnet | read + `Bash` to run tests | after every GREEN step | `PASS` or `UNMET` — § 7 criteria matched to tests, § 10 boxes to artifacts |
-| [`spec-documenter`](.claude/agents/spec-documenter.md) | fable | docs only, never `app/src/**` | after every GREEN step | reconciled specs, the files in `api/`, DoD scoreboard |
+| [`spec-documenter`](.claude/agents/spec-documenter.md) | fable | docs only, never `src/**` | after every GREEN step | reconciled specs, the files in `api/`, DoD scoreboard |
 | [`spec-reviewer`](.claude/agents/spec-reviewer.md) | opus | read-only | after a spec is drafted from a ticket | `PASS` or `GAPS` — hunts claims with no source |
 
 Rules:

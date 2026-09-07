@@ -72,7 +72,7 @@ jobs:
           missing=0
           for suite in DependencyRulesTest ClassRoleRulesTest ContextRegistryTest \
                        SpecCitationsTest DocumentationLinksTest; do
-            if ! grep -rqs "$suite" app/build/test-results/test/; then
+            if ! grep -rqs "$suite" build/test-results/test/; then
               echo "::error::No $suite results found — that enforcement suite did not run."
               missing=1
             fi
@@ -89,6 +89,6 @@ jobs:
         with:
           name: test-results
           path: |
-            app/build/reports/tests/
-            app/build/test-results/
+            build/reports/tests/
+            build/test-results/
           retention-days: 7

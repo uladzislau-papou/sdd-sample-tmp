@@ -11,4 +11,3 @@ plugins {
 }
 
 rootProject.name = "service-template"
-include("app")

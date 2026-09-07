@@ -76,12 +76,12 @@ same breath and asserting afterwards that the order was correct.
 
 Required evidence, quoted from the real run:
 
-- the command (`./gradlew :app:test --tests '<FQCN>'`)
+- the command (`./gradlew test --tests '<FQCN>'`)
 - the failing test name
 - the assertion message or exception, verbatim
 
 ```
-> ./gradlew :app:test --tests '*TourBookingTest.markActive_throwsInvalidBookingStateException_whenStillRequested'
+> ./gradlew test --tests '*TourBookingTest.markActive_throwsInvalidBookingStateException_whenStillRequested'
 
 TourBookingTest > markActive_throwsInvalidBookingStateException_whenStillRequested FAILED
     java.lang.AssertionError:

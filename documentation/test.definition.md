@@ -71,7 +71,7 @@ about H2.
 
 A profile-specific `application-test.yml` loads only when the `test` profile is active. A
 test that boots a Spring context without activating it falls back to `application.yml` — the
-*production* datasource. Under H2 that silently wrote a database file under `app/`, which
+*production* datasource. Under H2 that silently wrote a database file into the project directory, which
 survived across runs and which `./gradlew clean` did not remove, so run *n+1* inherited run
 *n*'s state. That is order-dependence (§ 8) and latent flakiness (§ 7) arriving through
 configuration rather than through test code.
@@ -275,7 +275,7 @@ A change MUST NOT be considered complete unless:
 3. `./gradlew build` succeeds
 4. `./gradlew spotlessCheck` and `./gradlew detekt` succeed (both wired into `check`,
    so `build` covers them)
-5. The ArchUnit suite in `app/src/test/.../architecture/` passes (ADR 0007). Note that
+5. The ArchUnit suite in `src/test/.../architecture/` passes (ADR 0007). Note that
    `ContextRegistryTest` reads its registry from `architecture.definition.md` § 11, so
    this gate also fails when the document and the packages disagree
 6. All new/changed behaviour is test-covered according to this definition

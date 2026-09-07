@@ -22,7 +22,7 @@ authoritative; this is a scoreboard.
 
 - [ ] `publish-showcase.yml` gone; no workflow can push outside this repository
 - [ ] `./gradlew clean test build` green on JVM 17 / Gradle 8.14
-- [ ] Zero `.java` files under `app/src`
+- [ ] Zero `.java` files under `src`
 - [ ] Three ArchUnit tests green, none containing a hardcoded package literal
 - [ ] `ContextRegistryTest` derives its context list from `architecture.definition.md` § 11
 - [ ] `./gradlew initService` produces a compiling, green service
@@ -50,7 +50,7 @@ authoritative; this is a scoreboard.
 - [x] **1.4** Delete the production and test sources of the dropped use cases (`Confirm*`, `Cancel*`, `ChangeParticipants*`, `Complete*`, `MarkBookingCompleted*`, `MarkBookingCancelledByGuide*`), including their commands, results, drivers, requests, responses and events
 - [x] **1.5** Delete the Flyway migrations for the dropped features; renumber to a clean V1/V2 pair
 - [x] **1.6** `git mv rest api`; delete the `.http` files of dropped use cases; keep `uc01` and `uc05`
-- [x] **1.7** Remove the jOOQ code-generation chain from `app/build.gradle.kts` (`flywayMigrate` → `jooqCodegen`, the H2 codegen database, the jOOQ version-forcing block) and its entries from `libs.versions.toml`
+- [x] **1.7** Remove the jOOQ code-generation chain from `build.gradle.kts` (`flywayMigrate` → `jooqCodegen`, the H2 codegen database, the jOOQ version-forcing block) and its entries from `libs.versions.toml`
 - [x] **1.8** Delete the empty `documentation/integrations/`; empty `documentation/notes.md` to its heading
 - [~] **1.9** ~~Green build after the deletions, still on Java~~ — **unachievable, see Deviations**
 
@@ -91,7 +91,7 @@ Per slice: port the tests (RED) → port the production code (GREEN) → dispatc
 - [x] **4.8** Slice UC06 `MarkBookingActive` — inport, driver, `TourStartedListener`. No API, no `api/` file
 - [x] **4.9** `bootstrap/`: application class and the three Spring configurations
 - [x] **4.10** Port the three ArchUnit tests
-- [x] **4.11** Delete `app/src/**/*.java`; confirm zero remain
+- [x] **4.11** Delete `src/**/*.java`; confirm zero remain
 - [~] **4.12** Fast gates green (117 tests, detekt, ktlint). **`integrationTest` unverified — no Docker on this machine.** `ddd-hex-reviewer` not yet dispatched
 
 ## Phase 5 — Remove the hardcoded identity
@@ -410,6 +410,6 @@ container must be static, and Kotlin forbids `@JvmStatic` in an interface's comp
 second rule is suppressed with that reason written next to it. Neither rule was wrong about
 what it saw; both cannot be satisfied.
 
-Also worth noting how it surfaced: `:app:detekt` passed while `detektMain` and `detektTest`
+Also worth noting how it surfaced: `detekt` passed while `detektMain` and `detektTest`
 — the type-resolution variants that `check` actually depends on — failed. Running the
 convenience task is not running the gate.

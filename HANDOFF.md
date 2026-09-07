@@ -75,7 +75,7 @@ more firmly. That instruction is ADR-0014.
 
 Written down because each one was discovered the expensive way.
 
-**`:app:detekt` is not the gate.** `check` depends on `detektMain` and `detektTest`, the
+**`detekt` is not the gate.** `check` depends on `detektMain` and `detektTest`, the
 type-resolution variants, which find things the convenience task does not. Run
 `./gradlew check`, or at minimum `detektMain detektTest`.
 

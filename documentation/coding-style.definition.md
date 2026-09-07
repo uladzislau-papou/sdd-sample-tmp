@@ -71,7 +71,7 @@ recorded, because a rule that vanishes without explanation reads as an oversight
 
 Target: **Kotlin 2.3 on JVM 17** (`adr/0010-jvm-17-baseline.adr.md`).
 
-Compiler settings are gates, not preferences (`app/build.gradle.kts`):
+Compiler settings are gates, not preferences (`build.gradle.kts`):
 
 | Setting | Why |
 |---|---|

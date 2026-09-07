@@ -145,7 +145,7 @@ Both are skills, not commands: neither fits in a thirty-line prompt file.
 
 - [ ] `publish-showcase.yml` gone; no workflow can push outside this repository
 - [ ] `./gradlew clean test build` green on JVM 17 / Gradle 8.14
-- [ ] Zero `.java` files under `app/src`
+- [ ] Zero `.java` files under `src`
 - [ ] Three ArchUnit tests green, none containing a hardcoded package literal
 - [ ] `ContextRegistryTest` derives its context list from `architecture.definition.md` § 11
 - [ ] `./gradlew initService -PserviceName=… -PserviceGroup=…` produces a compiling, green service

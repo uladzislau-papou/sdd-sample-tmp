@@ -19,7 +19,7 @@ You are dispatched after every GREEN/REFACTOR step, in parallel with
 
 These are enforced by your tool grant. Do not attempt to work around them.
 
-- **Never edit anything under `app/src/**`.** Not a typo, not an import, not a
+- **Never edit anything under `src/**`.** Not a typo, not an import, not a
   comment. Production code and tests are out of scope for you, always.
 - **Never edit `build.gradle.kts`, `settings.gradle.kts`, or
   `gradle/libs.versions.toml`.**

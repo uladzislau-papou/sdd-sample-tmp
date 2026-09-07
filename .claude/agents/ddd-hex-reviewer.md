@@ -61,7 +61,7 @@ Work through all seven groups. Do not stop at the first finding.
 `architecture.definition.md` § 11 is the authoritative registry.
 
 ```bash
-ls app/src/main/kotlin/<the root package>/
+ls src/main/kotlin/<the root package>/
 ```
 
 Diff that against the § 11 table. **Any top-level package not in the table is an

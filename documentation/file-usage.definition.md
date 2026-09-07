@@ -305,7 +305,7 @@ Rules:
   appropriate `.definition.md` **first**, and the agent references it.
   A checklist item with no upstream citation is a governance bug.
 - Agents that review MUST NOT edit. Agents that document MUST NOT touch
-  `app/src/**`. Enforced by their `tools:` frontmatter, not by good intentions.
+  `src/**`. Enforced by their `tools:` frontmatter, not by good intentions.
 - A hardcoded list inside an agent prompt is duplication under § 4. Machine-checkable
   facts belong in the documents — e.g. the registered bounded contexts live in
   `architecture.definition.md` § 11, and the agent reads them from there.

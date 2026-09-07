@@ -140,4 +140,4 @@ build
 
 # H2 file DB written if a test boots the app without the "test" profile
 # (test.definition.md 1.3 forbids the condition; this is belt-and-braces)
-app/data/
+data/
