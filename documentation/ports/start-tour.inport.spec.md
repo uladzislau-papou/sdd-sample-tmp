@@ -54,7 +54,21 @@ publish `TourStarted` for other contexts.
 
 **Postconditions:**
 - The aggregate is `RUNNING` with `startedAt` set, and persisted.
-- `TourStarted` is queued for post-commit delivery (ADR-0002).
+- `TourStarted` is published through `DomainEventPublisher` **inside this use case's
+  transaction** (`adr/0002` for the call site).
+
+> **This postcondition used to read "queued for post-commit delivery (ADR-0002)", and that was
+> the collapse, not a shorthand for it.** `domain-event-publisher.outport.spec.md` § 3 records
+> that delivery timing is a property of the adapter and not of the port, so a *postcondition* —
+> which is a contract — could not assert it. UC07 narrowed the port and did not propagate the
+> narrowing here; `ddd-hex-reviewer` found it.
+>
+> **UC06 does depend on post-commit delivery, and the dependency is real.**
+> `TourStartedListener` is `@TransactionalEventListener(AFTER_COMMIT)` with
+> `REQUIRES_NEW`, precisely so a failure in the fan-out cannot roll back a tour that really
+> started. That dependency is on the **currently wired adapter** (port spec § 3), not on this
+> port — which is why it is recorded as a note here rather than as a postcondition, and why the
+> outbox increment owes UC06 a migration note before it swaps the adapter.
 - `StartTourResult.status()` is `"RUNNING"`.
 
 **Exceptions** (all `RuntimeException`, declared in the interface's imports and

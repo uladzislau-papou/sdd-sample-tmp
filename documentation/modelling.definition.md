@@ -128,6 +128,30 @@ an identity, it is a Value Object. Crossing a context boundary, it is a string.
 Examples: `BookingId` in `booking.core.domain.tourbooking`, `GuideTourId` in
 `guide.core.domain.guidetour`.
 
+**Identities owned by no context of ours — a Value Object, local by default.**
+
+An external system's identifier — an employer, a lessor, a partner number — is owned by
+neither of our contexts. `adr/0005-bounded-context-identity-boundaries.adr.md` calls this
+**category 3** and permits it to live in `shared.domain` as a Value Object *when it is
+referenced by more than one of our contexts*. Both conditions have to hold; "both contexts use
+it" is not the test on its own.
+
+When only one context references it, the identity is a Value Object **local to that context**,
+exactly like an own identity, and it is **not** promoted to `shared`. Promoting it later, when
+a second context genuinely needs it, is a new ADR.
+
+Examples: `EmployerId`, `LessorId` and `PartnerNumber` in
+`mlc.core.domain.masterleasingcontract`, per
+`adr/0023-participant-identities-are-context-local.adr.md`.
+
+> **This clause was missing and the gap was load-bearing.** ADR-0005 laid out three
+> categories, and a reader looking for where to put an external identity referenced by one
+> context found a two-item menu: `shared` (whose condition was unmet) or a plain `String`
+> (whose permission is scoped to *another of our* contexts and so unavailable). ADR-0023 argued
+> the third option and set the precedent; `ddd-hex-reviewer` then pointed out that the
+> precedent lived only in an ADR, so the next author would read the menu and pick from it.
+> ADR-0005 states that this section is what it amends, which is why the clause belongs here.
+
 **Foreign identities — MAY be plain `String`.**
 
 A reference to an identity **owned by another bounded context** MAY be carried as a

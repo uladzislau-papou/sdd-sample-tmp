@@ -30,8 +30,8 @@ Pragmatic stance:
 ## 3. Package Structure
 
 ```
-com.<org>.<service>                          ← shared root
-├── ServiceApplication                       ← entry point; see § 4.9 for why it is here
+com.example.contractmanagement                ← shared root
+├── ContractManagementApplication            ← entry point; see § 4.9 for why it is here
 ├── bootstrap                                ← composition root (cross-context)
 │   └── <ContextName>Config
 ├── shared                                   ← shared kernel (cross-context building blocks)
@@ -40,7 +40,7 @@ com.<org>.<service>                          ← shared root
 │   │       └── DomainEvent                  ← marker interface for all domain events
 │   ├── outport                              ← ports needed by more than one context
 │   └── outbound                             ← adapters implementing shared.outport
-└── <bounded-context>                        ← one sub-package per bounded context (e.g. booking)
+└── <bounded-context>                        ← one sub-package per bounded context; § 11 is the registry
     ├── core
     │   ├── domain
     │   │   └── <aggregate>                  ← one sub-package per aggregate root (e.g. tourbooking)
@@ -373,10 +373,10 @@ what "now" was, and that gap let three use cases accept an arbitrary `Instant` f
 HTTP client with nothing bounding it — a cancellation could be dated before the booking
 existed, or years in the future.
 
-**A driver behind a REST endpoint MUST read the timestamp from `ClockPort`. It MUST NOT
-accept one from the request.** The time an action happened is the system's observation,
-not the caller's claim, and there is no business case in this project for a client
-asserting it. Nothing needs validating, because nothing is accepted.
+**A driver behind a REST or GraphQL endpoint MUST read the timestamp from `ClockPort`. It
+MUST NOT accept one from the request.** The time an action happened is the system's
+observation, not the caller's claim, and there is no business case in this project for a
+client asserting it. Nothing needs validating, because nothing is accepted.
 
 **A driver receiving a timestamp from another bounded context MUST use the one supplied,
 falling back to `ClockPort` only when it is absent.** UC06 and UC07 take `startedAt` and
@@ -391,11 +391,27 @@ The discriminator is the **caller**, not the field:
 | Inbound adapter | Timestamp source |
 |-----------------|------------------|
 | `inbound.rest` → driver | `ClockPort` only. No timestamp on the request DTO |
+| `inbound.graphql` → driver | `ClockPort` only. No timestamp field on the GraphQL input type |
 | `inbound.listener` → driver | the event's timestamp, `ClockPort` as fallback |
 | another context's driver → inport | the caller's timestamp, `ClockPort` as fallback |
 
 A command reached from both surfaces therefore carries a nullable timestamp, and the REST
 adapter simply never populates it.
+
+**The GraphQL row was added by UC07's OPEN QUESTION 11, and the reasoning is worth keeping
+because the row alone does not carry it.** The table originally enumerated `inbound.rest`
+only, and `adr/0020-graphql-as-the-only-transport.adr.md` then made GraphQL the *sole*
+transport — so the one rule about who may supply a timestamp named the one adapter the
+service no longer had. Nothing was violated; the rule simply stopped reaching anything.
+
+It is a row and not a rewrite because the discriminator this section already states is **the
+caller**, not the field. A GraphQL client and a REST client are the same kind of caller: an
+external party asserting a fact about our system's clock. Reading the existing rule as
+covering GraphQL was always the sensible reading — but a reading is not enforceable, so the
+row now has an executable owner: `TimestampRulesTest.noTimestampFieldOnExternalTransportInputTypes`
+fails if a type in `inbound.rest.request` or `inbound.graphql` declares an `Instant` field.
+It is keyed to both adapter packages rather than to `inbound.rest` alone, which is what
+stops the next transport from repeating this gap (ADR-0014).
 
 Recorded after `ddd-hex-reviewer` reported the gap under `Undocumented` during the UC08
 review: `architecture.definition.md` § 8 permitted "provide time from application
@@ -563,6 +579,7 @@ that does not exist. Either way the gap is named.
 |---------|------|------|-----|
 | `booking` | Bounded Context | `TourBooking` aggregate — request, confirm, activate | — (original context) |
 | `guide` | Bounded Context | `GuideTour` aggregate — guide-side tour lifecycle (start) | `adr/0003-separate-guide-bounded-context.adr.md` |
+| `mlc` | Bounded Context | `MasterLeasingContract` aggregate — the master leasing contract (*Leasingrahmenvertrag*) and its terms | `adr/0015-two-contexts-by-contract-level.adr.md` |
 | `shared` | Shared Kernel | Cross-context building blocks only (`TourId`, `DomainEvent`, cross-context events, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | `adr/0003-…` (`TourId` extraction) |
 | `bootstrap` | Composition Root | Wiring only. Not a context. See § 4.9. | — |
 

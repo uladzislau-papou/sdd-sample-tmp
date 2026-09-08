@@ -1,0 +1,25 @@
+# Git hooks, adr/0021.
+#
+# A hook is not a second gate. `./gradlew check` decides, and it is what CI runs. What a
+# hook buys is finding a formatting or static-analysis failure before the push — the
+# difference between an amended commit and a red pipeline.
+#
+# Install with `make setup` (or `lefthook install`). A hook nobody installed is not a gate,
+# which is exactly why `check` remains the gate.
+pre-commit:
+  parallel: false
+  commands:
+    format:
+      run: ./gradlew spotlessApply
+      stage_fixed: true
+    # `detektMain detektTest`, never the plain `detekt` task: the convenience task performs
+    # no type resolution and finds strictly less, so a hook running it would go green while
+    # `check` goes red. That is worse than no hook — it teaches that the hook means
+    # something.
+    static-analysis:
+      run: ./gradlew detektMain detektTest
+
+pre-push:
+  commands:
+    test:
+      run: ./gradlew test

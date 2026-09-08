@@ -191,6 +191,43 @@ Technical spec defines tooling.
 
 Copy-paste duplication is forbidden.
 
+## 4.1 Cite the owning document; do not paraphrase it
+
+The rule above bans copy-paste. **A paraphrase is the harder case**, and it is the one that
+actually happens: restating another document's claim in your own words produces a copy that no
+grep will find and no reader will recognise as a copy — so when the owner changes, the
+paraphrase silently becomes false.
+
+Therefore: a statement of fact about code or about another document's decision belongs in the
+file that **owns** it (§ 2), and every other file **cites** it. Write "see
+`domain-event-publisher.outport.spec.md` § 4", not a sentence that says the same thing
+differently.
+
+This applies to statements about **code** as much as to statements about rules. A spec asserting
+something false about the implementation is caught by `test.definition.md` § 7 gate 13, but that
+gate is about a spec describing the *previous* state; a paraphrase that was never true is a
+different defect and this clause is where it is named.
+
+> **Adopted after five instances in one increment.** UC07 corrected
+> `DomainEventPublisher`'s KDoc, which had said the implementation "delivers after commit" —
+> `adr/0022` superseded that and never propagated. The correction then asserted that
+> `LoggingDomainEventPublisher` "logs", which is false: it delegates to Spring's
+> `ApplicationEventPublisher` and the *listener* logs. That claim was inferred from the class
+> name and never read against the class. It was then repeated twice more in `uc07`'s own spec —
+> in the very passage describing the fix — and the port spec's own Purpose paragraph was left
+> asserting what its § 3 had been rewritten to withdraw.
+>
+> Three separate `ddd-hex-reviewer` rounds were needed, each finding what the previous fix had
+> introduced. That is not a lapse of care; it is what paraphrase does. `HANDOFF.md` § 5 names
+> the class as **a summary is not a source** and predicted a fourth victim — this clause exists
+> because it found the fourth, fifth, sixth and seventh.
+>
+> No test enforces this, and that is a known gap: `ddd-hex-reviewer` observed that no rule
+> prohibited a spec from asserting something false about the code, which is why it had to cite
+> § 4 and § 5 step 3 for a finding that fitted neither exactly. ADR-0014 says a rotted rule
+> should get an executable owner rather than a firmer restatement — a grep for paraphrase is not
+> possible, but a rule stated plainly is at least a rule a reviewer can cite.
+
 
 # 5. Change Protocol
 
@@ -231,6 +268,30 @@ Rules:
 - `ddd-hex-reviewer` verifies ordering with
   `git log --diff-filter=M -- documentation/`, replacing its previous
   "ordering unverifiable from a single snapshot" finding.
+- **Exempt: a row in `architecture.definition.md` § 11.** The registry is parsed
+  **bidirectionally** by `ContextRegistryTest` — a package with no row fails, and a row with
+  no package fails — so a doctrine-only commit adding the row breaks the build, and so does
+  the reverse. The row and the package MUST land in the same commit, and the commit message
+  states which context and cites its ADR.
+
+  This is a structural conflict between this rule and § 11's own gate, not a licence. It is
+  written as an exemption rather than added to the violations list below because it will
+  recur for **every** future bounded context: a rule that is violated by design every time
+  is a rule with a missing clause, not a repeated lapse. Surfaced by `ddd-hex-reviewer` while
+  reviewing the `mlc` increment, which could not satisfy both documents at once.
+
+  Note what stays governed. Two doctrine changes UC07 also made carry **no** bidirectional gate,
+  so both are ordinary § 5.1 cases and must land in an earlier commit than the code relying on
+  them:
+
+  - `architecture.definition.md` § 8.1's `inbound.graphql` row, before `TimestampRulesTest`;
+  - `modelling.definition.md` § Identity's third identity placement, before the `mlc` value
+    objects that rely on it.
+
+  The second was omitted from this note on its first draft and added after
+  `ddd-hex-reviewer` pointed out it sits in the identical position — an exemption list that
+  names one of two identical cases is worse than none, because it reads as though the other was
+  considered.
 
 Adopted after `ddd-hex-reviewer` observed that a `test.definition.md` § 1.3 rule naming
 `WebTestApplication`/`GuideWebTestApplication` had arrived in the same uncommitted tree

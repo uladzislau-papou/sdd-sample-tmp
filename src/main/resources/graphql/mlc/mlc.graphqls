@@ -1,0 +1,94 @@
+# GraphQL schema for the `mlc` bounded context.
+#
+# Schema-first: this file is the contract, and the resolver signatures are checked against it
+# at startup. Per adr/0020-graphql-as-the-only-transport.adr.md, GraphQL is the *only*
+# transport in the MVP — so this file is not one representation of the API, it is the API, and
+# renaming a field here is a breaking change for the Backoffice UI.
+#
+# `extend type Mutation` rather than `type Mutation`: the root is declared once, in
+# booking.graphqls, and graphql-java rejects a duplicate type definition. Every context adds
+# its operations by extension.
+#
+# No `Query` field. The GraphQL specification requires a schema to declare a Query root and
+# booking.graphqls already does; this service still has no read side, and adding a domain query
+# needs the read-side ADR that is not written yet.
+#
+# SDD: see documentation/use-cases/uc07-create-master-leasing-contract.spec.md § 9.
+
+extend type Mutation {
+    "UC07 — create a master leasing contract (Leasingrahmenvertrag) with the first version of its terms."
+    createMasterLeasingContract(input: CreateMasterLeasingContractInput!): CreateMasterLeasingContractPayload!
+}
+
+# The six non-null fields are exactly the ones PD-01 makes mandatory — a provisional decision
+# of ours, not a sourced rule. The JCM data model page lists every field and states no
+# optionality anywhere.
+#
+# Monetary and percentage values are `String` and not `Float`: GraphQL's Float is a
+# double-precision binary float and cannot represent money exactly. This service declares no
+# decimal scalar, so decimal notation on the wire is the honest option — the booking context
+# carries its date as a String for the same reason.
+#
+# There is deliberately NO timestamp field. architecture.definition.md § 8.1 puts a GraphQL
+# client in the same category as a REST client: the moment an action happened is the system's
+# observation, not the caller's claim (PD-11). Both `creationTime` and `activationDate` are
+# read from ClockPort (PD-08).
+input CreateMasterLeasingContractInput {
+    "Reference to the employer this framework agreement is established with (Arbeitgeber)."
+    employerId: String!
+    "Reference to the lessor party (Leasinggeber)."
+    lessorId: String!
+    "Join key between Odoo and Radar (Partnernummer). Omit when not yet known."
+    partnerNumber: String
+    "The internal team owning this record. Not the acting user — this service has no authentication."
+    owner: String
+
+    "Maximum credit exposure allowed on this contract. Decimal notation, e.g. \"50000.00\"."
+    creditLimit: String!
+    "The commercial model the contract runs under, e.g. \"salary-sacrifice-leasing\"."
+    contractType: String!
+    "ISO-4217 alphabetic code, e.g. \"EUR\"."
+    currency: String!
+    "Number of employees entitled to lease under this contract (JobRad-Berechtigte)."
+    eligibleEmployees: Int!
+
+    "The channel or segment through which the contract was sold."
+    salesChannel: String
+    "Whether this contract shares joint liability with other companies in its corporate group. Defaults to false."
+    groupJointLiability: Boolean
+    "Share of active leases per year dissolvable without penalty (Rückgabekontingent). Decimal, 0–100."
+    returnQuotaPercentage: String
+    "Fee owed if the return quota is claimed within the early-claim window. Decimal, 0–100."
+    earlyClaimFeePercentage: String
+    "Months within which claiming the quota counts as early."
+    earlyClaimWindowMonths: Int
+    "How much notice either party must give to terminate (Kündigungsfrist)."
+    noticePeriodRule: String
+    "Code identifying the agreed payment terms."
+    paymentTerms: String
+    "Lowest bike price this contract permits leasing. Decimal. Supply with priceRangeMax or not at all."
+    priceRangeMin: String
+    "Highest bike price this contract permits leasing. Decimal. Supply with priceRangeMin or not at all."
+    priceRangeMax: String
+    "How the leasing price is derived from sale price and shipping cost."
+    calculationBasis: String
+    "Service tiers employees may choose from (Servicepakete). Defaults to empty."
+    servicePackageOptions: [String!]
+    "Version of the service-package terms, tracked separately from the contract version."
+    servicePackageVersion: Int
+    "Whether the employer can edit bike categories in the manager portal. Defaults to false."
+    categoriesEditableInPortal: Boolean
+}
+
+# Derived, not sourced: no source specifies a response shape. § 3 derives these four from what
+# the caller cannot otherwise learn — this service has no read side, so a caller not told the
+# identifiers has no second way to obtain them.
+type CreateMasterLeasingContractPayload {
+    masterLeasingContractId: ID!
+    "ACTIVE on creation (PD-07)."
+    status: String!
+    "Identity of the terms version created with the contract — the source's mlc_config_id."
+    configurationId: ID!
+    "Always 1 on creation."
+    configurationVersion: Int!
+}

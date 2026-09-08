@@ -61,7 +61,7 @@ All errors return `{ "error": "<message>" }`.
 3. Load aggregate via `GuideTourRepository.findById(...)` → throw `GuideTourNotFoundException` if empty
 4. Call `guideTour.start(startedAt)` → throws `InvalidGuideTourStateException` or `TourStartTooEarlyException`
 5. Persist via `GuideTourRepository.update(guideTour)`
-6. Publish `TourStarted` via `DomainEventPublisher` (post-commit, ADR-0002)
+6. Publish `TourStarted` via `DomainEventPublisher`, inside this method's transaction (`adr/0002` for the call site; delivery timing belongs to the adapter — see `documentation/ports/domain-event-publisher.outport.spec.md` § 3)
 7. Return `{ "status": "RUNNING" }`
 
 

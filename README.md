@@ -1,57 +1,43 @@
-# Spec-Driven Service Template
+# Contract Management Service
 
-A template for starting Kotlin backend services that are built spec-first, structured as
-Ports & Adapters, and — the part that actually matters — whose rules are **enforced by the
-build** rather than described in prose.
+The backend for JRL's leasing contract management: master leasing contracts
+(*Leasingrahmenvertrag*, LRV) agreed with employers, and the individual leases
+(*Einzelleasingvertrag*, ELV) issued under them.
 
-It ships as a working service, not as a skeleton. The tour-booking example inside it is
-what proves the template compiles, its gates fire, and its documents describe something
-real.
+Built spec-first, structured as Ports & Adapters, and — the part that actually matters —
+with its rules **enforced by the build** rather than described in prose.
 
----
-
-## What is in here
-
-| | |
-|---|---|
-| **The process** | Two nested loops: an inner loop per increment, an outer loop per use case. Domain-independent, reusable as-is |
-| **The gates** | 27 ArchUnit rules, plus tests that read the documentation itself. A rule that rots fails a build |
-| **The agents** | Read-only reviewers and a documenter, dispatched at defined points in the loop |
-| **The example** | Four use cases across two bounded contexts, one of them reached over both REST and GraphQL |
-
-Stack: Kotlin 2.3 · JVM 17 · Spring Boot 4 · Gradle 8.14 · PostgreSQL + Flyway · REST +
-GraphQL · Spring Data JPA · Testcontainers · ktlint + detekt + ArchUnit.
+Start with [`documentation/project.definition.md`](documentation/project.definition.md) for
+what the service is for and what it deliberately is not.
 
 ---
 
-## Starting a service from it
+## Status
 
-```shell
-# 1. Take a copy, then give it an identity
-./gradlew initService -PserviceName=billing -PserviceGroup=com.acme
+Early. The domain packages do not exist yet; the first use case is the creation of a master
+contract. What does exist is the process, the gates, and a tour-booking example inherited
+from the template this repository grew out of.
 
-# 2. Bring up the database and run everything
-docker compose -f docker-compose/docker-compose.yaml up -d
-./gradlew build
-```
+**That example is not a reference for this domain.** It is the only code the 27 ArchUnit
+rules and the documentation gates currently have to check, so it stays until the first
+Contract Management context is complete end to end, and then leaves in one commit.
 
-`initService` moves the package directories, rewrites the package declarations, sets
-`rootProject.name` and `group`, and replaces `documentation/project.definition.md` with the
-blank in `project.definition.template.md`.
+---
 
-Then, before writing any code:
+## Stack
 
-1. **Fill in `documentation/project.definition.md`.** It is the highest-ranked document in
-   the authority order, so every agent run reads it first. Its Non-Goals section earns its
-   keep — an absence that is not written down gets invented, differently each time.
-2. **Decide what happens to the example.** Delete `booking/` and `guide/` and their specs,
-   or keep one slice as a reference while you write your first real one. Deleting a context
-   means deleting its row from `architecture.definition.md` § 11 — the registry is parsed,
-   so the two cannot disagree.
-3. **Review the profile documents.** `architecture.definition.md`,
-   `coding-style.definition.md` and `technical.spec.md` describe *this* project. You own
-   them. Very little of the coding style is domain-specific; the architecture registry is
-   entirely yours.
+Kotlin 2.3 · JVM 17 · Spring Boot 4 · Gradle 8.14 · PostgreSQL + Flyway · GraphQL ·
+Spring Data JPA · Testcontainers · ktlint + detekt + ArchUnit.
+
+The shape follows the platform's existing service, `risk-management-service`, which is where
+the stack comes from. What was **not** taken from it is its architecture: that service is
+layered per context with `@Entity` in its domain packages, and the rules here exist to
+prevent exactly that
+([`adr/0011`](documentation/adr/0011-persistence-annotations-stay-out-of-the-domain.adr.md)).
+
+GraphQL is the only transport. Every frontend on the platform speaks Apollo; REST arrives
+with the first machine consumer that needs it
+([`adr/0020`](documentation/adr/0020-graphql-as-the-only-transport.adr.md)).
 
 ---
 
@@ -62,9 +48,7 @@ docker compose -f docker-compose/docker-compose.yaml up -d   # PostgreSQL
 ./gradlew bootRun
 ```
 
-- REST: `POST /api/v1/bookings`, `POST /api/v1/bookings/{id}/confirm`,
-  `POST /api/v1/guide-tours/{id}/start`
-- GraphQL: `/graphql`, with GraphiQL at `/graphiql` in development
+- GraphQL at `/graphql`, with GraphiQL at `/graphiql` in development
 - Executable requests for every documented status live in [`api/`](api/)
 
 ## Testing it
@@ -72,71 +56,99 @@ docker compose -f docker-compose/docker-compose.yaml up -d   # PostgreSQL
 ```shell
 ./gradlew test              # fast: domain, use case and slice tests. No Docker needed
 ./gradlew integrationTest   # every *IT, against real PostgreSQL. Needs Docker
-./gradlew build             # everything, plus ktlint and detekt
+./gradlew check             # everything, plus ktlint and detekt
 ```
 
 The split is deliberate: one task that needs Docker would leave a developer without Docker
 no fast feedback at all, and a gate that cannot be run locally is a gate discovered in CI.
 
+`check` is the gate, not `detekt` — the latter is a convenience task, while `check` depends
+on `detektMain` and `detektTest`, the type-resolution variants that find what it does not.
+
 ---
 
-## The idea worth stealing, if you take nothing else
+## How work is done here
+
+Two nested loops. The inner loop implements one increment; the outer loop repeats it until a
+use case's Definition of Done is met.
+
+```
+/spec-create <page|ticket>  → use-case spec(s), decomposition confirmed first
+/uc-to-plan <ucNN>          → plan.md
+/plan-to-task               → tasks.md
+/execute-task <N.M>         → one task block, TDD-first
+/loop-uc <UCNN>             → outer loop until the DoD is met
+/code-review                → four axes, split authority
+```
+
+Non-negotiable: **no implementation without a spec, no architectural change without an ADR,
+no production code without a failing test.**
+
+Specifications are derived from the `JCM` Confluence space. They are written in English
+against German sources, so a disputed term is settled by going back to the page rather than
+by re-reading the spec.
+
+---
+
+## The idea the repository is built on
 
 **A rule with no executable owner does not survive contact with a refactor.**
 
 This is not a slogan; it is the repository's own history. Before the gates existed, the
 coding style described a package layout no code had ever used, required fields to be
 `private final` while every aggregate violated it, and forbade returning null while four
-shipped, reviewed classes relied on an unwritten exception. The bounded-context registry
-lived as prose in one file and as a string literal in a test, so adding a context meant
-editing both — and the test would have kept passing against the stale list.
+shipped, reviewed classes relied on an unwritten exception.
 
-The worst case was the quietest. The specs' Definition of Done cites tests by name, which
-is what makes it checkable. Porting the example from Java to Kotlin renamed nearly every
-test method, and **66 of 69 citations across four specs went stale in a single commit**
-while every box stayed ticked and every other gate stayed green. The specs read as
-complete. They were describing tests that did not exist.
+The worst case was the quietest. The specs' Definition of Done cites tests by name, which is
+what makes it checkable. Porting the example between languages renamed nearly every test
+method, and **66 of 69 citations across four specs went stale in a single commit** while
+every box stayed ticked and every other gate stayed green. The specs read as complete. They
+were describing tests that did not exist.
 
-So every class of rule here names its enforcer
-([`coding-style.definition.md` § 9](documentation/coding-style.definition.md)), and two of
+So every class of rule names its enforcer
+([`coding-style.definition.md` § 9](documentation/coding-style.definition.md)), and three of
 the tests read the documentation rather than the code:
 
-- `ContextRegistryTest` parses the context registry out of
-  `architecture.definition.md` § 11 — so the document is the single source, and a
-  disagreement with the packages on disk is a build failure
+- `ContextRegistryTest` parses the bounded-context registry out of
+  `architecture.definition.md` § 11, in both directions — a package without a row and a row
+  without a package both fail the build
 - `SpecCitationsTest` checks that every `SomeTest.some_method` cited anywhere in
-  `documentation/` names a test that exists. It found four genuine coverage gaps on its
-  first run
+  `documentation/` names a test that exists
+- `DocumentationLinksTest` checks that every ADR reference resolves
 
 Where a rule genuinely cannot be automated, the last row of that table says so. That
 admission is the point: when a rule in it rots, the fix is to move it up a row, not to
-restate it more firmly.
+restate it more firmly ([`adr/0014`](documentation/adr/0014-quality-gates-are-executable.adr.md)).
 
 ---
 
 ## Documentation
 
 Start with [`CLAUDE.md`](CLAUDE.md) — it carries the canonical authority order for every
-document, and the two lists that must exist in exactly one place.
+document, and the three lists that must exist in exactly one place.
 
 | Read this | For |
 |-----------|-----|
-| [`project.definition.md`](documentation/project.definition.md) | what the example is, and its honest limitations |
+| [`project.definition.md`](documentation/project.definition.md) | what the service is for, and its honest non-goals |
 | [`architecture.definition.md`](documentation/architecture.definition.md) | package ontology, dependency rules, the context registry |
+| [`technical.spec.md`](documentation/technical.spec.md) | stack, persistence, migrations, gate commands |
 | [`execution.playbook.md`](documentation/execution.playbook.md) | the inner loop, per increment |
 | [`loop.playbook.md`](documentation/loop.playbook.md) | the outer loop, per use case |
 | [`test.definition.md`](documentation/test.definition.md) | test taxonomy and the canonical quality gates |
-| [`adr/README.md`](documentation/adr/README.md) | which decisions you inherit, and which belong to the example |
+| [`adr/README.md`](documentation/adr/README.md) | every decision, and which tier it belongs to |
+| [`notes.md`](documentation/notes.md) | live debts and open questions |
 
 ---
 
 ## Provenance
 
-This template was extracted from **Alpine Booking**, a Java reference implementation of
-Spec-Driven Development written by **Dominik Galler**. The method, the two-loop process, the
-document ontology and the review agents are his work; the Kotlin port, the dual-transport
-example, the parsing gates and the rebuilt ADR set are not.
+The method this repository uses — Spec-Driven Development, the two-loop process, the
+document ontology and the review agents — comes from **Alpine Booking**, a Java reference
+implementation written by **Dominik Galler**. The Kotlin port, the gates that parse
+documentation, and the decisions in `adr/0009` onward are not his work.
 
 The original carries no licence file, which by default means all rights reserved. This copy
-exists for personal reuse and is not distributed. Anyone intending to go further than that
-should ask the author first.
+exists for personal reuse and is not distributed. Going further than that — publishing it,
+or handing the repository to a client — means asking the author first. That obligation is
+recorded as a tripwire in [`notes.md`](documentation/notes.md), because it activates on a
+specific event rather than on a date.

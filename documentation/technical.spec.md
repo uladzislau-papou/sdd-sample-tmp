@@ -2,14 +2,18 @@
 
 ## Purpose
 
-Defines the technical baseline and implementation constraints for a service built from this
-template.
+Defines the technical baseline and implementation constraints for the Contract Management
+service.
 
 **This is a profile document.** It ranks fifth in `CLAUDE.md`'s authority order and
-describes *this* project's technical choices. A service owns this file and may replace it —
-that is the point of it being a profile. What it may **not** silently drop are the
-constraints below marked as fixed by an ADR, because those are what the enforcement gates
-check.
+describes *this* project's technical choices. What it may **not** silently drop are the
+constraints marked as fixed by an ADR, because those are what the enforcement gates check.
+
+The stack comes from `risk-management-service`, the platform's existing Kotlin service. Its
+*architecture* deliberately does not — that service is layered per context with `@Entity` in
+its domain packages, which is the drift `adr/0011-persistence-annotations-stay-out-of-the-domain.adr.md`
+exists to prevent. Where this document says "the platform's other service", it means the
+stack donor and nothing more.
 
 The stack is deliberately opinionated, in support of:
 - Domain-centric design (DDD)
@@ -43,7 +47,12 @@ The stack is deliberately opinionated, in support of:
   is accepted.
 
 ### API
-- **REST and GraphQL** in parallel — `adr/0012-dual-delivery-transports.adr.md`
+- **GraphQL only**, for now — `adr/0020-graphql-as-the-only-transport.adr.md`. The codebase
+  still supports both transports over one core
+  (`adr/0012-dual-delivery-transports.adr.md`); nothing here forbids REST, and REST arrives
+  with the first machine consumer that needs it.
+- `springdoc-openapi` is **not** a dependency. It describes REST, and there is no REST to
+  describe. It is added in the same increment as the first REST endpoint.
 - GraphQL is schema-first: SDL in `src/main/resources/graphql/<context>/`
 - Executable requests live in `api/` — see `file-naming.definition.md`
 
@@ -55,9 +64,14 @@ The stack is deliberately opinionated, in support of:
 ### Persistence Access
 - **The fixed rule:** no type in `core`, `shared.domain` or `shared.outport` may depend on a
   persistence API — `adr/0011-persistence-annotations-stay-out-of-the-domain.adr.md`
-- **The ORM is a project choice.** This example uses Spring Data JPA, with `*JpaEntity`
-  types in `outbound.persistence` and a mapper to the aggregate. A service may choose
-  otherwise; the rule above does not move.
+- **The ORM for this service is Spring Data JPA**, with `*JpaEntity` types in
+  `outbound.persistence` and a mapper to the aggregate. Same as the platform's other
+  service, so the operational knowledge transfers; unlike it, the entities may not be the
+  aggregates.
+- Both bounded contexts share one database, and their schemas MUST stay separable: **no
+  foreign key from an `ilc` table into an `mlc` table**. That constraint is what keeps
+  `adr/0016-single-deployable-for-the-mvp.adr.md` reversible, and it is the one most likely
+  to be broken by accident, because the ORM makes it convenient.
 - Enforced by `DependencyRulesTest.rule6_noPersistenceTypeInTheCore` and
   `ClassRoleRulesTest.repositoryOutportsExposeNoPersistenceType`
 
@@ -123,6 +137,10 @@ Naming: `V<version>__<TYPE>_<description>.sql`, where `<TYPE>` is one of:
 
 Example: `V1__DDL_create_tour_booking.sql`, `V2__DML_seed_reference_data.sql`
 
+Table names are prefixed with their context — `mlc_…`, `ilc_…` — for the same reason the
+foreign-key rule above exists: the prefix makes the separability constraint visible in a
+migration's diff.
+
 Rules:
 - DDL and DML MUST NOT be mixed in one migration.
 - Seed data is an explicit DML migration.
@@ -160,12 +178,49 @@ Allowlisted in `.claude/settings.json` so agents can run them without prompting.
 - GraphiQL is enabled in development at `/graphiql`; it MUST be disabled in production.
 
 
+## Outbound Integration
+
+- Synchronisation towards Radar and Odoo goes through an **outbox**, never a foreign call
+  inside our transaction — `adr/0019-outbound-synchronisation-through-an-outbox.adr.md`.
+  The mechanism is fixed; the field mapping is an open question recorded in `notes.md`.
+- Foreign representations stop at the adapter. No Odoo or Radar type reaches `core` or
+  `shared.domain` — `adr/0017-contract-data-ownership-boundary.adr.md`.
+- Contract documents live in the external DMS (d.velop). This service stores a pointer and,
+  in the MVP, a stub behind the port. **No object storage of our own**: the platform's other
+  service carries a minio/S3 adapter, and adopting it here would build a store that is
+  destined to be thrown away.
+- No state-machine framework — `adr/0018-lifecycle-transitions-belong-to-the-aggregate.adr.md`.
+
+
+## Operational Baseline
+
+Taken from the platform's other service, so that this one behaves the same way in
+production:
+
+- **Actuator** plus micrometer, exporting OTLP and Prometheus.
+- **Authentication** verifies a JWT. There are no roles — a platform-wide roles and
+  permissions concept does not exist yet, and `notes.md` records that as an open question
+  rather than filling it in.
+- **lefthook** git hooks: `spotlessApply` and static analysis pre-commit, `test` pre-push,
+  plus branch-name and commit-message validation. The pre-commit static-analysis hook runs
+  `detektMain detektTest`, **not** `detekt` — the convenience task does not do
+  type resolution, so a hook that ran it would go green while `check` goes red.
+- **jacoco** produces a coverage report. It is **not** a merge gate: the canonical gate list
+  is `test.definition.md` § 7 and a coverage threshold is deliberately absent from it. A
+  number that blocks a merge gets defended, and the weakest area here — integration with
+  Radar and Odoo — is not something coverage measures.
+
+
 ## Non-Goals (Technical)
 
-- No microservice split
+- No microservice split before the domain is understood —
+  `adr/0016-single-deployable-for-the-mvp.adr.md`
 - No reactive stack by default
 - No "smart" framework inside the domain model
-- No read side: no query ports, no projections, no CQRS. A limitation of the example, not a
-  position — see `project.definition.md`
+- No read side yet: no query ports, no projections, no CQRS. The MVP's display requirements
+  need one, and the first display use case writes the ADR that chooses the pattern — see
+  `project.definition.md` and `notes.md`
+- No object storage, no webhook delivery, no audit trail as a feature. Each exists in the
+  platform's other service and is a reference to read, not a dependency to add
 - No optimistic locking. The aggregates carry no `@Version`, so concurrent updates are
   last-write-wins. A service with contended aggregates must address this

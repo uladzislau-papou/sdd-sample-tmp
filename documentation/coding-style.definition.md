@@ -198,7 +198,35 @@ over two transports demonstrably shares one core. See `architecture.definition.m
 > exemption is a single line. Found originally by `ddd-hex-reviewer`, which flagged that
 > roughly forty domain accessors violated the unqualified version of the rule.
 
-### 4.3 Declarations
+### 4.3 Domain vocabulary is English
+
+Every identifier is English, including domain terms whose sources are German. The German
+term is not carried into the code, not as a name and not as an alias.
+
+| Source term | In code |
+|---|---|
+| Leasingrahmenvertrag / LRV | `MasterLeasingContract`, package `mlc` |
+| Einzelleasingvertrag / ELV | `IndividualLeasingContract`, package `ilc` |
+| Dienstleistungsvertrag / DLV | `ServiceAgreement` |
+| Nutzungsüberlassungsvertrag / ÜV | `UsageProvisionContract` |
+| Kündigungsgrund | `cancellationReason` |
+| Umwandlungsrate | `conversionRatePerMonth` |
+| geldwerter Vorteil | `monetaryBenefit` |
+
+Context prefixes follow the platform's other service: a short package abbreviation (`mlc`,
+`ilc`) with full English words in the type names.
+
+**What this costs, stated rather than hidden.** Some of these are terms of German tax and
+contract law, and the English is a translation, not a synonym — `monetaryBenefit` reads as
+"a benefit worth money" while *geldwerter Vorteil* is the taxable value of private use. The
+translation is therefore load-bearing, and the place to settle a disputed one is the source
+page in the `JCM` space, not this table and not the code.
+
+The alternative — German identifiers where no faithful English exists — was considered and
+rejected: it needs a per-term judgement with no executable owner, which is the shape of a
+rule that becomes "however the last author felt" within a month.
+
+### 4.4 Declarations
 
 - Prefer inferred types for locals when the type is obvious from the right-hand side.
 - Declare explicit types on anything public.
@@ -364,10 +392,24 @@ Prose that nothing checks decays. Each rule class has an owner:
 | formatting, imports, line length | ktlint via spotless (`.editorconfig`) |
 | complexity, swallowed exceptions, nullability leaks | detekt (`config/detekt/detekt.yml`) |
 | layering, dependency direction, class roles (§ 3.3, § 4.1) | ArchUnit — `DependencyRulesTest`, `ClassRoleRulesTest`, `ContextRegistryTest` |
-| everything else in this document | `ddd-hex-reviewer`, and human review |
+| everything else in this document, including § 4.3 and the anti-corruption obligation below | `ddd-hex-reviewer`, and human review |
 
 The last row is an admission, not a boast: a rule in that row is a rule that can rot
 unnoticed. When one does, the fix is to move it up a row, not to restate it more firmly.
+
+Two rules sit in that row deliberately, with their weakness named:
+
+- **§ 4.3, English vocabulary.** A German identifier is a plain-text pattern and could be
+  grepped for. What cannot be checked is the *quality* of a translation, which is where the
+  risk actually is — so an executable owner would produce confidence out of proportion to
+  what it verifies.
+- **The anti-corruption obligation** from
+  `adr/0017-contract-data-ownership-boundary.adr.md`: no Odoo or Radar representation reaches
+  `core` or `shared.domain`. `DependencyRulesTest` already blocks framework and persistence
+  types there, and it would block a generated client type by package. What it cannot see is
+  a hand-written class that mirrors a foreign payload field-for-field under a domestic name.
+  That is a review judgement, and it is written here so that its absence from the gates is a
+  known absence.
 
 ---
 

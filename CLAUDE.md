@@ -140,12 +140,6 @@ would need every rule qualified by mode, and the qualification is where precisio
 is accepted: its logic axis runs through `mattpocock-skills:code-review`, which keeps its own
 namespace. The built-in stays available to a human invoking it directly.
 
----------|---------|
-| `/uc-to-plan <ucNN>` | use case spec → `plan.md` |
-| `/plan-to-task` | `plan.md` → phased checkbox `tasks.md` |
-| `/execute-task <N.M>` | implement one task block, TDD-first |
-| `/loop-uc <UCNN>` | run the outer loop until the use case's DoD is met |
-
 ---
 
 ## API Contract Documentation

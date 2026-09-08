@@ -4,9 +4,9 @@
 services:
   db:
     image: postgres:17-alpine
-    container_name: service-template-db
+    container_name: contract-management-db
     environment:
-      POSTGRES_DB: service_template
+      POSTGRES_DB: contract_management
       POSTGRES_USER: service
       POSTGRES_PASSWORD: service
     ports:
@@ -14,7 +14,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U service -d service_template"]
+      test: ["CMD-SHELL", "pg_isready -U service -d contract_management"]
       interval: 5s
       timeout: 5s
       retries: 10

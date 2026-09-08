@@ -49,11 +49,26 @@ dod_history      = []          # ticked-count per iteration, for the no-progress
   (`execution.playbook.md` § 3.2); do that first, explicitly, then re-invoke.
 - **A criterion that is not objectively checkable** → stop and name it. "Code is
   clean" is not a DoD item (`sdd.playbook.md` § 4.2).
+- **Status is `BLOCKED`** → stop, and name the open questions § 10 lists. Report this as
+  `HALTED (spec BLOCKED)`, **not** as `BLOCKED` — that word is already the no-progress
+  terminal state in step 6, and the two are opposite findings: this one is "the loop never
+  started", that one is "the loop ran and could not move". A report that conflates them
+  tells the caller nothing about which. A `BLOCKED` spec
+  is structurally complete and not workable: at least one open question reaches a section
+  the implementation needs. Closing those questions is Spec Phase work and needs a source
+  or an explicit, recorded decision — do it, flip the status to `SPECIFIED`, then
+  re-invoke. **Do not flip the status to get past this gate.**
 - **Status is `SUPERSEDED`** → stop. Superseded specs are not loop targets;
   point at the specs that replaced it.
 
 Refusing to start is a correct outcome. A loop with a vague exit condition does
 not terminate, it wanders.
+
+The `BLOCKED` gate exists because the `SUPERSEDED` gate was once the only status check, and
+`uc07-create-master-leasing-contract.spec.md` sat at `SPECIFIED` with eleven unanswered
+questions — its § 10 carrying the sentence *"this spec cannot be worked yet, and no
+mechanism will stop you."* It was right. The loop would have started, picked a criterion
+whose expected value was an open question, and wandered exactly as described above.
 
 ---
 

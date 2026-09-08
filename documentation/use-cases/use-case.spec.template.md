@@ -16,10 +16,29 @@ place (`file-usage.definition.md` § 4).
 -->
 
 ## Status
-SPECIFIED | IMPLEMENTED | SUPERSEDED
+BLOCKED | SPECIFIED | IMPLEMENTED | SUPERSEDED
+
+<!--
+Status vocabulary. Exactly one value, on the line above, as the whole line — the
+`/loop-uc` preflight parses it.
+
+- `BLOCKED`   — structurally complete and **not workable**: at least one open question
+                reaches a section the implementation needs. `/loop-uc` refuses to start.
+                List the questions in § 10 so the refusal names them.
+- `SPECIFIED` — workable. Every question that blocks an implementable section is closed.
+- `IMPLEMENTED`
+- `SUPERSEDED` — `/loop-uc` refuses; point at the specs that replaced it.
+
+**Why `BLOCKED` exists.** `uc07-create-master-leasing-contract.spec.md` was written with
+eleven unanswered questions and the status `SPECIFIED`, because the vocabulary had no value
+for "specified but not workable". Its § 10 said in prose *"do not start the loop"* — an
+instruction to a human that no parser could see, sitting in the one document the loop reads
+every iteration. A rule with no executable owner does not survive contact with a refactor
+(ADR-0014), so the state got a value and the value got a gate.
+-->
 
 ## Bounded Context
-`<context>` — triggered via <REST by external client | event-driven | synchronous outport call>.
+`<context>` — triggered via <GraphQL by external client | REST by external client | event-driven | synchronous outport call>.
 (For cross-context: Owner: `<context>`. Trigger/Caller: `<context>`. Integration pattern: <event-driven | synchronous outport call>.)
 
 Must be a context registered in `architecture.definition.md` § 11.
