@@ -1,7 +1,13 @@
 # ADR 0018 – Lifecycle Transitions Belong to the Aggregate
 
 ## Status
-Accepted
+Accepted — general, and currently with little to govern.
+
+It was written about the master-leasing-contract lifecycle, which was deleted with the `mlc`
+context. The rule it states is not domain-specific: a state change is a named method on the
+aggregate that enforces that transition's invariants, and no state-machine framework is
+introduced. `Master.activate` / `Master.deactivate` in `uc03` are its first subjects in the
+current scope.
 
 ## Context
 

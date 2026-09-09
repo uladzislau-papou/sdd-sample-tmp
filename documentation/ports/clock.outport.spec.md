@@ -14,10 +14,12 @@ SDD: See `documentation/architecture.definition.md` Section 8 – "Time, randomn
 shared.outport.ClockPort
 ```
 
-Lives in `shared.outport`, not a context's `core.outport`: both `booking` and
-`guide` need it, so it is shared-kernel infrastructure
-(`architecture.definition.md` § 9, § 11). Moved there during the guide-context
-extraction (`adr/0003-separate-guide-bounded-context.adr.md`).
+Lives in `shared.outport`, not a context's `core.outport`: it is context-neutral
+infrastructure that any context needs (`architecture.definition.md` § 9, § 11).
+
+The service currently has one bounded context, which makes "more than one context needs it"
+untestable today. It stays in `shared` regardless, because the test in § 9 is **ownership, not
+usage**: no context owns the clock.
 
 ## 2. Method Contract
 
@@ -41,7 +43,7 @@ Instant now()
 ## 3. Usage Context
 
 The driver calls `clockPort.now()` before invoking any domain factory method that requires temporal validation.
-The `Instant` is then passed as a parameter to the aggregate (e.g., `TourBooking.request(..., now)`).
+The `Instant` is then passed as a parameter to the aggregate (e.g. `Master.create(..., now)`).
 
 The domain MUST NOT call `Instant.now()` directly.
 
@@ -53,16 +55,17 @@ Class: `shared.outbound.clock.SystemClockPort`, wired by `bootstrap.SharedConfig
 Behaviour: Returns `Instant.now()` (system clock, UTC). This is the only place in the
 codebase permitted to call `Instant.now()` (`architecture.definition.md` § 8).
 
-It previously lived in `booking.outbound.integration.clock` and was wired by
-`BookingConfig`, which meant the `guide` context obtained its clock from `booking`'s
-configuration — a cross-context dependency invisible to any import check
-(`architecture.definition.md` § 9).
+It once lived inside a bounded context's `outbound.integration.clock` and was wired by that
+context's `@Configuration`, which meant a second context obtained its clock from the first
+context's wiring — a cross-context dependency invisible to any import check
+(`architecture.definition.md` § 9). That is why the adapter's location is a rule and not a
+preference.
 
 
 ## 5. Test Usage
 
 In unit tests, `ClockPort` is replaced by a stub returning a fixed `Instant`.
-This allows deterministic testing of all time-dependent invariants (e.g., tour date must be in the future).
+This allows deterministic testing of all time-dependent behaviour (e.g. UC01's AC-01, which asserts the Master's `createdAt` is the clock's value).
 
 
 ## 6. Constraints

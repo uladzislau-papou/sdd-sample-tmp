@@ -48,12 +48,23 @@ class ContextRegistryTest {
             ).containsExactlyInAnyOrderElementsOf(ContextRegistry.registeredPackages)
     }
 
+    /**
+     * This used to assert that § 11 declares **at least one bounded context**, which held for
+     * as long as the service had one. Deleting `booking`, `guide` and `mlc` in a single
+     * increment made it false, and the honest reading is that it was never a property of the
+     * registry — it was a property of the service having been built yet.
+     *
+     * The non-emptiness claim therefore moved to [EmptyServiceTripwireTest], inverted: that
+     * test asserts the registry has **no** contexts and fails the moment one is added, which
+     * is what re-arms the sixteen rules currently allowed to pass empty. Two facts with
+     * opposite lifetimes should not share an assertion.
+     *
+     * What survives here is the part that is true in every state: the parse works, and the
+     * shared kernel and composition root are registered.
+     */
     @Test
-    @DisplayName("§ 11: the registry declares at least one bounded context and the shared kernel")
+    @DisplayName("§ 11: the registry parses, and registers the shared kernel and composition root")
     fun theRegistryIsParsedAndPlausible() {
-        assertThat(ContextRegistry.boundedContexts)
-            .describedAs("§ 11 must declare at least one bounded context")
-            .isNotEmpty()
         assertThat(ContextRegistry.registeredPackages)
             .describedAs("the shared kernel and the composition root are registered packages too")
             .contains("shared", "bootstrap")

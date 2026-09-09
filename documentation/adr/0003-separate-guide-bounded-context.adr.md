@@ -1,8 +1,12 @@
 # ADR 0003 – Separate Guide Bounded Context
 
 ## Status
+**Withdrawn** — the `guide` bounded context and the whole tour-booking example were deleted
+from the tree. This ADR decided a boundary between two contexts that no longer exist.
 
-Accepted
+Kept rather than deleted, because its *reasoning* is the clearest worked example this
+repository has of the argument a new-context ADR is supposed to make, and `adr/0005` cites
+it. `adr/0024` is now the live precedent for "a new bounded context requires an ADR".
 
 ## Context
 

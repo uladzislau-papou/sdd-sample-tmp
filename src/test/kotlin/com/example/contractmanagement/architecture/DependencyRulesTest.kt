@@ -46,7 +46,8 @@ class DependencyRulesTest {
                     "project package. Only shared.domain is permitted (9). shared.outport is " +
                     "included deliberately: a domain class injecting ClockPort would satisfy " +
                     "8 in letter while evading it in substance.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -83,7 +84,8 @@ class DependencyRulesTest {
             .because(
                 "architecture.definition.md 6 rule 3 and 4.5: a delivery adapter depends on " +
                     "core.inport interfaces, never on a driver or an outbound adapter.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -97,7 +99,8 @@ class DependencyRulesTest {
                 "coding-style.definition.md 3.3: every delivery adapter obeys the same rule. " +
                     "A second transport arriving with weaker constraints is how the core stops " +
                     "being transport-agnostic.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -109,7 +112,8 @@ class DependencyRulesTest {
             .because(
                 "the two adapters exist to prove the core is reachable from either. Sharing a " +
                     "DTO between them would couple both to one transport's representation.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -126,7 +130,8 @@ class DependencyRulesTest {
             ).because(
                 "architecture.definition.md 4.4: a driver MAY depend on core.domain, " +
                     "core.inport and core.outport, and on nothing else.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -181,6 +186,7 @@ class DependencyRulesTest {
             .because(
                 "architecture.definition.md 2: the core is stable and the adapters are " +
                     "replaceable, which only holds while the arrows point inward.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 }

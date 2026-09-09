@@ -15,7 +15,7 @@ Scope: production code (domain, use cases, adapters) and tests (naming and struc
 **This is a profile document.** It ranks third in `CLAUDE.md`'s authority order and it
 describes *this* project. A service adopting the template may take it as it stands — very
 little of it is domain-specific — but it owns the file and may replace it. Where a rule
-below names a tour, a booking or a guide, that is the example talking, not a requirement.
+below names a Master or a Contract, that is the example talking, not a requirement.
 
 **This document replaced a Java one.** The rules it inherited were kept whenever Kotlin
 still needs them and dropped whenever the language already enforces them. Each drop is
@@ -84,7 +84,7 @@ Use `data class` when the type is a data carrier, equality is structural, and th
 lifecycle. Validate invariants in `init`.
 
 Do **not** use `data class` for an aggregate. Structural equality is wrong for an entity —
-two bookings with identical fields are not the same booking — and a generated `copy()`
+two Contracts with identical fields are not the same Contract — and a generated `copy()`
 hands every caller a way around the aggregate's transition methods.
 
 ### 2.2 `value class`
@@ -188,9 +188,9 @@ over two transports demonstrably shares one core. See `architecture.definition.m
 
 - A command MUST be a verb: `confirm`, `markActive`, `start`.
 - A **lookup** on a repository or port MUST start with `find`, `get` or `load` —
-  `findById`, `findConfirmedByTourId`.
+  `findById`, `findActiveByCustomerNumber`.
 - A **property read** is exempt and needs no prefix. In Kotlin it is usually not a function
-  at all: `val status`, `val bookingId`.
+  at all: `val status`, `val masterId`.
 
 > The Java original had to spell this exemption out at length, because records generate
 > unprefixed accessors while the rule demanded a `get` prefix — a rule forbidding the
@@ -200,31 +200,27 @@ over two transports demonstrably shares one core. See `architecture.definition.m
 
 ### 4.3 Domain vocabulary is English
 
-Every identifier is English, including domain terms whose sources are German. The German
+Every identifier is English, including domain terms whose sources are not. A source-language
 term is not carried into the code, not as a name and not as an alias.
 
-| Source term | In code |
-|---|---|
-| Leasingrahmenvertrag / LRV | `MasterLeasingContract`, package `mlc` |
-| Einzelleasingvertrag / ELV | `IndividualLeasingContract`, package `ilc` |
-| Dienstleistungsvertrag / DLV | `ServiceAgreement` |
-| Nutzungsüberlassungsvertrag / ÜV | `UsageProvisionContract` |
-| Kündigungsgrund | `cancellationReason` |
-| Umwandlungsrate | `conversionRatePerMonth` |
-| geldwerter Vorteil | `monetaryBenefit` |
+The current domain is invented and English throughout (`project.definition.md`), so this rule
+has **nothing to translate today**. It is kept rather than deleted because the reasoning is
+what matters and it is cheap to lose:
 
-Context prefixes follow the platform's other service: a short package abbreviation (`mlc`,
-`ilc`) with full English words in the type names.
+An earlier version of this service was specified from German sources, and this section
+carried a translation table — *Leasingrahmenvertrag* to `MasterLeasingContract`,
+*geldwerter Vorteil* to `monetaryBenefit`. What that table recorded, and what is worth keeping,
+is the **cost**: some terms are terms of law, and the English is a translation rather than a
+synonym. `monetaryBenefit` reads as "a benefit worth money" while *geldwerter Vorteil* is the
+taxable value of private use. The translation is load-bearing, and a disputed one is settled by
+going back to the source document — never by re-reading the code or a table like that one.
 
-**What this costs, stated rather than hidden.** Some of these are terms of German tax and
-contract law, and the English is a translation, not a synonym — `monetaryBenefit` reads as
-"a benefit worth money" while *geldwerter Vorteil* is the taxable value of private use. The
-translation is therefore load-bearing, and the place to settle a disputed one is the source
-page in the `JCM` space, not this table and not the code.
+The alternative — foreign identifiers where no faithful English exists — was considered and
+rejected: it needs a per-term judgement with no executable owner, which is the shape of a rule
+that becomes "however the last author felt" within a month.
 
-The alternative — German identifiers where no faithful English exists — was considered and
-rejected: it needs a per-term judgement with no executable owner, which is the shape of a
-rule that becomes "however the last author felt" within a month.
+A context package is named with a short abbreviation and full English words in the type names:
+`contract`, holding `Master` and `Contract`.
 
 ### 4.4 Declarations
 
@@ -242,7 +238,7 @@ rule that becomes "however the last author felt" within a month.
 - Properties are `val` **except** aggregate and entity state that a transition method
   mutates.
 - A mutable aggregate property MUST have a **private setter**:
-  `var status: BookingStatus = …; private set`.
+  `var status: MasterStatus = …; private set`.
 - There MUST be no setters on an aggregate beyond that, and no `copy()` — see § 2.1.
 
 The mutability exception is not a concession, it is the point: an aggregate with a
@@ -310,7 +306,7 @@ under it.
 
 A value object in `shared.domain` **cannot** satisfy clause one: it has no domain exception
 available. `architecture.definition.md` § 9 forbids `shared` from depending on any bounded
-context, so `TourId` cannot reference a booking-context exception — and this is enforced,
+context, so a shared identity cannot reference a context's exception — and this is enforced,
 not merely agreed: attempting it fails `ContextRegistryTest`.
 
 The options were to grow `shared` with its own exception package for one blank-string
@@ -403,13 +399,16 @@ Two rules sit in that row deliberately, with their weakness named:
   grepped for. What cannot be checked is the *quality* of a translation, which is where the
   risk actually is — so an executable owner would produce confidence out of proportion to
   what it verifies.
-- **The anti-corruption obligation** from
-  `adr/0017-contract-data-ownership-boundary.adr.md`: no Odoo or Radar representation reaches
-  `core` or `shared.domain`. `DependencyRulesTest` already blocks framework and persistence
-  types there, and it would block a generated client type by package. What it cannot see is
-  a hand-written class that mirrors a foreign payload field-for-field under a domestic name.
-  That is a review judgement, and it is written here so that its absence from the gates is a
-  known absence.
+- **The anti-corruption obligation.** No foreign system's representation reaches `core` or
+  `shared.domain`. `DependencyRulesTest` already blocks framework and persistence types there,
+  and it would block a generated client type by package. What it cannot see is a hand-written
+  class that mirrors a foreign payload field-for-field under a domestic name. That is a review
+  judgement, and it is written here so that its absence from the gates is a known absence.
+
+  The service currently has **no outbound integration at all**
+  (`project.definition.md`, Non-Goals), so this rule has no subject either. It is the first
+  thing to re-read when one arrives; `adr/0017-contract-data-ownership-boundary.adr.md` is
+  withdrawn but carries the argument in full.
 
 ---
 

@@ -26,10 +26,10 @@ Files are named after the specification they are based on, followed by `.spec.md
 
 | Kind | Pattern | Example |
 |------|---------|---------|
-| Use case | `uc<nn>-<kebab-name>.spec.md` | `uc05-start-tour.spec.md` |
-| Domain / aggregate | `aggregate-<kebab-name>.spec.md` | `aggregate-tour-booking.spec.md` |
-| Inbound port | `<kebab-name>.inport.spec.md` | `request-tour-booking.inport.spec.md` |
-| Outbound port | `<kebab-name>.outport.spec.md` | `tour-booking-repository.outport.spec.md` |
+| Use case | `uc<nn>-<kebab-name>.spec.md` | `uc05-add-contract-to-master.spec.md` |
+| Domain / aggregate | `aggregate-<kebab-name>.spec.md` | `aggregate-master.spec.md` |
+| Inbound port | `<kebab-name>.inport.spec.md` | `add-contract-to-master.inport.spec.md` |
+| Outbound port | `<kebab-name>.outport.spec.md` | `master-repository.outport.spec.md` |
 | Template | `<kind>.spec.template.md` | `use-case.spec.template.md` |
 
 The `uc<nn>` number is stable once assigned. It is the traceability key linking
@@ -65,8 +65,8 @@ One file per use case **per transport**, in `api/`, named to match its spec:
 
 | Transport | Pattern | Example |
 |-----------|---------|---------|
-| REST | `api/uc<nn>-<kebab-name>.http` | `api/uc05-start-tour.http` |
-| GraphQL | `api/uc<nn>-<kebab-name>.graphql` | `api/uc01-request-tour-booking.graphql` |
+| REST | `api/uc<nn>-<kebab-name>.http` | `api/uc05-add-contract-to-master.http` |
+| GraphQL | `api/uc<nn>-<kebab-name>.graphql` | `api/uc01-create-master.graphql` |
 
 The `uc<nn>` prefix MUST match the corresponding use case spec. A use case has a file per
 transport it is actually exposed over, and **none** if it has no external API — a

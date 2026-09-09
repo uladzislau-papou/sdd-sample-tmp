@@ -158,7 +158,7 @@ Rules:
     - optional message check only if message is part of contract
 
 ## 3.3 Equality & Identity
-- Domain identity MUST be tested via explicit identity fields (e.g., `BookingId`), not object identity.
+- Domain identity MUST be tested via explicit identity fields (e.g. `MasterId`), not object identity.
 - Value Objects SHOULD be compared by value.
 
 
@@ -186,7 +186,7 @@ Tests MUST be behavior-driven and domain-oriented.
 **Convention: `<method>_<condition>_<expectedResult>`.**
 
 ```
-confirm_throwsInvalidBookingStateException_whenAlreadyConfirmed
+addContract_throwsDuplicateContractNumberException_whenNumberAlreadyUsed
 markActive_idempotent_whenAlreadyActive_noEventEmitted
 start_usesClockPort_whenStartedAtIsEmpty
 update_changesParticipantCount_inDatabase
@@ -210,12 +210,14 @@ not self-explanatory. It is not required, and none of the current tests use it.
 Tests SHOULD mirror production packages to support navigation and traceability.
 
 Examples, in the actual ontology (`architecture.definition.md` § 3):
-- `booking.core.domain.tourbooking` → `TourBookingTest`, `ParticipantCountTest`
-- `booking.inbound.driver` → `ConfirmTourBookingDriverTest`
-- `booking.inbound.listener` → `TourStartedListenerTest`
-- `booking.inbound.rest` → `TourBookingRestControllerTest`
-- `booking.inbound.graphql` → `TourBookingGraphQLControllerTest`
-- `booking.outbound.persistence` → `TourBookingJpaRepositoryIT`
+- `contract.core.domain.master` → `MasterTest`, `ContractPeriodTest`, `MoneyTest`
+- `contract.inbound.driver` → `CreateMasterDriverTest`
+- `contract.inbound.graphql` → `MasterGraphQLControllerTest`
+- `contract.outbound.persistence` → `MasterJpaRepositoryIT`
+
+None of these exists yet — the six specifications in `use-cases/` are written and not
+implemented. They are the names those specs' § 10 items cite, so the mapping above is what the
+implementing session is working towards rather than a description of the tree.
 - `<root>.architecture` → the enforcement suite (ADR 0007, ADR 0014), which mirrors no
   production package because it is about the tree as a whole. Two of its tests read
   `documentation/` rather than the code: `ContextRegistryTest` and `SpecCitationsTest`

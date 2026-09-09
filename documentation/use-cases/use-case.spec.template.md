@@ -29,12 +29,16 @@ Status vocabulary. Exactly one value, on the line above, as the whole line — t
 - `IMPLEMENTED`
 - `SUPERSEDED` — `/loop-uc` refuses; point at the specs that replaced it.
 
-**Why `BLOCKED` exists.** `uc07-create-master-leasing-contract.spec.md` was written with
-eleven unanswered questions and the status `SPECIFIED`, because the vocabulary had no value
-for "specified but not workable". Its § 10 said in prose *"do not start the loop"* — an
-instruction to a human that no parser could see, sitting in the one document the loop reads
-every iteration. A rule with no executable owner does not survive contact with a refactor
-(ADR-0014), so the state got a value and the value got a gate.
+**Why `BLOCKED` exists.** A specification once existed here with eleven unanswered questions
+and the status `SPECIFIED`, because the vocabulary had no value for "specified but not
+workable". Its § 10 said in prose *"do not start the loop"* — an instruction to a human that no
+parser could see, sitting in the one document the loop reads every iteration. A rule with no
+executable owner does not survive contact with a refactor (ADR-0014), so the state got a value
+and the value got a gate.
+
+That specification was deleted with the scope it belonged to. The status survives it, and none
+of the six current specs uses it — which is worth knowing, because a status with no live
+example is the kind of thing a later reader deletes as unused.
 -->
 
 ## Bounded Context

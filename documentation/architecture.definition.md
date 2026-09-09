@@ -43,7 +43,7 @@ com.example.contractmanagement                ← shared root
 └── <bounded-context>                        ← one sub-package per bounded context; § 11 is the registry
     ├── core
     │   ├── domain
-    │   │   └── <aggregate>                  ← one sub-package per aggregate root (e.g. tourbooking)
+    │   │   └── <aggregate>                  ← one sub-package per aggregate root (e.g. master)
     │   │       ├── event                    ← domain events for this aggregate
     │   │       └── exception                ← domain exceptions for this aggregate
     │   ├── inport
@@ -198,31 +198,34 @@ Typical characteristics:
 
 ##### Selection criteria in write-side queries
 
-A write-side query MAY filter on a domain criterion — `findConfirmedByTourId` rather than
-`findByTourId` plus a filter in the caller. Three conditions:
+A write-side query MAY filter on a domain criterion — `findActiveByCustomerNumber` rather
+than `findByCustomerNumber` plus a status filter in the caller. Three conditions:
 
 1. **The aggregate still enforces the rule.** The query *selects candidates*; it does not
-   replace the guard. `markActive` must reject a non-CONFIRMED booking whether or not the
-   query already excluded it. A query that becomes the only enforcement is drift.
-2. **The criterion is named in the method.** `findConfirmedByTourId`, not
-   `findByTourIdAndStatus(status)` with the constant supplied by the caller — that just
-   relocates the knowledge to the caller.
+   replace the guard. `addContract` must reject an inactive Master whether or not the query
+   already excluded it. A query that becomes the only enforcement is drift.
+2. **The criterion is named in the method.** `findActiveByCustomerNumber`, not
+   `findByCustomerNumberAndStatus(status)` with the constant supplied by the caller — that
+   just relocates the knowledge to the caller.
 3. **It is specified.** The port spec states the criterion, so the duplication between SQL
    and aggregate guard is deliberate and visible rather than discovered later.
 
-Why permit the duplication at all: the alternative is a status filter in the caller, and
-for an inbound adapter that is business logic in the wrong layer (§ 4.8). It can also be
-load-bearing — `TourStartedListener` fans out across bookings in one transaction, and
-`markActive` throws for a non-activatable one, so filtering in the caller is what stops a
-single ineligible booking rolling back the batch.
+Why permit the duplication at all: the alternative is a status filter in the caller, and for
+an inbound adapter that is business logic in the wrong layer (§ 4.8).
 
 The duplication is the accepted cost. If the criterion changes, both places change, and the
 port spec is where that is recorded.
 
-> Previously this rule existed only as an argument inside
-> `ports/tour-booking-repository.outport.spec.md` § 2.4 — an authority-level-16 document,
-> which made the precedent unappealable and unenforceable. Raised to definition level after
-> `ddd-hex-reviewer` reported it as the last remaining undocumented rule.
+**This rule currently has no subject.** `MasterRepository` exposes `findById` only
+(`ports/master-repository.outport.spec.md`), because no use case selects a set. The rule is
+kept because the first query that does select one is exactly when nobody will want to stop and
+derive it.
+
+> The rule once existed only as an argument inside a port spec — an authority-level-16
+> document, which made the precedent unappealable and unenforceable. It was raised to
+> definition level after `ddd-hex-reviewer` reported it as the last remaining undocumented
+> rule. That is the part worth remembering: where a rule *lives* decides whether it can be
+> cited against a future increment.
 
 #### `outbound.persistence.read`
 
@@ -285,7 +288,7 @@ bounded-context package**. This reflects that bootstrap is not aligned to any si
 context — it wires the whole application.
 
 Contains:
-- Per-context configuration classes (e.g. `BookingConfig`)
+- Per-context configuration classes (e.g. `ContractConfig`)
 - Bean wiring
 
 **The Spring Boot entry point is not in `bootstrap`. It sits in the root package itself**,
@@ -370,8 +373,8 @@ Guiding rule:
 
 The rule above says where `now()` may be read. It does not say who is allowed to *decide*
 what "now" was, and that gap let three use cases accept an arbitrary `Instant` from an
-HTTP client with nothing bounding it — a cancellation could be dated before the booking
-existed, or years in the future.
+HTTP client with nothing bounding it — an event could be dated before the record it referred
+to existed, or years in the future.
 
 **A driver behind a REST or GraphQL endpoint MUST read the timestamp from `ClockPort`. It
 MUST NOT accept one from the request.** The time an action happened is the system's
@@ -379,12 +382,15 @@ observation, not the caller's claim, and there is no business case in this proje
 client asserting it. Nothing needs validating, because nothing is accepted.
 
 **A driver receiving a timestamp from another bounded context MUST use the one supplied,
-falling back to `ClockPort` only when it is absent.** UC06 and UC07 take `startedAt` and
-`completedAt` from `TourStarted` / `TourCompleted`; UC09 takes `cancelledAt` from the
-guide side. These are facts already recorded in the originating context, crossing a
-boundary. Re-dating them with the receiver's clock would make a booking claim it completed
-at a different moment than the tour did — the timestamps would drift apart by the event's
-delivery latency, and neither would be wrong-looking on its own.
+falling back to `ClockPort` only when it is absent.** Such a timestamp is a fact already
+recorded in the originating context, crossing a boundary. Re-dating it with the receiver's
+clock would make the two records drift apart by the event's delivery latency, and neither
+would look wrong on its own.
+
+This half of the rule has **no subject today**: there is one bounded context (`adr/0024`) and
+no cross-context event. The service's earlier scope had three use cases relying on it, which is
+why it is written rather than inferred. The first half — a REST or GraphQL client may not
+supply one — is live, and `TimestampRulesTest` enforces it.
 
 The discriminator is the **caller**, not the field:
 
@@ -425,10 +431,10 @@ Cross-cutting building blocks that are not owned by any single bounded context.
 ```
 shared
 ├── domain
-│   ├── TourId                    ← identity owned by no context (ADR 0005 category 3)
+│   ├── <ForeignId>               ← identity owned by no context (ADR 0005 category 3) — none today
 │   └── event
 │       ├── DomainEvent           ← marker interface
-│       └── <CrossContextEvent>   ← e.g. TourStarted
+│       └── <CrossContextEvent>   ← none today: one context, no cross-context event
 ├── outport                       ← ports every context needs
 │   ├── ClockPort
 │   └── DomainEventPublisher
@@ -441,8 +447,12 @@ shared
 
 - `DomainEvent` — the marker interface all domain events implement.
 - Cross-context integration events, so a consuming context need not depend on the
-  publishing one (e.g. `TourStarted`; see § 11 rule 3 and ADR 0002).
-- Identities owned by no context in this system (`TourId`; ADR 0005 category 3).
+  publishing one (see § 11 rule 3 and ADR 0002). **There are none**: the service has one
+  bounded context.
+- Identities owned by no context in this system (ADR 0005 category 3). **There are none**, and
+  ADR-0005's reservation — a second member requires an ADR — is therefore unspent.
+
+`DomainEvent` is currently the shared kernel's only `domain` member.
 - Framework-free; no Spring, no IO.
 
 ### `shared.outport`
@@ -456,14 +466,14 @@ A port used by exactly one context belongs in that context's `core.outport`, not
 
 **Adapters implementing `shared.outport` live here, not inside a bounded context.**
 
-Rationale: an implementation of a shared port is not owned by any context either. Putting
-`ClockPort`'s adapter in `booking.outbound.integration` forces `guide` to obtain a clock
-from `BookingConfig`, which makes `guide` depend on `booking`'s wiring for something
-neither context owns. That is a dependency the context split exists to prevent, and it
-made ADR 0003's claim that "both contexts depend on `shared.domain` only" false.
+Rationale: an implementation of a shared port is not owned by any context either. This was
+found the expensive way — `ClockPort`'s adapter once lived inside one context's
+`outbound.integration`, which forced a second context to obtain its clock from the first
+context's `@Configuration`. No import crossed a boundary, so no compile-time check could see
+it, and the claim that the two contexts depended only on `shared.domain` was simply false.
 
-Wiring: `bootstrap.SharedConfig` declares the shared beans. Per-context configs
-(`BookingConfig`, `GuideConfig`) declare only their own context's adapters.
+Wiring: `bootstrap.SharedConfig` declares the shared beans. A per-context config declares only
+its own context's adapters.
 
 **Framework dependencies are permitted in `shared.outbound`** (and in a future
 `shared.inbound`), on the same terms as any other adapter package — § 4.7. These are
@@ -478,13 +488,13 @@ context-neutral one.
 
 Rules:
 - Keep `shared` minimal. Only add here what is genuinely cross-context.
-- Do not add context-specific types here (e.g., `TourBookingRequested` stays in
-  `booking.core.domain.tourbooking.event`).
+- Do not add context-specific types here (e.g. `MasterCreated` stays in
+  `contract.core.domain.master.event`).
 - `shared` must not depend on any bounded context. Any context may depend on `shared`.
 - The test is **ownership, not usage**. "Both contexts use it" is not sufficient — if one
   context owns it, the other goes through an event or its own port.
-- A context MUST NOT wire another context's beans. If `guide` needs a shared adapter, it
-  comes from `SharedConfig`, never from `BookingConfig`.
+- A context MUST NOT wire another context's beans. A shared adapter comes from
+  `SharedConfig`, never from another context's config.
 
 ## 10. Anti-patterns (explicitly forbidden)
 - JPA annotations in domain objects.
@@ -505,41 +515,50 @@ aggregates* inside one transaction, which couples their consistency boundaries.
 Guideline: prefer one aggregate per transaction. It bounds lock duration and keeps
 failures isolated.
 
-Where the guideline is deliberately not followed: `TourStartedListener` activates every
-CONFIRMED booking for a tour in a single `REQUIRES_NEW` transaction (UC06). Accepted
-because no invariant spans the bookings — each `markActive` is independent, and the
-listener is simply a fan-out. The alternative (one transaction per booking, plus an
-outbox to make the fan-out reliable) is a substantially larger design for no invariant
-gained.
+No current use case departs from the guideline. Every one of the six touches exactly one
+`Master`, and a Master's contracts are inside it rather than beside it — so "several
+aggregates in one transaction" does not arise. UC04 is the one that looks like an exception
+and is not: deleting a Master removes its contracts because they are *part of* that aggregate,
+not because two aggregates are being coordinated.
+
+The earlier scope did depart from it, in a way worth keeping: a listener activated every
+eligible child of one parent in a single `REQUIRES_NEW` transaction, accepted because no
+invariant spanned them and each mutation was independent — a fan-out, not a coordination. The
+alternative, one transaction each plus an outbox to make the fan-out reliable, was a
+substantially larger design for no invariant gained.
 
 ### One transaction spanning two bounded contexts
 
-The guideline above covers instances of the same aggregate type inside one context. UC12
-does something the document did not previously address: a `GuideTour` mutation and N
-`TourBooking` mutations share **one** transaction, across a context boundary, because the
-guide's driver calls `booking`'s inport synchronously (§ 11 rule 3).
+The guideline above covers instances of the same aggregate type inside one context. The
+following governs a driver in one context calling another context's inport synchronously
+(§ 11 rule 3), so that two aggregates in different contexts share **one** transaction.
+
+**It has no subject today** — there is one bounded context — and it is kept in full because it
+is the rule that will be needed on the day a second one is added, which is also the day nobody
+will want to stop and derive it.
 
 **This is permitted, narrowly.** All of the following must hold:
 
 1. The call is driver-to-inport, per § 11 rule 3. No other layer may open a cross-context
    transaction.
-2. The caller genuinely needs confirmation before it can commit its own decision. UC12
-   qualifies: a tour reported cancelled while its bookings still believe it is going ahead
-   is the failure the use case exists to prevent. "It would be convenient" does not qualify.
+2. The caller genuinely needs confirmation before it can commit its own decision. The worked
+   example was a cancellation: a parent reported cancelled while its dependents still believe
+   it is going ahead is the failure such a use case exists to prevent. "It would be
+   convenient" does not qualify.
 3. The callee joins the caller's transaction (`REQUIRED`) rather than opening its own. A
    `REQUIRES_NEW` callee would give the illusion of atomicity while committing
    independently — worse than not sharing at all, because the divergence would be silent.
-4. No invariant spans the two aggregates. The tour and its bookings are updated together
-   for consistency of *outcome*, not because either enforces a rule about the other. This
-   keeps § 10's actual prohibition intact.
+4. No invariant spans the two aggregates. They are updated together for consistency of
+   *outcome*, not because either enforces a rule about the other. This keeps § 10's actual
+   prohibition intact.
 
-**Where it is not permitted:** a notification. If the receiving context may react whenever
-it likes, use a domain event and `AFTER_COMMIT` + `REQUIRES_NEW`, as UC06 and UC07 do.
-Reaching for a shared transaction there buys coupling and lock duration for nothing.
+**Where it is not permitted:** a notification. If the receiving context may react whenever it
+likes, use a domain event and `AFTER_COMMIT` + `REQUIRES_NEW`. Reaching for a shared
+transaction there buys coupling and lock duration for nothing.
 
-The cost is real and accepted: the transaction is open for the duration of N cross-context
-calls, both contexts fail together, and neither can be deployed separately without
-revisiting this. That is the trade for never having a cancelled tour with live bookings.
+The cost is real: the transaction is open for the duration of N cross-context calls, both
+contexts fail together, and neither can be deployed separately without revisiting this. That is
+the trade for never having a cancelled parent with live dependents.
 
 Switching an interaction between the two models — shared transaction ↔ event — is a
 cross-context interaction model change and an ADR trigger (`sdd.playbook.md` § 6 item 10).
@@ -577,10 +596,7 @@ that does not exist. Either way the gap is named.
 
 | Package | Kind | Owns | ADR |
 |---------|------|------|-----|
-| `booking` | Bounded Context | `TourBooking` aggregate — request, confirm, activate | — (original context) |
-| `guide` | Bounded Context | `GuideTour` aggregate — guide-side tour lifecycle (start) | `adr/0003-separate-guide-bounded-context.adr.md` |
-| `mlc` | Bounded Context | `MasterLeasingContract` aggregate — the master leasing contract (*Leasingrahmenvertrag*) and its terms | `adr/0015-two-contexts-by-contract-level.adr.md` |
-| `shared` | Shared Kernel | Cross-context building blocks only (`TourId`, `DomainEvent`, cross-context events, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | `adr/0003-…` (`TourId` extraction) |
+| `shared` | Shared Kernel | Cross-context building blocks only (`DomainEvent`, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | — |
 | `bootstrap` | Composition Root | Wiring only. Not a context. See § 4.9. | — |
 
 The service's entry point deliberately sits in the **root** package rather than in
@@ -607,7 +623,7 @@ instead of repeating a string literal in three tests.
 
    | Form | When | Example |
    |------|------|---------|
-   | Domain event via `shared.domain.event` | The publisher does not need to know the outcome | UC05 → UC06 (`TourStarted`) |
+   | Domain event via `shared.domain.event` | The publisher does not need to know the outcome | *no current example — one context* |
    | Synchronous call to the other context's **inport**, from the orchestrating driver | The caller's own outcome depends on the callee's | UC12 → UC09 |
    | The caller's own outport | The dependency is on something outside this system | `AvailabilityChecker` |
 

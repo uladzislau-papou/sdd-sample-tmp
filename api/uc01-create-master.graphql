@@ -1,0 +1,66 @@
+# UC01 — CreateMaster over GraphQL.
+#
+# There is no `uc01-*.http` companion. GraphQL is the only transport
+# (adr/0020-graphql-as-the-only-transport.adr.md), so each use case has one contract file and
+# not two.
+#
+# Run against http://localhost:8080/graphql — GraphiQL is enabled in development at
+# http://localhost:8080/graphiql
+#
+# SDD: documentation/use-cases/uc01-create-master.spec.md § 9
+
+# --- Happy path. --------------------------------------------------------------------------
+# Returns the new identity, ACTIVE, and the createdAt the service read from ClockPort. The
+# request cannot supply createdAt: architecture.definition.md § 8.1 forbids a client from
+# asserting a fact about our clock, and TimestampRulesTest enforces it.
+mutation CreateMaster {
+  createMaster(input: {
+    name: "Acme Manufacturing"
+    customerNumber: "DE-000001"
+  }) {
+    masterId
+    name
+    customerNumber
+    status
+    createdAt
+  }
+}
+
+# --- AC-05: the customer number is NOT globally unique. -----------------------------------
+# Run immediately after the happy path. It succeeds, and that is the point — uniqueness is
+# the first thing a reader assumes about this field. aggregate-master.spec.md § 2 explains
+# why the constraint is absent: with no optimistic locking, a rule the service cannot hold is
+# worse than no rule. Deleting this request is how that reasoning gets lost.
+mutation CreateMasterWithDuplicateCustomerNumber {
+  createMaster(input: {
+    name: "Acme Logistics"
+    customerNumber: "DE-000001"
+  }) {
+    masterId
+    customerNumber
+  }
+}
+
+# --- BAD_REQUEST: blank name (I-01). ------------------------------------------------------
+mutation CreateMasterBlankName {
+  createMaster(input: { name: "   ", customerNumber: "DE-000002" }) {
+    masterId
+  }
+}
+
+# --- BAD_REQUEST: name over 200 characters (I-01). ----------------------------------------
+mutation CreateMasterOverlongName {
+  createMaster(input: {
+    name: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    customerNumber: "DE-000003"
+  }) {
+    masterId
+  }
+}
+
+# --- BAD_REQUEST: customer number does not match ^[A-Z]{2}-[0-9]{6}$ (I-02). ---------------
+mutation CreateMasterMalformedCustomerNumber {
+  createMaster(input: { name: "Acme Manufacturing", customerNumber: "de-1" }) {
+    masterId
+  }
+}

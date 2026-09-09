@@ -15,10 +15,14 @@ import org.springframework.context.annotation.Configuration
  * wiring.
  *
  * That is not hypothetical tidiness. `ClockPort` and `DomainEventPublisher` were once
- * declared in the booking context's config, which meant the guide context got its clock
- * from booking's configuration. No import crossed a context boundary, so no compile-time
- * check could see it — but the claim that the two contexts depend only on `shared.domain`
+ * declared in one bounded context's config, which meant a second context got its clock from
+ * the first context's configuration. No import crossed a context boundary, so no compile-time
+ * check could see it — but the claim that the two contexts depended only on `shared.domain`
  * was false.
+ *
+ * The service currently has **no** bounded contexts, so these two beans are the whole of its
+ * wiring. That is a transient state — see
+ * `documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md`.
  *
  * SDD: see `documentation/architecture.definition.md` sections 9 and 4.9.
  */

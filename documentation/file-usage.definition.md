@@ -278,15 +278,20 @@ Rules:
   written as an exemption rather than added to the violations list below because it will
   recur for **every** future bounded context: a rule that is violated by design every time
   is a rule with a missing clause, not a repeated lapse. Surfaced by `ddd-hex-reviewer` while
-  reviewing the `mlc` increment, which could not satisfy both documents at once.
+  reviewing a bounded-context increment that could not satisfy both documents at once.
 
-  Note what stays governed. Two doctrine changes UC07 also made carry **no** bidirectional gate,
-  so both are ordinary § 5.1 cases and must land in an earlier commit than the code relying on
-  them:
+  **The next occurrence is already scheduled**, and it is the `contract` row: the six
+  specifications in `use-cases/` are written, the package does not exist, and `adr/0024` decides
+  it. The row and the package land in the same commit as `uc01-create-master.spec.md`'s
+  implementation.
+
+  Note what stays governed. A doctrine change that carries **no** bidirectional gate is an
+  ordinary § 5.1 case and must land in an earlier commit than the code relying on it. Two
+  worked examples, both from the earlier scope:
 
   - `architecture.definition.md` § 8.1's `inbound.graphql` row, before `TimestampRulesTest`;
-  - `modelling.definition.md` § Identity's third identity placement, before the `mlc` value
-    objects that rely on it.
+  - `modelling.definition.md` § Identity's third identity placement, before the value objects
+    that relied on it.
 
   The second was omitted from this note on its first draft and added after
   `ddd-hex-reviewer` pointed out it sits in the identical position — an exemption list that

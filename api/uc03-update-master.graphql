@@ -1,0 +1,90 @@
+# UC03 — UpdateMaster over GraphQL.
+#
+# A partial update: name and status are both optional, and absent means "leave it alone".
+# customerNumber is not updatable — it identifies the Master to the outside world, and a
+# field that both identifies and changes turns into a data-migration story.
+#
+# SDD: documentation/use-cases/uc03-update-master.spec.md § 9
+
+# --- Happy path: rename only. -------------------------------------------------------------
+mutation UpdateMasterName {
+  updateMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    name: "Acme Manufacturing Holdings"
+  }) {
+    masterId
+    name
+    status
+  }
+}
+
+# --- Happy path: deactivate only. ---------------------------------------------------------
+# Run before uc05's MasterNotActive request, which needs an INACTIVE Master to exist.
+mutation UpdateMasterStatus {
+  updateMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000003"
+    status: INACTIVE
+  }) {
+    masterId
+    status
+  }
+}
+
+# --- Happy path: both fields in one call (AC-03). -----------------------------------------
+mutation UpdateMasterBothFields {
+  updateMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    name: "Acme Manufacturing GmbH"
+    status: INACTIVE
+  }) {
+    masterId
+    name
+    status
+  }
+}
+
+# --- AC-04: submitting unchanged values succeeds and publishes nothing. -------------------
+# Not an error. A resubmitted form is not a mistake, and aggregate-master.spec.md § 3 makes
+# ACTIVE → ACTIVE a no-op rather than an illegal transition. The absence of an event is not
+# visible in the response — MasterTest is what asserts it.
+mutation UpdateMasterNoChange {
+  updateMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000002"
+    name: "Acme Logistics"
+    status: ACTIVE
+  }) {
+    masterId
+    name
+    status
+  }
+}
+
+# --- BAD_REQUEST: neither field supplied (AC-05). -----------------------------------------
+# Rejected rather than silently succeeding: a request that changes nothing and says nothing
+# is more likely a client bug than an intention.
+mutation UpdateMasterEmpty {
+  updateMaster(input: { masterId: "00000000-0000-0000-0000-000000000001" }) {
+    masterId
+  }
+}
+
+# --- BAD_REQUEST: blank name (I-01). ------------------------------------------------------
+# AC-07 also requires the stored name to be unchanged afterwards. Re-run GetMaster to see it.
+mutation UpdateMasterBlankName {
+  updateMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    name: ""
+  }) {
+    masterId
+  }
+}
+
+# --- NOT_FOUND: no Master with that id. ---------------------------------------------------
+mutation UpdateMasterNotFound {
+  updateMaster(input: {
+    masterId: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    name: "Nobody"
+  }) {
+    masterId
+  }
+}

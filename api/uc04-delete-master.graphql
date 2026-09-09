@@ -1,0 +1,49 @@
+# UC04 — DeleteMaster over GraphQL.
+#
+# A hard delete that cascades to the Master's contracts. Both halves are decisions, not
+# defaults: project.definition.md rules out soft delete, and Contract is an entity inside the
+# Master aggregate (adr/0024), so an orphaned contract row would mean nothing.
+#
+# There is no `force` or `cascade` flag. A parameter that must always carry one value buys
+# nothing.
+#
+# SDD: documentation/use-cases/uc04-delete-master.spec.md § 9
+
+# --- Happy path: a Master holding no contracts. -------------------------------------------
+# deletedContractCount is 0.
+mutation DeleteEmptyMaster {
+  deleteMaster(input: { masterId: "00000000-0000-0000-0000-000000000002" }) {
+    masterId
+    deletedContractCount
+  }
+}
+
+# --- Happy path: the cascade (AC-02). -----------------------------------------------------
+# Add contracts with uc05-add-contract-to-master.graphql first, then run this and check
+# deletedContractCount. Exactly one MasterDeleted is published — not one event per contract.
+# Their removal is what deleting the aggregate means, not N separate removals.
+mutation DeleteMasterWithContracts {
+  deleteMaster(input: { masterId: "00000000-0000-0000-0000-000000000001" }) {
+    masterId
+    deletedContractCount
+  }
+}
+
+# --- NOT_FOUND: unknown id. ---------------------------------------------------------------
+mutation DeleteMasterNotFound {
+  deleteMaster(input: { masterId: "ffffffff-ffff-ffff-ffff-ffffffffffff" }) {
+    masterId
+  }
+}
+
+# --- AC-05: deletion is not idempotent. ---------------------------------------------------
+# Re-run DeleteEmptyMaster above. The second call is NOT_FOUND, not a silent success: the
+# caller is asserting something about the world that is false, and hiding that hides a client
+# bug. A client that genuinely does not care can ignore NOT_FOUND from a delete.
+
+# --- BAD_REQUEST: the id is not a UUID. ---------------------------------------------------
+mutation DeleteMasterMalformedId {
+  deleteMaster(input: { masterId: "not-a-uuid" }) {
+    masterId
+  }
+}

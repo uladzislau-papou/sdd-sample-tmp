@@ -1,7 +1,17 @@
 # ADR 0012 – REST and GraphQL as Parallel Delivery Transports
 
 ## Status
-Accepted (inherited from template)
+Accepted (inherited from template) — narrowed by ADR-0020, which makes GraphQL the only
+transport with a consumer. The class-role split this ADR decides still holds and is still
+enforced by `ClassRoleRulesTest`; what lapsed is its worked example.
+
+**One edit was made to the text below**, which the immutability convention in
+[`README.md`](README.md) would normally forbid. Its Consequences cited a test method by name,
+that test was deleted with the tour-booking example, and `SpecCitationsTest` fails on a
+citation naming nothing. `CLAUDE.md`'s authority order settles the conflict — `test.definition.md`
+§ 9 is rank 6 and this convention is rank 13 — so the citation was replaced by a statement of
+what is now true. No reasoning was rewritten; the paragraph says the claim is currently
+unasserted rather than pretending it still is.
 
 ## Context
 
@@ -44,11 +54,17 @@ interfaces, while a comment beside that code warns that `@SchemaMapping` must be
 target class rather than a proxy interface. The pair was written with the annotations on the
 interface and the slice test was allowed to decide. It passes.
 
-**Why the example exposes one use case over both.** UC01 is reachable over REST and over
-GraphQL, and `TourBookingGraphQLControllerTest.requestTourBooking_buildsTheSameCommandAsTheRestAdapter`
-asserts that both adapters build the same command. That is the claim Ports & Adapters makes,
-and it is the thing that silently stops being true first — usually when a second transport
-arrives and a validation rule gets added to only one of them.
+**Why the example exposes one use case over both.** UC01 was reachable over REST and over
+GraphQL, and a case in `TourBookingGraphQLControllerTest` asserted that both adapters build
+the same command. That is the claim Ports & Adapters makes, and it is the thing that silently
+stops being true first — usually when a second transport arrives and a validation rule gets
+added to only one of them.
+
+That test was deleted with the tour-booking example, so **no test asserts this claim today**.
+The `contract` context exposes GraphQL only (ADR-0020), which makes the claim currently
+untestable rather than merely untested: one transport cannot disagree with itself. It becomes
+a real gap the moment a second transport arrives, and whoever adds one owes this assertion
+back.
 
 **Why not split by operation kind** (writes over REST, reads over GraphQL, which is how
 GraphQL is usually used): it needs a read side, and the template has none by decision.

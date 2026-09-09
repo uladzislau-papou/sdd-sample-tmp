@@ -22,10 +22,10 @@ driver publishes inside its `@Transactional` boundary — and
 shared.outport.DomainEventPublisher
 ```
 
-Lives in `shared.outport`, not a context's `core.outport`: both `booking` and
-`guide` need it, so it is shared-kernel infrastructure
-(`architecture.definition.md` § 9, § 11). Moved there during the guide-context
-extraction (`adr/0003-separate-guide-bounded-context.adr.md`).
+Lives in `shared.outport`, not a context's `core.outport`: it is context-neutral
+infrastructure that any context needs (`architecture.definition.md` § 9, § 11). The test in
+§ 9 is **ownership, not usage** — no context owns event publication — which is why one
+bounded context is enough for it to belong here.
 
 ## 2. Method Contract
 
@@ -62,11 +62,11 @@ domain event requires no change to this port.
 
 Decided in `adr/0004-generic-domain-event-publisher-signature.adr.md`.
 
-This section previously specified `void publish(TourBookingRequested event)`,
-specific to UC01, and stated that a generic signature "may be introduced in later
-use cases **via ADR**". The code widened to `publish(DomainEvent)` without that
-ADR being written — a bypassed recording gate, found by `spec-documenter` and
-escalated under its Conflicts protocol rather than being silently reconciled.
+This section once specified a signature taking one concrete event type, and stated that a
+generic signature "may be introduced in later use cases **via ADR**". The code widened to
+`publish(DomainEvent)` without that ADR being written — a bypassed recording gate, found by
+`spec-documenter` and escalated under its Conflicts protocol rather than being silently
+reconciled.
 ADR 0004 supplies the missing record and accepts the implementation as correct.
 
 
@@ -115,14 +115,16 @@ damaged.
 
 ### What swapping the adapter owes its existing callers
 
-`TourStartedListener` is `@TransactionalEventListener(AFTER_COMMIT)` with
-`REQUIRES_NEW`, so UC05 → UC06's fan-out **genuinely depends on post-commit delivery** — by
-design, so that a failure in the fan-out cannot roll back a tour that really started.
+**Nothing today: this port has no subscribers.** The six current use cases publish events that
+are logged and consumed by no one (`project.definition.md`, Non-Goals).
 
-That dependency is on the adapter in the first row above, not on this port. So the outbox
-increment does not merely add an adapter: **it owes UC06 a migration note**, because an adapter
-that writes a row in-transaction and dispatches from a relay changes when — and in which
-transaction — that listener runs. Written here rather than left implicit, because the increment
+That was not always true, and the reasoning is worth keeping. A listener registered
+`@TransactionalEventListener(AFTER_COMMIT)` with `REQUIRES_NEW` **genuinely depends on
+post-commit delivery** — by design, so that a failure downstream cannot roll back the
+transaction that succeeded. That dependency is on the *adapter*, not on this port. So replacing
+the adapter with one that writes a row in-transaction and dispatches from a relay is not merely
+an addition: it changes when, and in which transaction, every such listener runs, and it owes
+each one a migration note. Written here rather than left implicit, because the increment
 that swaps the adapter will be reading this file and not `uc06`.
 
 ### Not the domain's concern either way
@@ -143,10 +145,11 @@ this class "logs", inferred from the name rather than read from the code.
 
 It is `adr/0002`'s reference adapter and the one `adr/0022` replaces (§ 3).
 
-It previously lived in `booking.outbound.integration` and was wired by `BookingConfig`,
-so the `guide` context published its events through `booking`'s configuration
-(`architecture.definition.md` § 9). Spring is permitted here: `shared.outbound` is an
-adapter package, and only `shared.domain` and `shared.outport` are framework-free.
+It once lived inside a bounded context's `outbound.integration` and was wired by that
+context's `@Configuration`, so a second context published its events through the first
+context's configuration (`architecture.definition.md` § 9). Spring is permitted here:
+`shared.outbound` is an adapter package, and only `shared.domain` and `shared.outport` are
+framework-free.
 
 
 ## 5. Constraints

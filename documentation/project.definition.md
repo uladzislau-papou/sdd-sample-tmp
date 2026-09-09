@@ -1,10 +1,9 @@
-# Project Vision: JRL Contract Management
+# Project Vision: Contract Management
 
 ## What this document is
 
 The **highest-ranked document** in `CLAUDE.md`'s authority order. Every agent run opens by
-reading it, so it describes the service being built — not the process used to build it, and
-not the example still sitting in the tree.
+reading it, so it describes the service being built — not the process used to build it.
 
 | Question | Answered in |
 |----------|-------------|
@@ -12,127 +11,107 @@ not the example still sitting in the tree.
 | What is the service for? | **this file** |
 | How is work done here? | `CLAUDE.md`, then the two playbooks |
 
-Sources are the `JCM` Confluence space (*JRL Contract Management*). Where this document
-states a scope decision, that decision comes from the **MVP** page; where it states a field
-or an entity, that comes from the **Contract Management Domain Data model** page. Claims
-with no source there do not belong in this file.
-
 
 ## Purpose of the service
 
-JobRad's leasing business runs on two levels of contract. A **master leasing contract**
-(*Leasing­rahmenvertrag*, LRV) is agreed with an employer and governs the terms under which
-that employer's staff may lease. Each **individual leasing contract**
-(*Einzel­leasing­vertrag*, ELV) is one employee's bike, issued under that master contract
-and inheriting its conditions.
+A **CRUD API over a Master and the Contracts it holds.** A Master is a party this business
+contracts with; each Contract under it is one agreement with a period and a monthly amount.
+The API creates, reads, updates and deletes Masters, and adds and removes Contracts on them.
 
-Today this work happens by hand across Radar, Odoo and a set of submenus, and the rules
-connecting the two levels — limits, entitlements, status dependencies — exist only in the
-heads of the people doing it. This service exists to make those rules **explicit,
-executable and checkable**.
+That is the whole domain, and the scope is deliberately smaller than the machinery around it.
 
-The near-term product is a backend for the internal Backoffice UI used by contract
-administrators. It is not a customer-facing system and it is not a replacement for the
-leasing platform.
+**Read this next, because it decides how to interpret everything else here.** The subject of
+this repository is the *method* — spec-driven development with executable gates — and the
+domain is the specimen it is practised on. A domain drawn from a real product would drag in
+questions nobody in this repository can answer, and the previous version of this document
+proves it: it described a leasing business, and the one specification written against it was
+blocked on eleven questions that had to be settled by people outside the codebase. Nothing
+about the *method* was learned while waiting.
+
+So the domain here is invented, and small enough to hold in one paragraph, on purpose. The
+gates, the ADR discipline, the review agents and the two loops are the real subject matter.
+
+**The consequence to keep in view:** an invented domain cannot settle a design argument by
+appeal to reality. Where a rule below looks arbitrary — the shape of a customer number, a cap
+of fifty contracts — it *is* arbitrary. It is there because an Always-Valid aggregate needs
+invariants to enforce and a test needs something to assert, and it is chosen rather than
+discovered. Do not reason from these rules to what a real contract system should do, and do
+not defend one by claiming a source it does not have.
 
 
 ## Domain in one page
 
-| Entity | German | What it is |
-|--------|--------|-----------|
-| `MasterLeasingContract` | Leasingrahmenvertrag / LRV | The framework contract with an employer |
-| `MlcConfiguration` | — | One version of that contract's terms: credit limit, return quota, price range, service packages |
-| `IndividualLeasingContract` | Einzelleasingvertrag / ELV | One employee's bike lease, issued under an LRV |
-| `IlcConfiguration` | — | One version of that lease's terms: rate, duration, residual value, service tier |
-| `ServiceAgreement` | Dienstleistungsvertrag / DLV | The administrative agreement linked to a master contract |
-| `UsageProvisionContract` | Nutzungsüberlassungsvertrag / ÜV | The employer-employee side of a lease: conversion rate, subsidy, monetary benefit |
-| `Document` | — | A pointer to a contract PDF held in the external DMS |
+Two types. One aggregate.
 
-Two properties of this model drive most of the design. **Terms are versioned separately
-from the contract they belong to**, and an inheriting configuration records whether the
-inherited values stay live-linked to the parent or were copied once (`inheritance_mode`).
-That flag is an integration contract between the two levels, not a field — see
-`adr/0015-two-contexts-by-contract-level.adr.md`.
+| Type | Role | Fields |
+|------|------|--------|
+| `Master` | Aggregate root | `id`, `name`, `customerNumber`, `status`, `createdAt` |
+| `Contract` | Entity **inside** the Master aggregate | `id`, `contractNumber`, `period`, `monthlyAmount` |
+
+`Contract` is an entity and not a Value Object because it has an identity that outlives a
+change to its fields. It is **not** an aggregate root: it has no independent existence, it is
+loaded and saved with its Master, and it is never addressed without naming that Master.
+`adr/0024-one-context-with-master-as-the-aggregate-root.adr.md` argues why, and the short
+version is that every invariant worth writing spans the two.
+
+Three invariants are the reason the boundary sits where it does:
+
+- A contract number is **unique within its Master**. Two Masters may each hold a `C-0001`.
+- A Master holds **at most fifty** contracts.
+- A contract may be added only to an **ACTIVE** Master.
+
+None of the three can be enforced by a `Contract` looking only at itself, and none can be
+enforced honestly outside an aggregate in a service with no optimistic locking — see
+Non-Goals. That is the whole argument for the aggregate boundary, stated once, here.
 
 
 ## Bounded contexts
 
-Two, split by contract level. `mlc` owns the master contract, its configuration and the
-service agreement; `ilc` owns the individual lease, its configuration and the usage
-provision contract.
+**One**, named `contract`. `architecture.definition.md` § 11 is the authoritative registry and
+is parsed by a test; this paragraph is not the registry.
 
-The split is not organisational tidiness. The same word means different things on each
-side: an LRV's *Kündigung* is an employer leaving, which must consider every lease issued
-underneath it; an ELV's *Beendigung* is a 36-month term running out and a bike being sold.
-One `Status` type covering both would be a type that permits states its own aggregate
-cannot reach.
-
-The registry in `architecture.definition.md` § 11 is authoritative and parsed. This
-paragraph is not the registry.
-
-
-## What this service owns, and what it does not
-
-Radar and Odoo are the leading systems today. That is a fact about the platform, not a
-temporary inconvenience, and it decides where this service's authority ends.
-
-| Ours | Not ours |
-|------|----------|
-| The contract: its existence, status, lifecycle transitions and cancellation grounds | The employer (`employer_id`) |
-| Its terms: limits, quotas, rates, durations, residual values | The employee (`job_cyclist_id`) |
-| The link between an LRV and the ELVs issued under it | The bike (`bike_id`) |
-| The rules connecting the two levels | The lessor, the service provider, the partner number |
-
-Everything in the right column arrives through an **anti-corruption layer**: an adapter
-that translates a foreign representation into this service's value objects. No Odoo or
-Radar structure reaches the domain. The data model page already draws this line — every
-entity in the right column is marked *external* there — and `adr/0017-contract-data-ownership-boundary.adr.md` records it.
-
-The practical consequence is that an aggregate here holds real invariants rather than
-mirroring a foreign record. A master contract cannot be terminated while leases are active
-under it; a lease cannot be issued outside its master contract's price range or beyond its
-credit limit. Those are the rules the discovery phase recorded as *not currently expressed
-anywhere*.
-
-
-## MVP scope
-
-From the **MVP** page. A thin slice through both contract levels: the standard case first,
-special cases iteratively.
-
-| Use case | Level | Today |
-|----------|-------|-------|
-| Create a master contract (trigger mocked; eventually employer onboarding) | LRV | — |
-| Create an individual lease and link it to its master contract | ELV | — |
-| Regular termination of a master contract with no active leases | LRV | Odoo |
-| End of lease — sale to JobRad GmbH (~5 000 / year) | ELV | Radar, Odoo |
-| Name change, e.g. on marriage | ELV | Radar, by hand |
-
-Displays are in scope too — conditions and limits, the contract PDF, the linked service
-agreement, the list of leases under a master contract. They need a read side, which this
-repository has never had; see Non-Goals.
-
-Deliberately **out** of the first iteration, from the same page: terminating a master
-contract that still has active leases, retrospective changes, arbitrary status changes,
-other company changes, early lease termination, object or lessee swaps, follow-on leases,
-the refinancing interface, and the complete Radar and Odoo interfaces.
+One context means the cross-context rules — published inports, domain events between
+contexts, the closed-internals rule — have **no subject in this codebase**. That is a real
+loss for a repository whose purpose is demonstrating the method, and it is accepted rather
+than fixed by inventing a second context. A context with no reason is drift with a row in a
+table. `adr/0024` records the trade explicitly; `adr/0008`, though withdrawn, is kept as the
+worked example of the integration pattern this service no longer has.
 
 
 ## Architectural stance
 
 - Strict Ports & Adapters, with a framework-free core
 - Aggregates enforce their own invariants; no setters, no `data class` on an entity
-- **Lifecycle transitions belong to the aggregate.** No state-machine framework — a guard
-  that reaches into another context is application logic hiding in configuration
+- **Lifecycle transitions belong to the aggregate.** No state-machine framework
   (`adr/0018-lifecycle-transitions-belong-to-the-aggregate.adr.md`)
 - One use case = one transaction boundary, owned by the driver
-- Contexts communicate through `shared.domain.event` or a published inport, never internals
 - Persistence is an implementation detail; the domain holds no persistence annotations
-- Outbound synchronisation to Radar and Odoo goes through an **outbox**, never a foreign
-  call inside our transaction (`adr/0019-outbound-synchronisation-through-an-outbox.adr.md`)
-- **One deployable** for the MVP, though the platform's component view draws two services.
-  The dependency between the two levels is the least understood thing in the domain, and a
-  network boundary across it would turn a failing test into a data divergence (`adr/0016-single-deployable-for-the-mvp.adr.md`)
+- **Reads use the same repository outport the writes use** — no query side, with three
+  written conditions for revisiting that
+  (`adr/0025-reads-go-through-the-repository-outport.adr.md`)
+- Time enters through `ClockPort` at the driver. A GraphQL client may not supply a timestamp,
+  and a test enforces it (`architecture.definition.md` § 8.1)
+
+
+## Scope
+
+| Use case | Spec |
+|----------|------|
+| Create a Master | `uc01-create-master.spec.md` |
+| Get a Master with its Contracts | `uc02-get-master.spec.md` |
+| Update a Master's name and status | `uc03-update-master.spec.md` |
+| Delete a Master and its Contracts | `uc04-delete-master.spec.md` |
+| Add a Contract to a Master | `uc05-add-contract-to-master.spec.md` |
+| Remove a Contract from a Master | `uc06-remove-contract-from-master.spec.md` |
+
+Deliberately **out**: listing or searching Masters, paging, updating a Contract in place
+(remove and re-add), contract periods that may not overlap, and any second party to a
+contract.
+
+Updating a Contract in place is the omission most likely to be mistaken for an oversight, so:
+it is left out because it adds a third mutation shape without adding a new *kind* of rule to
+enforce, and the six above already cover create, read, update, delete, and both directions of
+collection membership.
 
 
 ## Development doctrine
@@ -143,45 +122,40 @@ the refinancing interface, and the complete Radar and Odoo interfaces.
 - Small, verifiable increments.
 - When a rule rots, give it an executable owner rather than restating it.
 
-Specifications are written in English against German sources. The translation is therefore
-part of the spec, and a disputed term is resolved by going back to the Confluence page, not
-by re-reading the spec.
-
 
 ## Non-Goals
 
-Absences, written down so that nobody mistakes one for a decision and invents an answer
-three different ways.
+Absences, written down so that nobody mistakes one for a decision and invents an answer three
+different ways.
 
 | Absent | Consequence you should know about |
 |--------|-----------------------------------|
-| **No read side yet** | The repository has no query ports, no projections, no read model. The MVP's display requirements need one, and choosing the pattern is an **ADR the first display use case must write**. The three use cases sequenced ahead of it are all writes, which is why this is a written trigger rather than a blocker |
-| **No REST** | GraphQL is the only transport. The platform's frontends all speak Apollo; REST — and the OpenAPI description of it — arrives with the first machine consumer (`adr/0020-graphql-as-the-only-transport.adr.md`) |
-| **No authentication and no authorization** | Neither is implemented. `adr/0021-operational-baseline-from-the-platform.adr.md` adopts the operational baseline and deliberately stops short of authentication, because verifying a token is production code and arrives behind a failing test and a spec; the intended shape is token verification with **no roles**, since a platform-wide roles and permissions concept does not exist yet — a workshop is pending, and inventing three roles here would be inventing the wrong three. This row previously read as though authentication already existed, which contradicted the ADR |
-| **No live inbound sync** | Nothing subscribes to Radar or Odoo. Reading a real contract out of Radar is a one-off migration exercise, not a running integration |
-| **No document storage** | Contract PDFs live in the external DMS (d.velop). This service holds a pointer and, in the MVP, a stub behind the port |
-| **No employer onboarding** | The trigger that creates a master contract is mocked. The real one is the onboarding service, whose message format is not documented anywhere yet — so it is not guessed at (`adr/0019-outbound-synchronisation-through-an-outbox.adr.md` port spec) |
-| **No optimistic locking** | No `@Version`. Concurrent updates are last-write-wins |
-| **No audit trail as a feature** | The outbox gives it a foundation; nothing consumes it |
+| **No REST** | GraphQL is the only transport; REST and its OpenAPI description arrive with the first machine consumer (`adr/0020-graphql-as-the-only-transport.adr.md`). `api/` therefore holds only `.graphql` files |
+| **No authentication and no authorization** | Neither is implemented. Every GraphQL operation is unauthenticated, which is fine for a service with no data and is not fine the moment one runs anywhere shared. `adr/0021` adopts the operational baseline and deliberately stops short, because verifying a token is production code and arrives behind a failing test and a spec |
+| **No query side** | Reads go through the write repository. This is now a **decision** rather than an absence — `adr/0025` names the three conditions that reopen it |
+| **No optimistic locking** | No `@Version`. Concurrent updates are last-write-wins, and this is why `customerNumber` is *not* globally unique: two concurrent creates would both read "no such customer number" and both succeed, so the constraint would be advisory. Uniqueness that holds is uniqueness inside one aggregate |
+| **No outbound integration** | Nothing is synchronised anywhere. Domain events are published through `DomainEventPublisher` and logged; nothing consumes them |
+| **No audit trail** | Domain events are the foundation for one; nothing builds on it |
+| **No soft delete** | Deleting a Master removes it and its Contracts. `status` is about whether a Master is trading, not whether it exists |
 
 Also not goals: a microservice split before the domain is understood, premature scalability
 patterns, and coverage thresholds as merge gates.
 
 
-## The example still in the tree
+## The state of the tree
 
-`booking` and `guide` — a tour-booking service — are inherited from the template this
-repository grew out of. They are the only code the 27 ArchUnit rules and the documentation
-gates currently have to check, so they stay until the first Contract Management context is
-complete end to end, and then leave in one commit along with `adr/0003-separate-guide-bounded-context.adr.md`.
+The service currently has **no bounded contexts and no domain code**. The tour-booking example
+inherited from the template and the earlier leasing implementation were deleted together, and
+the six specifications above are written but not implemented.
 
-They are not a reference for how this domain should look. When they contradict this
-document, this document wins and they are what is stale.
+That state is transient and is not silent: sixteen architecture rules have nothing to check
+and are allowed to pass empty behind a single named allowance, guarded by a test that fails
+the moment the first context is registered. `adr/0026-the-empty-service-is-a-transient-state.adr.md`
+records the arrangement and the instruction to retire it.
 
 
 ## What "done" means
 
-Not "contract management is complete" — it will not be. Done, per increment, is what
-`test.definition.md` § 7 says: every gate green, including the ones that read the
-documentation, and every Definition of Done box in the use case's spec pointing at an
-artifact that exists.
+Not "contract management is complete". Done, per increment, is what `test.definition.md` § 7
+says: every gate green, including the ones that read the documentation, and every Definition
+of Done box in the use case's spec pointing at an artifact that exists.

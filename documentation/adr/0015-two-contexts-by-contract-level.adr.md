@@ -1,7 +1,13 @@
 # ADR 0015 – Two Bounded Contexts, Split by Contract Level
 
 ## Status
-Accepted
+**Superseded by `adr/0024-one-context-with-master-as-the-aggregate-root.adr.md`.**
+
+The `mlc`/`ilc` split was drawn from the JCM contract-level distinction. That domain, its data
+model and the `mlc` implementation built on it were all removed together, and the service is
+now scoped to a Master owning several Contracts — which has no master/individual level to
+split on. ADR-0024 answers the same question for the current scope and explains why one
+context is the right count here and two was the right count there.
 
 ## Context
 

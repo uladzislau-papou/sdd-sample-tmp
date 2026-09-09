@@ -70,7 +70,8 @@ class ClassRoleRulesTest {
             ).because(
                 "coding-style.definition.md 3.3: the whole HTTP surface lives on the " +
                     "*RestAPI interface, so the wire contract can be read in one file.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -99,7 +100,8 @@ class ClassRoleRulesTest {
                 "coding-style.definition.md 3.3: the GraphQL split mirrors the REST one. " +
                     "That the annotations are found on the interface at all was verified " +
                     "empirically, not assumed.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -109,12 +111,14 @@ class ClassRoleRulesTest {
             .that().haveSimpleNameEndingWith("RestController")
             .should().beAnnotatedWith("org.springframework.web.bind.annotation.RestController")
             .because("a delivery adapter Spring never registers is dead code that still compiles.")
+            .whileTheServiceHasNoBoundedContexts()
             .check(production)
 
         classes()
             .that().haveSimpleNameEndingWith("GraphQLController")
             .should().beAnnotatedWith("org.springframework.stereotype.Controller")
             .because("Spring for GraphQL discovers resolvers by @Controller and nothing else.")
+            .whileTheServiceHasNoBoundedContexts()
             .check(production)
     }
 
@@ -158,7 +162,8 @@ class ClassRoleRulesTest {
                 "architecture.definition.md 4.4: a driver is reached through its inbound " +
                     "port. A driver that maps a route is an adapter wearing the wrong name, " +
                     "and it silently ties the use case to one transport.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -168,6 +173,7 @@ class ClassRoleRulesTest {
             .that().resideInAPackage("..inbound.listener..")
             .should().dependOnClassesThat().resideInAPackage("..outbound..")
             .because("architecture.definition.md 4.8: a listener is an inbound adapter like any other.")
+            .whileTheServiceHasNoBoundedContexts()
             .check(production)
     }
 
@@ -176,21 +182,25 @@ class ClassRoleRulesTest {
     fun corePackagesHoldOnlyTheirRole() {
         classes().that().resideInAPackage("..core.inport.command..")
             .should().haveSimpleNameEndingWith("Command")
-            .because("coding-style.definition.md 4.1").check(production)
+            .because("coding-style.definition.md 4.1").whileTheServiceHasNoBoundedContexts()
+            .check(production)
 
         classes().that().resideInAPackage("..core.inport.result..")
             .should().haveSimpleNameEndingWith("Result")
-            .because("coding-style.definition.md 4.1").check(production)
+            .because("coding-style.definition.md 4.1").whileTheServiceHasNoBoundedContexts()
+            .check(production)
 
         classes().that().resideInAPackage("..core.inport.usecase..")
             .should().haveSimpleNameEndingWith("UseCase")
             .andShould().beInterfaces()
             .because("coding-style.definition.md 4.1: an inbound port is an interface.")
+            .whileTheServiceHasNoBoundedContexts()
             .check(production)
 
         classes().that().resideInAPackage("..inbound.driver..")
             .should().haveSimpleNameEndingWith("Driver")
-            .because("coding-style.definition.md 4.1").check(production)
+            .because("coding-style.definition.md 4.1").whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -204,7 +214,8 @@ class ClassRoleRulesTest {
             .because(
                 "architecture.definition.md 4.5: a DTO that carries a domain type makes the " +
                     "wire format an alias of the domain, so neither can change alone.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -218,7 +229,8 @@ class ClassRoleRulesTest {
                 "architecture.definition.md 4.4: an inbound port is implemented by exactly " +
                     "one kind of class. An adapter implementing it directly would skip the " +
                     "transaction boundary.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 
     @Test
@@ -252,6 +264,7 @@ class ClassRoleRulesTest {
             ).because(
                 "an outbound port is the core's vocabulary. A port returning an entity or a " +
                     "Page has already leaked the adapter it was meant to hide.",
-            ).check(production)
+            ).whileTheServiceHasNoBoundedContexts()
+            .check(production)
     }
 }

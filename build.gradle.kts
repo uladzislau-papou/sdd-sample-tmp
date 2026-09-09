@@ -99,7 +99,23 @@ val integrationTest by tasks.registering(Test::class) {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
-    filter { includeTestsMatching("*IT") }
+    filter {
+        includeTestsMatching("*IT")
+
+        // TRANSIENT — remove with the empty-service allowance.
+        //
+        // The service has no bounded contexts and therefore no `*IT`, and Gradle fails a Test
+        // task whose filter matches nothing. Same shape as the sixteen ArchUnit rules that
+        // currently check nothing: the honest statement is "there is no subject yet", not
+        // "this gate is optional".
+        //
+        // It is listed in EmptyServiceTripwireTest's retirement instructions, so it is
+        // re-armed on the same increment as the rest. Leaving it in permanently would hide the
+        // one failure mode worth keeping — an `*IT` suite silently excluded by a bad filter.
+        //
+        // See documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md
+        isFailOnNoMatchingTests = false
+    }
     shouldRunAfter(tasks.named("test"))
 }
 

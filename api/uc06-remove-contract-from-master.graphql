@@ -1,0 +1,99 @@
+# UC06 — RemoveContractFromMaster over GraphQL.
+#
+# A contract is never addressed without its Master: there is no repository that could find
+# one without it (adr/0024). Removal is by contract id and not by number — the number is
+# unique within the Master but mutable in principle, and an API keyed on a mutable field is
+# one rename away from removing the wrong row.
+#
+# Unlike UC05 there is no status precondition. Only *adding* is gated by I-09; a Master that
+# has stopped trading must still be able to shed contracts.
+#
+# SDD: documentation/use-cases/uc06-remove-contract-from-master.spec.md § 9
+
+# --- Happy path. --------------------------------------------------------------------------
+# Substitute a contractId returned by uc05-add-contract-to-master.graphql.
+mutation RemoveContractFromMaster {
+  removeContractFromMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractId: "11111111-1111-1111-1111-111111111111"
+  }) {
+    masterId
+    contractId
+    contractCount
+  }
+}
+
+# --- AC-03: removing the last contract is permitted. --------------------------------------
+# The Master remains, holding none. contractCount comes back 0.
+mutation RemoveLastContract {
+  removeContractFromMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000002"
+    contractId: "22222222-2222-2222-2222-222222222222"
+  }) {
+    masterId
+    contractCount
+  }
+}
+
+# --- AC-04: removal from an INACTIVE Master succeeds. -------------------------------------
+# The asymmetry with UC05, and the one most likely to be "fixed" by mistake. A rule that
+# traps data inside a deactivated record gets worked around by reactivating the Master, which
+# is worse than whatever the rule was preventing.
+mutation RemoveContractFromInactiveMaster {
+  removeContractFromMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000003"
+    contractId: "33333333-3333-3333-3333-333333333333"
+  }) {
+    masterId
+    contractCount
+  }
+}
+
+# --- NOT_FOUND: this Master holds no contract with that id. -------------------------------
+mutation RemoveUnknownContract {
+  removeContractFromMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractId: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+  }) {
+    contractId
+  }
+}
+
+# --- NOT_FOUND (AC-06): the contract exists, but under a different Master. ----------------
+# Same classification and the same exception as above, deliberately. From this Master's point
+# of view the contract does not exist — and a distinct "wrong owner" error would have to
+# reveal that it exists elsewhere, which the caller has shown no right to know.
+mutation RemoveContractOwnedByAnotherMaster {
+  removeContractFromMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000002"
+    contractId: "11111111-1111-1111-1111-111111111111"
+  }) {
+    contractId
+  }
+}
+
+# --- NOT_FOUND: unknown Master. -----------------------------------------------------------
+mutation RemoveContractFromUnknownMaster {
+  removeContractFromMaster(input: {
+    masterId: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    contractId: "11111111-1111-1111-1111-111111111111"
+  }) {
+    contractId
+  }
+}
+
+# --- BAD_REQUEST: an id that is not a UUID. -----------------------------------------------
+mutation RemoveContractMalformedId {
+  removeContractFromMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractId: "not-a-uuid"
+  }) {
+    contractId
+  }
+}
+
+# --- AC-08: a freed contract number becomes reusable. -------------------------------------
+# After the happy path removes C-0001, re-running uc05's AddContractToMaster with C-0001
+# succeeds. I-07 is over *current* contracts, not over every number ever used — the
+# alternative is a defensible design that this is not, and the difference is invisible until
+# someone tries it.

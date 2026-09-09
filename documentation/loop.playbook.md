@@ -25,7 +25,7 @@ objectively checkable criteria (`sdd.playbook.md` § 4.2). That list, and nothin
 else, decides when the loop stops.
 
 ```
-documentation/use-cases/uc06-mark-booking-active.spec.md
+documentation/use-cases/uc06-remove-contract-from-master.spec.md
   ## 10. Definition of Done      ← authoritative
         │
         │ mirrored each iteration

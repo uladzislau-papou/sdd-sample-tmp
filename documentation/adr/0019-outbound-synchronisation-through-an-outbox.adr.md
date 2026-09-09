@@ -1,7 +1,13 @@
 # ADR 0019 – Outbound Synchronisation Through an Outbox
 
 ## Status
-Accepted
+**Withdrawn** — its subject no longer exists.
+
+The outbox existed to synchronise contract data to Radar and Odoo. There are no outbound
+systems in the current scope, so there is nothing to synchronise and no outbox. `adr/0002`
+governs domain-event publication and is untouched.
+
+Withdrawing this also withdraws `adr/0022`, which decided *how* the outbox row was written.
 
 ## Context
 

@@ -1,8 +1,8 @@
 # Contract Management Service
 
-The backend for JRL's leasing contract management: master leasing contracts
-(*Leasingrahmenvertrag*, LRV) agreed with employers, and the individual leases
-(*Einzelleasingvertrag*, ELV) issued under them.
+A CRUD API over a **Master** and the **Contracts** it holds. The domain is deliberately
+small and deliberately invented — the subject of this repository is the *method*, and the
+domain is the specimen it is practised on.
 
 Built spec-first, structured as Ports & Adapters, and — the part that actually matters —
 with its rules **enforced by the build** rather than described in prose.
@@ -14,13 +14,19 @@ what the service is for and what it deliberately is not.
 
 ## Status
 
-Early. The domain packages do not exist yet; the first use case is the creation of a master
-contract. What does exist is the process, the gates, and a tour-booking example inherited
-from the template this repository grew out of.
+**No domain code.** The `contract` bounded context is decided
+([`adr/0024`](documentation/adr/0024-one-context-with-master-as-the-aggregate-root.adr.md))
+and specified across six use cases in
+[`documentation/use-cases/`](documentation/use-cases/), and none of them is implemented. What
+exists is the process, the ADR set, and the gates.
 
-**That example is not a reference for this domain.** It is the only code the 27 ArchUnit
-rules and the documentation gates currently have to check, so it stays until the first
-Contract Management context is complete end to end, and then leaves in one commit.
+That state is transient and it is not silent. Sixteen ArchUnit rules currently have nothing to
+check, and rather than being deleted or globally disarmed they are marked with one named
+allowance — `whileTheServiceHasNoBoundedContexts` — guarded by a test that **fails the moment
+the first context is registered**, with instructions to retire itself. See
+[`adr/0026`](documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md).
+
+`./gradlew check` is green. Read that in the light of the paragraph above.
 
 ---
 
@@ -84,9 +90,11 @@ use case's Definition of Done is met.
 Non-negotiable: **no implementation without a spec, no architectural change without an ADR,
 no production code without a failing test.**
 
-Specifications are derived from the `JCM` Confluence space. They are written in English
-against German sources, so a disputed term is settled by going back to the page rather than
-by re-reading the spec.
+Specifications have no external source: the domain is invented, and each spec's § 1 says so
+rather than leaving the field looking merely unfilled. The cost is real and is stated in
+`project.definition.md` — the conformance axis of `/code-review` cannot follow a spec back to
+an original request, so it verifies the code against the spec and the spec against the domain
+spec, and nothing verifies the domain spec against the world.
 
 ---
 
@@ -143,9 +151,9 @@ document, and the three lists that must exist in exactly one place.
 ## Provenance
 
 The method this repository uses — Spec-Driven Development, the two-loop process, the
-document ontology and the review agents — comes from **Alpine Booking**, a Java reference
-implementation written by **Dominik Galler**. The Kotlin port, the gates that parse
-documentation, and the decisions in `adr/0009` onward are not his work.
+document ontology and the review agents — comes from a Java reference implementation written
+by **Dominik Galler**. The Kotlin port, the gates that parse documentation, and the decisions
+in `adr/0009` onward are not his work.
 
 The original carries no licence file, which by default means all rights reserved. This copy
 exists for personal reuse and is not distributed. Going further than that — publishing it,

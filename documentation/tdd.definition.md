@@ -81,9 +81,9 @@ Required evidence, quoted from the real run:
 - the assertion message or exception, verbatim
 
 ```
-> ./gradlew test --tests '*TourBookingTest.markActive_throwsInvalidBookingStateException_whenStillRequested'
+> ./gradlew test --tests '*MasterTest.addContract_throwsMasterNotActiveException_whenMasterIsInactive'
 
-TourBookingTest > markActive_throwsInvalidBookingStateException_whenStillRequested FAILED
+MasterTest > addContract_throwsMasterNotActiveException_whenMasterIsInactive FAILED
     java.lang.AssertionError:
     Expecting code to raise a throwable.
 ```

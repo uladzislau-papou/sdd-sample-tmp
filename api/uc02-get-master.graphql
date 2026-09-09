@@ -1,0 +1,65 @@
+# UC02 — GetMaster over GraphQL.
+#
+# The only read in the service. adr/0025-reads-go-through-the-repository-outport.adr.md
+# decided it uses the same MasterRepository the writes use, and named the three conditions
+# that would reopen that.
+#
+# This operation replaces Query.apiVersion, which existed only so the schema had a legal
+# Query root before there was a read side.
+#
+# SDD: documentation/use-cases/uc02-get-master.spec.md § 9
+
+# --- Happy path: a Master with its contracts. ---------------------------------------------
+# Contracts come back ordered by contractNumber ascending (AC-02). Substitute an id returned
+# by uc01-create-master.graphql.
+query GetMaster {
+  master(id: "00000000-0000-0000-0000-000000000001") {
+    id
+    name
+    customerNumber
+    status
+    createdAt
+    contracts {
+      id
+      contractNumber
+      startDate
+      endDate
+      monthlyAmount
+      currency
+    }
+  }
+}
+
+# --- AC-03: a Master holding nothing returns an empty list, not null and not an error. -----
+query GetMasterWithNoContracts {
+  master(id: "00000000-0000-0000-0000-000000000002") {
+    id
+    contracts { id }
+  }
+}
+
+# --- AC-05: an INACTIVE Master is still readable. -----------------------------------------
+# There is no soft delete here; status says whether a Master is trading, not whether it is
+# visible. Deactivate one with uc03-update-master.graphql, then run this.
+query GetInactiveMaster {
+  master(id: "00000000-0000-0000-0000-000000000003") {
+    id
+    status
+  }
+}
+
+# --- NOT_FOUND: no Master with that id. ---------------------------------------------------
+query GetMasterNotFound {
+  master(id: "ffffffff-ffff-ffff-ffff-ffffffffffff") {
+    id
+  }
+}
+
+# --- BAD_REQUEST: the id is not a UUID. ---------------------------------------------------
+# Distinct from NOT_FOUND on purpose: telling a caller with a typo to go looking for a record
+# that never existed sends them the wrong way.
+query GetMasterMalformedId {
+  master(id: "not-a-uuid") {
+    id
+  }
+}

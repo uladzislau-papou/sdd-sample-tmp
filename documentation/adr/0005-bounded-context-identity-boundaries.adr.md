@@ -1,7 +1,13 @@
 # ADR 0005 – Bounded Context Identity Boundaries
 
 ## Status
-Accepted
+Accepted — with its worked example gone.
+
+`TourId` was the shared kernel's only identity type and was deleted with the tour example, so
+the shared kernel currently holds **no** identity at all. The decision itself is unaffected:
+a foreign context's identity still crosses as an opaque value, and this ADR's reservation —
+adding a member to the shared kernel requires an ADR — is now unspent. `adr/0023` spent it
+once, declining to promote three `mlc` types, and was withdrawn with them.
 
 ## Context
 

@@ -1,7 +1,14 @@
 # ADR 0023 – Participant Identities Are Context-Local, Not Shared
 
 ## Status
-Accepted
+**Withdrawn** — its subject no longer exists.
+
+It declined to promote `EmployerId`, `LessorId` and `PartnerNumber` to `shared.domain`. All
+three types were deleted with the `mlc` context.
+
+The reservation it was answering is **not** withdrawn: `adr/0005` still requires an ADR before
+a second identity joins the shared kernel, and that reservation is now unspent again — the
+shared kernel currently holds no identity type at all.
 
 ## Context
 

@@ -48,8 +48,8 @@ Partial or evolving states are allowed if they are explicitly modelled (e.g. Pen
 Invariants MAY depend on the current lifecycle state.
 
 Example:
-- confirmedAt MAY only be set if status == CONFIRMED.
-- A CancelledBooking MUST NOT allow further modifications.
+- A `Contract` MAY only be added while its `Master` is `ACTIVE`.
+- A `Master` MUST reject a contract number one of its contracts already carries.
 
 State transitions MUST enforce invariants atomically.
 
@@ -125,24 +125,32 @@ an identity, it is a Value Object. Crossing a context boundary, it is a string.
   - If referenced across aggregates → define in a shared domain type package
     **within the bounded context** (not in `shared`).
 
-Examples: `BookingId` in `booking.core.domain.tourbooking`, `GuideTourId` in
-`guide.core.domain.guidetour`.
+Examples: `MasterId` and `ContractId` in `contract.core.domain.master`. Both are inside the
+same aggregate, so both are defined there — `ContractId` is not "shared" merely because two
+types mention it.
 
 **Identities owned by no context of ours — a Value Object, local by default.**
 
-An external system's identifier — an employer, a lessor, a partner number — is owned by
-neither of our contexts. `adr/0005-bounded-context-identity-boundaries.adr.md` calls this
-**category 3** and permits it to live in `shared.domain` as a Value Object *when it is
-referenced by more than one of our contexts*. Both conditions have to hold; "both contexts use
-it" is not the test on its own.
+An external system's identifier is owned by none of our contexts.
+`adr/0005-bounded-context-identity-boundaries.adr.md` calls this **category 3** and permits it
+to live in `shared.domain` as a Value Object *when it is referenced by more than one of our
+contexts*. Both conditions have to hold; "more than one context uses it" is not the test on its
+own.
 
 When only one context references it, the identity is a Value Object **local to that context**,
 exactly like an own identity, and it is **not** promoted to `shared`. Promoting it later, when
 a second context genuinely needs it, is a new ADR.
 
-Examples: `EmployerId`, `LessorId` and `PartnerNumber` in
-`mlc.core.domain.masterleasingcontract`, per
-`adr/0023-participant-identities-are-context-local.adr.md`.
+**This rule currently has no subject, twice over.** The service has one bounded context
+(`adr/0024`) and no foreign identities at all, so category 3 is empty and the shared kernel
+holds no identity type. `adr/0023` was the one time the rule was exercised — it declined to
+promote three identities — and it was withdrawn with the domain that produced them. ADR-0005's
+reservation is therefore unspent again.
+
+Example, historical: `EmployerId`, `LessorId` and `PartnerNumber`, per
+`adr/0023-participant-identities-are-context-local.adr.md`. Those types no longer exist, and
+the ADR is withdrawn; it is cited because it is the only worked application of this rule the
+repository has.
 
 > **This clause was missing and the gap was load-bearing.** ADR-0005 laid out three
 > categories, and a reader looking for where to put an external identity referenced by one
@@ -170,16 +178,17 @@ The receiving context does not own the identity, cannot validate its invariants,
 must not reason about its structure. A `String` states that honestly; a Value Object
 would imply knowledge the context does not have.
 
-Example: `guideTourId` is owned by `guide` (as `GuideTourId`). Where `booking`
-carries it — `TourBooking.markActive(Instant, String)`, `BookingActivated`,
-`TourStarted` — it is a plain `String` correlation id.
+There is no current example: the service has one bounded context (`adr/0024`), so no identity
+is foreign to the context holding it. The shape to look for is an aggregate in context A
+carrying context B's identity as a plain `String` on a method parameter, an event payload or a
+field — never as B's Value Object.
 
 Constraints on foreign identities:
 - MUST be treated as opaque. No parsing, no substring, no format assumptions, no
   reconstructing the owning context's Value Object from it.
 - MUST NOT carry business meaning in the receiving context. It is a correlation
   handle for tracing and for calling back through a port — never a value to branch on.
-- SHOULD be named so the ownership is obvious (`guideTourId`, not `id`).
+- SHOULD be named so the ownership is obvious (`billingAccountId`, not `id`).
 - If the receiving context starts enforcing rules about a foreign identity, that is a
   signal the boundary is wrong — raise it rather than promoting the type.
 
@@ -191,9 +200,11 @@ Value Object, because doing so couples our contexts to the external contract rat
 than to each other — which is what the shared kernel is for
 (`architecture.definition.md` § 9).
 
-`shared.domain.TourId` is the only such case today: there is no `Tour` aggregate in
-this system, the tour catalogue is external, and both contexts must validate the
-reference identically. See `adr/0005-bounded-context-identity-boundaries.adr.md`.
+**There is no such case today**, and `shared.domain` holds no identity at all. The category
+has been exercised exactly once in this repository's history, by an identity for an external
+catalogue that two contexts both had to validate identically. See
+`adr/0005-bounded-context-identity-boundaries.adr.md`, whose reservation — a second member
+requires its own ADR — is therefore unspent.
 
 This category is deliberately narrow. "Both contexts use it" is not sufficient
 justification — the test is whether *neither* context owns it. If one does, the other
@@ -239,15 +250,14 @@ Worked both ways, because the rule is not "prefer events":
 
 | Field | Stored? | The observer |
 |-------|---------|--------------|
-| `GuideTour.startedAt` | **yes** | invariant I-04 states that it is absent exactly while the tour is `SCHEDULED`, so the aggregate has to be able to answer the question |
-| `TourBooking.availableCapacity` | **yes** | the capacity observed when the decision was made. A later decision has to be judgeable against what was actually seen, not against a fresh reading |
-| `BookingActivated.guideTourId` | no | nothing queries which guide tour caused a transition, and no invariant guards on it. It rides the event |
-| `startedAt` on `TourBooking` | no | another context's fact, relayed. No booking invariant compares against it, so it is event payload and the booking stores only that it *is* active |
+| `Master.status` | **yes** | invariant I-09 guards on it: a contract may be added only while the Master is `ACTIVE`, so the aggregate has to be able to answer the question |
+| `Master.createdAt` | **yes** | UC01's AC-01 asserts it, and UC02 returns it. An acceptance criterion is an observer |
+| `Contract.period` | **yes** | I-04 guards it at construction, and UC02 returns it |
+| `MasterCreated.occurredAt` | no | it is the event's own timestamp, not the aggregate's state. `Master.createdAt` is the stored fact; the event carries a copy for its consumer |
+| a "last modified" timestamp on `Master` | no | nothing queries it, no invariant guards on it, and no criterion asserts it. UC03 changes a Master and stores no trace of when — `project.definition.md` lists audit as a Non-Goal |
 
-Note the asymmetry between the last two rows and `GuideTour.startedAt`: the *same value*
-is state in one aggregate and event payload in another, because the observer differs. That
-is the rule working, not an inconsistency — consistency between aggregates is not the
-criterion.
+The last row is the one that costs something to hold to. A modification timestamp is the most
+natural field in the world to add, it looks like data, and nothing in the model asks for it.
 
 The temptation this rule resists is storing a value because it was passed in and looks like
 data. A column nothing reads still has to be migrated, mapped, round-tripped and tested,

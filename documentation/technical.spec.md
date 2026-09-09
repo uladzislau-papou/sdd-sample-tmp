@@ -68,10 +68,11 @@ The stack is deliberately opinionated, in support of:
   `outbound.persistence` and a mapper to the aggregate. Same as the platform's other
   service, so the operational knowledge transfers; unlike it, the entities may not be the
   aggregates.
-- Both bounded contexts share one database, and their schemas MUST stay separable: **no
-  foreign key from an `ilc` table into an `mlc` table**. That constraint is what keeps
-  `adr/0016-single-deployable-for-the-mvp.adr.md` reversible, and it is the one most likely
-  to be broken by accident, because the ORM makes it convenient.
+- There is one bounded context (`adr/0024-one-context-with-master-as-the-aggregate-root.adr.md`)
+  and one database. A foreign key **inside** an aggregate is expected: `contract.master_id`
+  references `master` and carries `ON DELETE CASCADE`, because a contract cannot outlive its
+  Master. A foreign key **between** aggregates would be the thing to argue about, and there is
+  no second aggregate to argue about it with.
 - Enforced by `DependencyRulesTest.rule6_noPersistenceTypeInTheCore` and
   `ClassRoleRulesTest.repositoryOutportsExposeNoPersistenceType`
 
@@ -135,7 +136,7 @@ Naming: `V<version>__<TYPE>_<description>.sql`, where `<TYPE>` is one of:
 | `DML` | `INSERT`/`UPDATE`/`DELETE`, seed data |
 | `DCL` | `GRANT`, `REVOKE` |
 
-Example: `V1__DDL_create_tour_booking.sql`, `V2__DML_seed_reference_data.sql`
+Example: `V1__DDL_create_master.sql`, `V2__DML_seed_reference_data.sql`
 
 Table names are prefixed with their context — `mlc_…`, `ilc_…` — for the same reason the
 foreign-key rule above exists: the prefix makes the separability constraint visible in a
@@ -180,15 +181,20 @@ Allowlisted in `.claude/settings.json` so agents can run them without prompting.
 
 ## Outbound Integration
 
-- Synchronisation towards Radar and Odoo goes through an **outbox**, never a foreign call
-  inside our transaction — `adr/0019-outbound-synchronisation-through-an-outbox.adr.md`.
-  The mechanism is fixed; the field mapping is an open question recorded in `notes.md`.
-- Foreign representations stop at the adapter. No Odoo or Radar type reaches `core` or
-  `shared.domain` — `adr/0017-contract-data-ownership-boundary.adr.md`.
-- Contract documents live in the external DMS (d.velop). This service stores a pointer and,
-  in the MVP, a stub behind the port. **No object storage of our own**: the platform's other
-  service carries a minio/S3 adapter, and adopting it here would build a store that is
-  destined to be thrown away.
+**There is none.** Nothing is synchronised anywhere, nothing is fetched from a foreign system,
+and no object storage exists (`project.definition.md`, Non-Goals). Domain events are published
+through `DomainEventPublisher` inside the caller's transaction (`adr/0002`) and logged; nothing
+consumes them.
+
+Two rules apply the moment that changes, and both are recorded now rather than rediscovered:
+
+- Foreign representations stop at the adapter. No foreign type reaches `core` or
+  `shared.domain`. `adr/0017-contract-data-ownership-boundary.adr.md` is withdrawn with the
+  domain that motivated it and still carries the argument.
+- A foreign call never happens inside our transaction. `adr/0019` and `adr/0022` are withdrawn
+  with the same domain and record why an outbox, written synchronously in the caller's
+  transaction, was the answer.
+
 - No state-machine framework — `adr/0018-lifecycle-transitions-belong-to-the-aggregate.adr.md`.
 
 
@@ -198,17 +204,18 @@ Taken from the platform's other service, so that this one behaves the same way i
 production:
 
 - **Actuator** plus micrometer, exporting OTLP and Prometheus.
-- **Authentication** verifies a JWT. There are no roles — a platform-wide roles and
-  permissions concept does not exist yet, and `notes.md` records that as an open question
-  rather than filling it in.
+- **Authentication is not implemented.** Verifying a JWT is production code and arrives behind
+  a failing test and a spec, which is why `adr/0021` deliberately stopped short of it. Every
+  GraphQL operation is unauthenticated today; `notes.md` carries it as the next real increment.
 - **lefthook** git hooks: `spotlessApply` and static analysis pre-commit, `test` pre-push,
   plus branch-name and commit-message validation. The pre-commit static-analysis hook runs
   `detektMain detektTest`, **not** `detekt` — the convenience task does not do
   type resolution, so a hook that ran it would go green while `check` goes red.
 - **jacoco** produces a coverage report. It is **not** a merge gate: the canonical gate list
-  is `test.definition.md` § 7 and a coverage threshold is deliberately absent from it. A
-  number that blocks a merge gets defended, and the weakest area here — integration with
-  Radar and Odoo — is not something coverage measures.
+  is `test.definition.md` § 7 and a coverage threshold is deliberately absent from it. A number
+  that blocks a merge gets defended rather than acted on, and the weakest areas here — an
+  invented domain's rules, and sixteen architecture rules currently matching nothing
+  (`adr/0026`) — are not things coverage measures.
 
 
 ## Non-Goals (Technical)

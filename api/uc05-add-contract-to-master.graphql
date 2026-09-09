@@ -1,0 +1,195 @@
+# UC05 — AddContractToMaster over GraphQL.
+#
+# The use case the aggregate boundary exists for: all three aggregate-level invariants
+# (I-07 duplicate number, I-08 the fifty cap, I-09 the Master must be ACTIVE) are enforced
+# here, and none can be checked by looking at the incoming contract alone.
+#
+# **This file covers every condition, not every classification.** Three conflict conditions
+# collapse into BAD_REQUEST because GraphQL has no conflict classification — see
+# uc05-add-contract-to-master.spec.md § 9. Keeping them as separate requests is what makes
+# each one executable; merging them would hide exactly the distinction the spec warns about.
+#
+# monthlyAmount crosses as a decimal string. GraphQL's Float is a binary double and cannot
+# hold money exactly, and this service declares no decimal scalar.
+#
+# startDate and endDate are LocalDate, which is why a client may supply them at all:
+# architecture.definition.md § 8.1 governs claims about *our clock*, and a contract's term is
+# business data the parties agreed.
+#
+# SDD: documentation/use-cases/uc05-add-contract-to-master.spec.md § 9
+
+# --- Happy path. --------------------------------------------------------------------------
+mutation AddContractToMaster {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0001"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "149.50"
+    currency: "EUR"
+  }) {
+    masterId
+    contractId
+    contractNumber
+    contractCount
+  }
+}
+
+# --- AC-11: periods may overlap. ----------------------------------------------------------
+# Run after the happy path. It succeeds. Non-overlapping periods is the first constraint a
+# reader invents for this model, and project.definition.md puts it out of scope — so this
+# request exists to stop someone adding the rule later believing they are closing a gap.
+mutation AddOverlappingContract {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0002"
+    startDate: "2026-06-01"
+    endDate: "2027-05-31"
+    monthlyAmount: "99.00"
+    currency: "EUR"
+  }) {
+    contractId
+    contractCount
+  }
+}
+
+# --- BAD_REQUEST (I-07): duplicate contract number within this Master. --------------------
+# Re-run the happy path. C-0001 is already taken here.
+
+# --- AC-04: the same number under a different Master succeeds. ----------------------------
+# The pair with I-07 above, and neither means anything alone: together they say the
+# uniqueness is scoped to the aggregate, which is the difference between an invariant this
+# service can hold and a global constraint it cannot.
+mutation AddSameNumberToDifferentMaster {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000002"
+    contractNumber: "C-0001"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "149.50"
+    currency: "EUR"
+  }) {
+    contractId
+    contractCount
+  }
+}
+
+# --- BAD_REQUEST (I-09): the Master is INACTIVE. ------------------------------------------
+# Deactivate 000...003 with uc03-update-master.graphql first.
+mutation AddContractToInactiveMaster {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000003"
+    contractNumber: "C-0009"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "10.00"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}
+
+# --- BAD_REQUEST (I-08): the fifty-first contract. ----------------------------------------
+# Needs a Master already holding 50. Cheaper to assert in MasterTest than to set up here, and
+# the request is kept so the condition has a transport-level statement at all.
+mutation AddFiftyFirstContract {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0051"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "10.00"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}
+
+# --- AC-07: the precedence between I-09, I-07 and I-08. -----------------------------------
+# An INACTIVE Master, holding 50 contracts including C-0001, asked for C-0001. The answer is
+# MasterNotActiveException and not the other two. Without a fixed order, two correct-looking
+# implementations return different errors for the same request.
+mutation AddContractViolatingEverything {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000003"
+    contractNumber: "C-0001"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "10.00"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}
+
+# --- BAD_REQUEST (I-04): end date not after start date. -----------------------------------
+mutation AddContractWithInvertedPeriod {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0003"
+    startDate: "2026-12-31"
+    endDate: "2026-01-01"
+    monthlyAmount: "149.50"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}
+
+# --- BAD_REQUEST (I-05): three decimal places. --------------------------------------------
+mutation AddContractWithOverPreciseAmount {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0004"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "149.505"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}
+
+# --- BAD_REQUEST (I-05): a non-positive amount. -------------------------------------------
+mutation AddContractWithZeroAmount {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0005"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "0.00"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}
+
+# --- BAD_REQUEST (I-06): the currency is not three uppercase letters. ---------------------
+# The rule checks shape, not membership: validating against the ISO-4217 list needs a table,
+# and a table needs a source of truth this service does not have.
+mutation AddContractWithMalformedCurrency {
+  addContractToMaster(input: {
+    masterId: "00000000-0000-0000-0000-000000000001"
+    contractNumber: "C-0006"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "149.50"
+    currency: "eur"
+  }) {
+    contractId
+  }
+}
+
+# --- NOT_FOUND: unknown Master. -----------------------------------------------------------
+mutation AddContractToUnknownMaster {
+  addContractToMaster(input: {
+    masterId: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    contractNumber: "C-0007"
+    startDate: "2026-01-01"
+    endDate: "2026-12-31"
+    monthlyAmount: "149.50"
+    currency: "EUR"
+  }) {
+    contractId
+  }
+}

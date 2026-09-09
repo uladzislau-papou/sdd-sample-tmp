@@ -1,7 +1,12 @@
 # ADR 0016 – One Deployable for the MVP, Not Two Services
 
 ## Status
-Accepted
+**Withdrawn** — its subject no longer exists.
+
+The question was whether to build one deployable or two, against a platform component view
+drawing `MLA Management` and `ILA Management` as separate services. Neither service, neither
+context, nor the component view is part of this service's scope any more. Nothing replaced the
+decision, so "superseded" would be a lie.
 
 ## Context
 

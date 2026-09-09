@@ -1,0 +1,18 @@
+# Root schema for the Contract Management service.
+#
+# The GraphQL specification requires a schema to declare a `Query` root, even when the
+# service exposes nothing to read. This service currently exposes nothing at all: the
+# tour-booking example and the `mlc` context were deleted together, and the `contract`
+# context specified in documentation/use-cases/uc01-create-master.spec.md and its siblings
+# has not been built yet.
+#
+# So the root carries one infrastructure field rather than a domain read. Inventing a domain
+# query here would ship a read side that no spec asked for and no use case owns — and UC02
+# (GetMaster) is the spec that owns the first real one.
+#
+# The first increment of the `contract` context replaces this field, and adds its operations
+# by `extend type Mutation` against the root declared below.
+type Query {
+    "Version of this API. Not a domain read."
+    apiVersion: String!
+}

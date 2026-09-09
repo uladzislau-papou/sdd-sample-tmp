@@ -1,7 +1,12 @@
 # ADR 0022 – The Outbox Row Is Written Inside the Caller's Transaction
 
 ## Status
-Accepted
+**Withdrawn** — it decided a detail of `adr/0019`, which is itself withdrawn.
+
+Worth reading anyway, for the reason recorded in its Context rather than its Decision: it
+exists because ADR-0019 was written against `adr/README.md`'s one-line *summary* of ADR-0002
+instead of against ADR-0002 itself, and the summary had collapsed two different facts into one
+clause. That failure mode outlived the outbox.
 
 ## Context
 

@@ -1,7 +1,14 @@
 # ADR 0017 – The Contract Is Ours; Its Participants Are Not
 
 ## Status
-Accepted
+**Withdrawn** — its subject no longer exists.
+
+It drew an ownership boundary between the contract (ours) and its participants — employer,
+lessor, partner number — held in Radar and Odoo behind an anti-corruption layer. The current
+scope has no external participant systems and no foreign identities: a Master carries its own
+name and customer number, and nothing about it is mastered elsewhere.
+
+Its general argument is still worth reading before the first outbound integration arrives.
 
 ## Context
 

@@ -2,11 +2,16 @@
 
 ## Project
 
-A spec-driven service template, carrying a small working Tour Booking example that proves
-the template compiles and its gates fire. See [`README.md`](README.md) for what the
+A spec-driven service: a CRUD API over a **Master** and the **Contracts** it holds, built
+to exercise the method rather than the domain. See [`README.md`](README.md) for what the
 repository is, and
-[`documentation/project.definition.md`](documentation/project.definition.md) for the
-example's vision and — importantly — its non-goals.
+[`documentation/project.definition.md`](documentation/project.definition.md) for the vision
+and — importantly — its non-goals, which explain why the domain is deliberately invented.
+
+**The service currently has no domain code.** Six specifications are written and none is
+implemented; sixteen architecture rules have nothing to check and are allowed to pass empty
+behind a tripwire that fails the moment the first context is registered
+([`adr/0026`](documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md)).
 
 ---
 
@@ -75,7 +80,7 @@ Defined in [`documentation/execution.playbook.md`](documentation/execution.playb
 ### Outer loop — per use case
 
 Defined in [`documentation/loop.playbook.md`](documentation/loop.playbook.md),
-invoked as `/loop-uc UC07`:
+invoked as `/loop-uc UC01`:
 
 Read the use case's `## 10. Definition of Done` → pick one unmet criterion →
 run the inner loop → re-evaluate → repeat. The loop exits only when every DoD
@@ -150,7 +155,8 @@ Every use case exposed over a transport **must** have a matching executable requ
 - `api/uc<nn>-<use-case-name>.http` for REST
 - `api/uc<nn>-<use-case-name>.graphql` for GraphQL
 - One file **per transport the use case actually uses**, and **none** for a use case with no
-  external API — a listener-driven use case says so in its § 9. UC06 is the worked example.
+  external API — a listener-driven use case says so in its § 9. Every current use case is
+  reached over GraphQL, so all six have a `.graphql` file and none has a `.http` one.
 - Each file covers the happy path plus one request per documented status or error
   classification.
 - Files are written in the **Implement Phase**, not afterwards. `spec-documenter` verifies
