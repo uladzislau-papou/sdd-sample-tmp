@@ -60,6 +60,18 @@ Deleting every bounded context left 19 failing tests. Sixteen were ArchUnit rule
 asserting § 11 declares at least one context. Two were a `TimestampRulesTest` allowlist whose
 subject had been deleted.
 
+> **Superseded in a later session — read this box first.** The arrangement described below
+> was `adr/0026`'s, and it did not survive contact with the first `contract` increment. Its
+> retirement instruction could not be executed: five of the sixteen rules it relaxed describe
+> the `inbound.rest` and `inbound.listener` packages that `adr/0020` leaves the service
+> without, so its precondition could never expire.
+> `adr/0027-a-rule-with-no-possible-subject-is-deleted-not-allowed-to-pass-empty.adr.md`
+> supersedes it: rules with no subject *yet* keep an allowance named
+> `whileTheContractSliceIsIncomplete`, and the five with no *possible* subject were deleted
+> behind a restoration tripwire. `EmptyServiceAllowance.kt` and `EmptyServiceTripwireTest` no
+> longer exist. The account below is kept because the reasoning that produced it is still the
+> reasoning `adr/0027` inherits — only its scoping was wrong.
+
 The sixteen are now marked `whileTheServiceHasNoBoundedContexts()`, one named extension in
 `EmptyServiceAllowance.kt`, guarded by `EmptyServiceTripwireTest` — which asserts the registry
 has **no** contexts and fails the moment one is added, carrying its own retirement

@@ -43,7 +43,7 @@ why the code looks the way it does.
 | [0021](0021-operational-baseline-from-the-platform.adr.md) | Metrics, git hooks and a coverage report taken from the platform's other service; coverage reports, never blocks |
 | [0024](0024-one-context-with-master-as-the-aggregate-root.adr.md) | One bounded context, `contract`. `Master` is the only aggregate root and `Contract` is an entity inside it, so there is one repository and deleting a master deletes its contracts |
 | [0025](0025-reads-go-through-the-repository-outport.adr.md) | Reads use the same `MasterRepository` the writes use — no query port, no projection — with three written conditions for revisiting |
-| [0026](0026-the-empty-service-is-a-transient-state.adr.md) | Sixteen architecture rules are allowed to match nothing while the service has no bounded contexts, behind one named allowance whose precondition a test asserts |
+| [0027](0027-a-rule-with-no-possible-subject-is-deleted-not-allowed-to-pass-empty.adr.md) | A rule whose subject **cannot** exist is deleted and restored with the transport that gives it one; a rule with no subject **yet** keeps an allowance named for the condition that actually holds |
 
 **No decision is currently owed.** The read-side ADR was the standing debt across every
 earlier version of this index; 0025 pays it. Two items remain open and are *not* ADR debts —
@@ -66,6 +66,7 @@ edit is declared in that ADR's own Status block.
 | [0001](0001-technical-stack.adr.md) | Superseded by 0009 | The Java 21 / jOOQ / H2 stack describes nothing here any more |
 | [0006](0006-java-25-baseline.adr.md) | Superseded by 0010 | Baseline moved to JVM 17 |
 | [0015](0015-two-contexts-by-contract-level.adr.md) | Superseded by 0024 | The `mlc`/`ilc` split answered a contract-level question the current scope does not pose |
+| [0026](0026-the-empty-service-is-a-transient-state.adr.md) | Superseded by 0027 | Its retirement instruction assumed every relaxed rule would gain a subject with the first `contract` increment; five of them describe packages `adr/0020` forbids |
 | [0003](0003-separate-guide-bounded-context.adr.md) | **Withdrawn** | The `guide` context and the tour example were deleted. 0024 is now the precedent a new-context ADR follows |
 | [0008](0008-synchronous-cross-context-cancellation.adr.md) | **Withdrawn** | The use cases it governed were part of the example |
 | [0016](0016-single-deployable-for-the-mvp.adr.md) | **Withdrawn** | One deployable or two, for services that are no longer in scope |

@@ -214,8 +214,8 @@ production:
 - **jacoco** produces a coverage report. It is **not** a merge gate: the canonical gate list
   is `test.definition.md` § 7 and a coverage threshold is deliberately absent from it. A number
   that blocks a merge gets defended rather than acted on, and the weakest areas here — an
-  invented domain's rules, and sixteen architecture rules currently matching nothing
-  (`adr/0026`) — are not things coverage measures.
+  invented domain's rules, and the architecture rules still waiting on unbuilt layers of the
+  `contract` slice (`adr/0027`) — are not things coverage measures.
 
 
 ## Non-Goals (Technical)

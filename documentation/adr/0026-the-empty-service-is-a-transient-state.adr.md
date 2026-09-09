@@ -1,7 +1,13 @@
 # ADR 0026 – The Empty Service Is a Transient State, and Its Gate Relaxation Expires On Its Own
 
 ## Status
-Accepted
+Superseded by [0027](0027-a-rule-with-no-possible-subject-is-deleted-not-allowed-to-pass-empty.adr.md)
+
+The retirement instruction below could not be executed: it assumed the first `contract`
+increment would give every relaxed rule a subject, and five of them describe
+`inbound.rest` and `inbound.listener` packages that `adr/0020` forbids the service from
+having at all. 0027 splits the two populations. Superseded rather than withdrawn — the
+subject, architecture rules matching nothing, still exists.
 
 ## Context
 

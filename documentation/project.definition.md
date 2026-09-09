@@ -144,14 +144,25 @@ patterns, and coverage thresholds as merge gates.
 
 ## The state of the tree
 
-The service currently has **no bounded contexts and no domain code**. The tour-booking example
-inherited from the template and the earlier leasing implementation were deleted together, and
-the six specifications above are written but not implemented.
+The service has **one registered bounded context, `contract`**, and the first slice of domain
+code inside it. The tour-booking example inherited from the template and the earlier leasing
+implementation were deleted together; UC01 is now being implemented against the six
+specifications above, and UC02–UC06 are written but not started.
 
-That state is transient and is not silent: sixteen architecture rules have nothing to check
-and are allowed to pass empty behind a single named allowance, guarded by a test that fails
-the moment the first context is registered. `adr/0026-the-empty-service-is-a-transient-state.adr.md`
-records the arrangement and the instruction to retire it.
+That state is transient and is not silent, and the arrangement that keeps it honest is
+`adr/0027-a-rule-with-no-possible-subject-is-deleted-not-allowed-to-pass-empty.adr.md`
+(superseding `adr/0026`). It draws a line between two kinds of rule that match nothing:
+
+- A rule with no subject **yet** — the layers of the `contract` slice that are still unbuilt —
+  is allowed to pass empty behind one named allowance, `whileTheContractSliceIsIncomplete`,
+  and a tripwire that fails once every awaited package exists.
+- A rule with no **possible** subject — five rules describing the `inbound.rest` and
+  `inbound.listener` packages that `adr/0020` leaves the service without — was **deleted**, on
+  the written condition that it is restored in the increment that gives it one. A second
+  tripwire fails on the commit that creates either package.
+
+The distinction is the correction `adr/0027` makes to `adr/0026`, which bundled both into one
+allowance whose precondition could therefore never expire.
 
 
 ## What "done" means

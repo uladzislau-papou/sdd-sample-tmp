@@ -32,7 +32,7 @@ import java.time.ZonedDateTime
  * class, that companion test failed on the next run as designed, and both it and the
  * allowlist were deleted rather than repaired. The arrangement worked: an exception that
  * expires on its own is the only kind worth granting, and this is the worked example of one
- * expiring. [EmptyServiceAllowance] is the same shape applied to a different workaround.
+ * expiring. [ContractSliceAllowance] is the same shape applied to a different workaround.
  *
  * SDD: see `documentation/adr/0007-archunit-boundary-enforcement.adr.md` and
  * `documentation/adr/0014-quality-gates-are-executable.adr.md`.
@@ -77,7 +77,7 @@ class TimestampRulesTest {
                     "MUST read the timestamp from ClockPort and MUST NOT accept one from the " +
                     "request. The time an action happened is the system's observation, not the " +
                     "caller's claim",
-            ).whileTheServiceHasNoBoundedContexts()
+            ).whileTheContractSliceIsIncomplete()
             .check(production)
     }
 }

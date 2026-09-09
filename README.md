@@ -14,17 +14,25 @@ what the service is for and what it deliberately is not.
 
 ## Status
 
-**No domain code.** The `contract` bounded context is decided
-([`adr/0024`](documentation/adr/0024-one-context-with-master-as-the-aggregate-root.adr.md))
-and specified across six use cases in
-[`documentation/use-cases/`](documentation/use-cases/), and none of them is implemented. What
-exists is the process, the ADR set, and the gates.
+**UC01 in progress; everything else specified only.** The `contract` bounded context is
+decided ([`adr/0024`](documentation/adr/0024-one-context-with-master-as-the-aggregate-root.adr.md)),
+registered in `architecture.definition.md` § 11, and specified across six use cases in
+[`documentation/use-cases/`](documentation/use-cases/). The first slice of domain code exists —
+the `MasterName` value object and its invariant — and UC02–UC06 are untouched. What is most
+worth reading here is still the process, the ADR set, and the gates.
 
-That state is transient and it is not silent. Sixteen ArchUnit rules currently have nothing to
-check, and rather than being deleted or globally disarmed they are marked with one named
-allowance — `whileTheServiceHasNoBoundedContexts` — guarded by a test that **fails the moment
-the first context is registered**, with instructions to retire itself. See
-[`adr/0026`](documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md).
+That state is transient and it is not silent. ArchUnit fails a rule that matches nothing, and
+[`adr/0027`](documentation/adr/0027-a-rule-with-no-possible-subject-is-deleted-not-allowed-to-pass-empty.adr.md)
+splits the rules that currently do into two kinds. Those waiting on a layer of the `contract`
+slice that is not built yet are marked with one named allowance —
+`whileTheContractSliceIsIncomplete` — guarded by a test that **fails once every awaited package
+exists**, with instructions to retire itself. Five rules describing the `inbound.rest` and
+`inbound.listener` packages that [`adr/0020`](documentation/adr/0020-graphql-as-the-only-transport.adr.md)
+leaves the service without were **deleted** instead, because an allowance whose precondition
+can never come true is a permanent relaxation wearing a temporary name; a second tripwire fails
+on the commit that creates either package and names the rules to restore. `adr/0027` supersedes
+[`adr/0026`](documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md), which
+bundled both kinds together.
 
 `./gradlew check` is green. Read that in the light of the paragraph above.
 

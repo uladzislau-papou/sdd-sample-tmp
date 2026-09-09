@@ -7,9 +7,8 @@ SPECIFIED
 `contract` — triggered via GraphQL by external client.
 
 `contract` is decided by `adr/0024-one-context-with-master-as-the-aggregate-root.adr.md` and
-is **not yet a row in `architecture.definition.md` § 11**. The registry is parsed in both
-directions, so the row and the package must land in the same increment — the one that
-implements this use case. It is the first thing that increment does.
+is registered as a `Bounded Context` row in `architecture.definition.md` § 11, citing that
+same ADR.
 
 ## Purpose
 
@@ -199,7 +198,10 @@ that moment. This is a known hole in the gate, named here rather than worked aro
 - [ ] AC-01 covered by `CreateMasterDriverTest` — asserts the saved aggregate's status,
       empty contract list and `createdAt`
 - [ ] AC-02 covered by `CreateMasterDriverTest` — asserts one `MasterCreated` published
-- [ ] AC-03 covered by `MasterNameTest` — one case per rejection reason
+- [x] AC-03 covered by `MasterNameTest.blankNameThrows`, `MasterNameTest.whitespaceOnlyNameThrows`,
+      `MasterNameTest.nameLongerThanTheLimitThrows`,
+      `MasterNameTest.nameLongerThanTheLimitOnlyBeforeTrimmingThrows` — one case per rejection
+      reason, plus the raw-vs-trimmed boundary
 - [ ] AC-04 covered by `CustomerNumberTest` — one case per rejection reason
 - [ ] AC-05 covered by `MasterJpaRepositoryIT` — two Masters with one customer number
 - [ ] Domain invariants for `Master` covered by `MasterTest`
@@ -216,8 +218,11 @@ that moment. This is a known hole in the gate, named here rather than worked aro
 - [ ] `documentation/ports/master-repository.outport.spec.md` reflects the port as implemented
 
 ### Governance
-- [ ] `architecture.definition.md` § 11 has a `contract` row, landing with the package
-- [ ] `EmptyServiceTripwireTest` retired and `adr/0026` withdrawn, per its own instruction
+- [x] `architecture.definition.md` § 11 has a `contract` row, landing with the package
+      — verified by `ContextRegistryTest.topLevelPackagesMatchTheRegistry`
+- [ ] `ContractSliceAllowance` / `ContractSliceTripwireTest` retired and `isFailOnNoMatchingTests`
+      restored in `build.gradle.kts`, when `ContractSliceTripwireTest.theContractSliceIsStillMissingAtLeastOneLayer`
+      fails, per `adr/0027`
 - [ ] This spec reconciled against the code by `spec-documenter`
 - [ ] `ddd-hex-reviewer` returns `PASS` on the architecture axis
 - [ ] `conformance-reviewer` matches every § 7 criterion to a test and every § 10 box to an artifact

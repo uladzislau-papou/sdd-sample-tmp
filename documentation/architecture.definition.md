@@ -596,6 +596,7 @@ that does not exist. Either way the gap is named.
 
 | Package | Kind | Owns | ADR |
 |---------|------|------|-----|
+| `contract` | Bounded Context | The `Master` aggregate root and the `Contract` entities inside it. One repository outport, `MasterRepository`; no `ContractRepository`. | `adr/0024-one-context-with-master-as-the-aggregate-root.adr.md` |
 | `shared` | Shared Kernel | Cross-context building blocks only (`DomainEvent`, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | — |
 | `bootstrap` | Composition Root | Wiring only. Not a context. See § 4.9. | — |
 

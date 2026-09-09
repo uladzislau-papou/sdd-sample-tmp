@@ -54,10 +54,13 @@ class ContextRegistryTest {
      * increment made it false, and the honest reading is that it was never a property of the
      * registry — it was a property of the service having been built yet.
      *
-     * The non-emptiness claim therefore moved to [EmptyServiceTripwireTest], inverted: that
-     * test asserts the registry has **no** contexts and fails the moment one is added, which
-     * is what re-arms the sixteen rules currently allowed to pass empty. Two facts with
-     * opposite lifetimes should not share an assertion.
+     * The non-emptiness claim therefore moved into a tripwire test, inverted, so that it
+     * would fail the moment a context was added and re-arm the rules allowed to pass empty.
+     * Two facts with opposite lifetimes should not share an assertion.
+     *
+     * That tripwire has since fired and been retired: `contract` is registered, and
+     * `adr/0027` replaced it with [ContractSliceTripwireTest], keyed to the *completion* of
+     * the slice rather than to its first commit.
      *
      * What survives here is the part that is true in every state: the parse works, and the
      * shared kernel and composition root are registered.

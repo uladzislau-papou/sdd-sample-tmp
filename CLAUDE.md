@@ -8,10 +8,14 @@ repository is, and
 [`documentation/project.definition.md`](documentation/project.definition.md) for the vision
 and — importantly — its non-goals, which explain why the domain is deliberately invented.
 
-**The service currently has no domain code.** Six specifications are written and none is
-implemented; sixteen architecture rules have nothing to check and are allowed to pass empty
-behind a tripwire that fails the moment the first context is registered
-([`adr/0026`](documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md)).
+**The `contract` bounded context is registered and UC01 is part-built.** Of six
+specifications, one is in progress and five are untouched. Architecture rules still waiting on
+unbuilt layers of the slice are allowed to pass empty behind `whileTheContractSliceIsIncomplete`
+and a tripwire that fails once every awaited package exists; five rules describing transports
+this service does not have were deleted instead, with a second tripwire that fires if either
+package appears
+([`adr/0027`](documentation/adr/0027-a-rule-with-no-possible-subject-is-deleted-not-allowed-to-pass-empty.adr.md),
+superseding [`adr/0026`](documentation/adr/0026-the-empty-service-is-a-transient-state.adr.md)).
 
 ---
 

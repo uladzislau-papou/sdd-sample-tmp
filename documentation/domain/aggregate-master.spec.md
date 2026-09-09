@@ -62,7 +62,7 @@ of its own.
 
 | # | Invariant | Owned by | Exception |
 |---|-----------|----------|-----------|
-| I-01 | `name` is non-blank after trimming and at most 200 characters | `MasterName` | `InvalidMasterException` |
+| I-01 | `name` is non-blank after trimming and at most 200 characters. Trimming qualifies only the blank check — the stored value is the string as supplied, not the trimmed form, pinned by `MasterNameTest.nameIsKeptAsGiven`. The 200-character bound is measured on the **raw** value, not the trimmed one, so padding counts toward the limit, pinned by `MasterNameTest.nameLongerThanTheLimitOnlyBeforeTrimmingThrows` | `MasterName` | `InvalidMasterException` |
 | I-02 | `customerNumber` matches `^[A-Z]{2}-[0-9]{6}$` | `CustomerNumber` | `InvalidMasterException` |
 | I-03 | `contractNumber` is non-blank after trimming and at most 50 characters | `ContractNumber` | `InvalidContractException` |
 | I-04 | `endDate` is strictly after `startDate` | `ContractPeriod` | `InvalidContractException` |

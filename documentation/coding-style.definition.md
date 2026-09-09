@@ -387,13 +387,44 @@ Prose that nothing checks decays. Each rule class has an owner:
 |---|---|
 | formatting, imports, line length | ktlint via spotless (`.editorconfig`) |
 | complexity, swallowed exceptions, nullability leaks | detekt (`config/detekt/detekt.yml`) |
-| layering, dependency direction, class roles (§ 3.3, § 4.1) | ArchUnit — `DependencyRulesTest`, `ClassRoleRulesTest`, `ContextRegistryTest` |
+| layering, dependency direction, class roles (§ 3.3, § 4.1) | ArchUnit — `DependencyRulesTest`, `ClassRoleRulesTest`, `ContextRegistryTest`. **Five exceptions**, listed below |
 | everything else in this document, including § 4.3 and the anti-corruption obligation below | `ddd-hex-reviewer`, and human review |
 
 The last row is an admission, not a boast: a rule in that row is a rule that can rot
 unnoticed. When one does, the fix is to move it up a row, not to restate it more firmly.
 
-Two rules sit in that row deliberately, with their weakness named:
+Seven rules sit in that row deliberately, with their weakness named. The first five are a
+recent and reversible addition; the last two are permanent.
+
+**Five transport rules lost their enforcer to `adr/0027`**, which deleted the ArchUnit rules
+that checked them because `adr/0020` leaves the service with no `inbound.rest` package and no
+use case in `uc01`–`uc06` needs an `inbound.listener`. ArchUnit fails a rule that matches
+nothing, and an allowance whose precondition can never come true is a permanent, invisible
+relaxation — so deletion was chosen over relaxation. The **rules** below still bind; only
+their enforcement is gone:
+
+| Rule | Where it is stated | Deleted enforcer |
+|---|---|---|
+| A `*RestController` carries no HTTP annotation | § 3.3 | `ClassRoleRulesTest` · `restAdapterCarriesNoHttpAnnotation` |
+| A `*RestController` is annotated `@RestController` | § 3.3 | the REST half of `ClassRoleRulesTest` · `deliveryAdaptersAreRegisteredWithTheirFramework` |
+| No domain type appears in a REST DTO | `architecture.definition.md` § 4.5 | `ClassRoleRulesTest` · `deliveryDtosCarryNoDomainType` |
+| A listener does not touch `outbound.*` | `architecture.definition.md` § 4.8 | `ClassRoleRulesTest` · `listenersDoNotTouchOutboundAdapters` |
+| `inbound.rest` depends only on `core.inport`, its DTOs and domain exceptions | `architecture.definition.md` § 6 rule 3 | `DependencyRulesTest` · `rule3_restDependsOnInportOnly` |
+
+The deleted enforcers are written `ClassName` · `methodName` rather than
+`` `ClassName.methodName` ``, because `SpecCitationsTest` checks that every citation of the
+second form names a test that exists — and these deliberately do not. UC01 § 10 uses the same
+device for the inverse case, a test not yet written. Both are the same hole in the same gate:
+it cannot distinguish a citation that is stale from one whose subject is intentionally absent.
+Named here rather than worked around silently.
+
+This is the one case where "move it up a row" is scheduled rather than owed:
+`DeletedTransportRulesTripwireTest` fails on the commit that creates either package, and its
+message is the instruction to restore all five. So these rules leave the last row on the day
+they acquire a subject, and until then nothing can violate them because the packages do not
+exist.
+
+The two permanent members:
 
 - **§ 4.3, English vocabulary.** A German identifier is a plain-text pattern and could be
   grepped for. What cannot be checked is the *quality* of a translation, which is where the
