@@ -1,0 +1,40 @@
+# Detekt overrides on top of the default config (buildUponDefaultConfig = true).
+#
+# Every entry here is a deliberate deviation with a reason. A rule switched off
+# because it was noisy, with no reason recorded, is how a static-analysis config
+# decays into decoration. Property names are detekt 2.x; the 1.x spellings
+# (functionThreshold, thresholdInClasses) are rejected outright rather than ignored,
+# which is the behaviour that caught the first draft of this file.
+
+complexity:
+  LongParameterList:
+    # Aggregate factories take one parameter per value object, by design:
+    # modelling.definition.md forbids collapsing them into a primitive-bearing DTO,
+    # and coding-style.definition.md § 2.1 mandates data classes for the carriers.
+    # MasterLeasingContract.register takes 8; IndividualLeasingContract.issue takes 9.
+    allowedFunctionParameters: 10
+    allowedConstructorParameters: 12
+  TooManyFunctions:
+    # An aggregate root's public surface is one method per state transition plus its
+    # accessors. Splitting it to satisfy a count would break the consistency boundary.
+    allowedFunctionsPerClass: 25
+    allowedFunctionsPerFile: 25
+    ignorePrivate: true
+
+style:
+  ReturnCount:
+    # Guard clauses are the Always-Valid style: check, throw, proceed. Idempotent
+    # transitions add an early `return` on top of that (see the aggregate specs).
+    max: 4
+  ThrowsCount:
+    # An aggregate transition validates several invariants, each with its own domain
+    # exception. Collapsing them into one exception type to satisfy a count would
+    # lose the distinction the HTTP/GraphQL error mapping depends on.
+    max: 4
+    excludeGuardClauses: true
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+  SwallowedException:
+    active: true

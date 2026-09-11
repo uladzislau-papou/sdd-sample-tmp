@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: contract_management_db
+    env_file:
+      - ../.env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Second database, used only by `./gradlew test`. Separate from the dev database
+  # on purpose: integration tests truncate tables between cases
+  # (test.definition.md § 2.3), and doing that to the database somebody is running
+  # the application against is a good way to lose an afternoon.
+  test_db:
+    image: postgres:17-alpine
+    container_name: contract_management_test_db
+    environment:
+      POSTGRES_USER: contract_management
+      POSTGRES_PASSWORD: contract_management
+      POSTGRES_DB: contract_management_test
+    ports:
+      - "${POSTGRES_TEST_PORT:-5433}:5432"
+    # tmpfs: the test database is disposable by definition, and not touching the disk
+    # makes the suite meaningfully faster.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contract_management -d contract_management_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

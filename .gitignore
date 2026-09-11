@@ -133,11 +133,10 @@ build
 # Ignore Kotlin plugin data
 .kotlin
 
-# Ignore DB lock
-/data/alpine-booking.lock.db
-# Ignore DB
-/data/alpine-booking.mv.db
+# Local environment (copied from .env.example by `make devsetup`)
+.env
 
-# H2 file DB written if a test boots the app without the "test" profile
-# (test.definition.md 1.3 forbids the condition; this is belt-and-braces)
-app/data/
+# Docker volumes / local data
+/data/
+
+# Detekt and JaCoCo reports live under build/, already ignored above.

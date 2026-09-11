@@ -9,18 +9,18 @@ on every increment — both rely on the numbering below. Do not insert, reorder 
 renumber sections. A section that does not apply says so explicitly:
 "Not applicable — <reason>".
 
-Note on Test Requirements: this template no longer carries a separate
-"Test Requirements" section. Required tests are expressed as Definition of Done
-items in § 10, where each one names the test that satisfies it. One list, one
-place (`file-usage.definition.md` § 4).
+Note on Test Requirements: this template carries no separate "Test Requirements"
+section. Required tests are expressed as Definition of Done items in § 10, where
+each one names the test that satisfies it. One list, one place
+(`file-usage.definition.md` § 4).
 -->
 
 ## Status
 SPECIFIED | IMPLEMENTED | SUPERSEDED
 
 ## Bounded Context
-`<context>` — triggered via <REST by external client | event-driven | synchronous outport call>.
-(For cross-context: Owner: `<context>`. Trigger/Caller: `<context>`. Integration pattern: <event-driven | synchronous outport call>.)
+`<context>` — triggered via <GraphQL mutation by an external client | domain event | synchronous inport call from another context>.
+(For cross-context: Owner: `<context>`. Trigger/Caller: `<context>`. Integration pattern: <domain event | shared-transaction inport call>.)
 
 Must be a context registered in `architecture.definition.md` § 11.
 
@@ -30,7 +30,8 @@ Describe orchestration logic.
 
 ## 1. Intent
 
-What business outcome does this use case produce?
+What business outcome does this use case produce? Name the German term for the
+concept if the ubiquitous language has one (`CLAUDE.md`, Ubiquitous Language).
 
 
 ## 2. Input Contract
@@ -43,6 +44,11 @@ Validation rules:
 - Required fields
 - Format rules
 
+State explicitly where any timestamp comes from (`architecture.definition.md` § 8.1).
+A GraphQL-triggered use case takes it from `ClockPort` and the input type has no
+such field. Business dates that the parties agreed — `termStart`, `activationDate` —
+are inputs and are validated as business values, not observations.
+
 
 ## 3. Output Contract
 
@@ -51,15 +57,18 @@ Return type:
 
 Error types:
 
-| Exception | Condition | HTTP Status |
-|-----------|-----------|-------------|
-| `<DomainException>` | <when it is thrown> | <4xx/5xx> |
+| Exception | Condition | GraphQL classification |
+|-----------|-----------|------------------------|
+| `<DomainException>` | <when it is thrown> | `BAD_REQUEST` / `NOT_FOUND` / `CONFLICT` / `INTERNAL_ERROR` |
+
+There are no HTTP status codes. Every GraphQL response is `200 OK`; the error kind
+is carried in `extensions.classification` (`architecture.definition.md` § 4.5).
 
 
 ## 4. Preconditions
 
 - Aggregate must exist?
-- Must be in specific state?
+- Must be in a specific state?
 
 
 ## 5. Flow
@@ -69,12 +78,20 @@ Error types:
 3. Persist aggregate
 4. Publish event (if applicable)
 
+Where order is load-bearing — a validation that must precede a write, a fetch that
+must precede a construction — say so and say why. `test.definition.md` § 2.2
+requires the order to be asserted when it matters.
+
 
 ## 6. Side Effects
 
 - Persistence
 - External calls
 - Event publication
+
+Name the Flyway migration if the schema changed, and state whether the event is
+context-local or lives in `shared.domain.event` and why
+(`modelling.definition.md`, Domain Event).
 
 
 ## 7. Acceptance Criteria
@@ -94,42 +111,49 @@ Then
 
 Criteria describe domain behaviour, state transitions, failure scenarios and
 invariant enforcement. Technical implementation details are not criteria.
+A criterion about money or a derived date **states the expected value**
+(`sdd.playbook.md` § 4.1).
 
 
 ## 8. Failure Scenarios
 
-- Aggregate not found
-- Invalid state
-- External dependency failure
+| Scenario | Exception | Classification |
+|----------|-----------|----------------|
+| Aggregate not found | `<NotFoundException>` | `NOT_FOUND` |
+| Invalid state transition | `<InvalidStateException>` | `CONFLICT` |
+| External dependency failure | `<UnavailableException>` | `INTERNAL_ERROR` |
 
 
-## 9. REST Contract
+## 9. GraphQL Contract
 
-For non-REST use cases: `Not applicable — <event-driven | outport-triggered>.`
+For non-GraphQL use cases: `Not applicable — <event-driven | inport-triggered>.`
 
-Endpoint:
+Schema (`src/main/resources/graphql/<context>/<name>.graphqls`):
+```graphql
+type Mutation {
+  <operation>(input: <Name>Input!): <Name>Payload!
+}
 ```
-<METHOD> /<path>
+
+Operation:
+```graphql
+mutation { }
 ```
 
-Request body:
+Response:
 ```json
-{ }
+{ "data": { } }
 ```
 
-Response body:
-```json
-{ }
-```
+Error classification mapping:
+- success – <condition>
+- `BAD_REQUEST` – <validation failure>
+- `NOT_FOUND` – <missing aggregate>
+- `CONFLICT` – <invalid state transition>
 
-HTTP status mapping:
-- `200 OK` / `201 Created` – <success condition>
-- `400 Bad Request` – <validation failure>
-- `404 Not Found` – <missing aggregate>
-- `409 Conflict` – <invalid state transition>
-
-Every status listed here MUST have a matching request in
-`rest/uc<nn>-<use-case-name>.http` (`CLAUDE.md`, REST Endpoint Documentation).
+Every classification listed here MUST have a matching operation in
+`graphql/uc<nn>-<use-case-name>.graphql` (`CLAUDE.md`, GraphQL Operation
+Documentation).
 
 
 ## 10. Definition of Done
@@ -153,8 +177,10 @@ Rules for writing items:
 - [ ] Every failure scenario in § 8 has a negative test
 
 ### Contracts
-- [ ] `rest/uc<nn>-<use-case-name>.http` covers every status in § 9
-- [ ] Persistence roundtrip covered by `<Aggregate>JooqRepositoryIT` (if persistence changed)
+- [ ] `src/main/resources/graphql/<context>/<name>.graphqls` declares the operation
+- [ ] `graphql/uc<nn>-<use-case-name>.graphql` covers success and every classification in § 9
+- [ ] Persistence roundtrip covered by `<Aggregate>PersistenceAdapterIT` (if persistence changed)
+- [ ] Flyway migration `V<n>__DDL_<description>.sql` exists (if the schema changed)
 - [ ] Port specs in `documentation/ports/` reflect the ports as implemented
 
 ### Governance

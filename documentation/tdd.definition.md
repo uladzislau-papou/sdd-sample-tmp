@@ -1,4 +1,4 @@
-# TDD Definition – Alpine Booking (`tdd.definition.md`)
+# TDD Definition – JRL Contract Management (`tdd.definition.md`)
 
 ## Purpose
 
@@ -42,6 +42,12 @@ Exit condition: the test fails, and it fails **for the intended reason**.
 A test that fails because a class does not compile is a valid RED. A test that
 fails because of a typo in the test itself is not — fix it and re-run.
 
+In Kotlin the compile failure is the *normal* first RED, because a call to a
+function that does not exist yet does not compile. That is fine and is not a
+lesser form of RED: the compiler is asserting the same absence the test is. What
+it is not is an excuse to skip running the command — the quoted output is the gate
+(§ 2), and "it obviously will not compile" is a prediction.
+
 ## 1.2 GREEN — make it pass, minimally
 
 Write the least production code that turns this test green.
@@ -52,6 +58,11 @@ Exit condition: the new test passes **and no previously passing test broke**.
 scenarios, GREEN for `AC-02` implements `AC-02` only. The other four arrive in
 their own cycles. Implementing ahead of the test is how untested branches enter
 a codebase that believes it is fully covered.
+
+Kotlin makes one form of over-implementation especially tempting: a `when` over a
+sealed type or enum will not compile until every branch is handled. Handling the
+others with a `TODO()` is correct; implementing them because the compiler asked is
+over-implementing during GREEN.
 
 ## 1.3 REFACTOR — improve the shape, not the behaviour
 
@@ -76,14 +87,14 @@ same breath and asserting afterwards that the order was correct.
 
 Required evidence, quoted from the real run:
 
-- the command (`./gradlew :app:test --tests '<FQCN>'`)
+- the command (`./gradlew test --tests '<FQCN>'`)
 - the failing test name
 - the assertion message or exception, verbatim
 
 ```
-> ./gradlew :app:test --tests '*TourBookingTest.should_reject_completion_when_not_active'
+> ./gradlew test --tests '*MasterLeasingContractTest.activate_throwsInvalidMasterLeasingContractStateException_whenAlreadyCancelled'
 
-TourBookingTest > should_reject_completion_when_not_active FAILED
+MasterLeasingContractTest > activate_throwsInvalidMasterLeasingContractStateException_whenAlreadyCancelled FAILED
     java.lang.AssertionError:
     Expecting code to raise a throwable.
 ```
@@ -102,7 +113,7 @@ Rules:
 
 A change with **no behavioural delta** cannot produce a RED — there is no new behaviour
 to fail on. Moving a class between packages, renaming one, relocating an adapter, or
-extracting a method are all this shape.
+extracting a function are all this shape.
 
 For these, the evidence is the **unchanged suite**:
 
@@ -125,6 +136,9 @@ Boundaries of the exception:
 - If an existing test must change its *assertions* to accommodate the change, the
   behaviour changed. Back it out and do it as its own RED.
 - Adding a test to previously-uncovered code is not this clause either — see § 2.2.
+- **A Flyway migration is never behaviour-preserving.** Adding a column changes what
+  `ddl-auto=validate` accepts at startup and what a round-trip carries, and both are
+  observable. It gets a RED, in the persistence suite.
 
 ## 2.2 A RED that unexpectedly passes
 
@@ -141,6 +155,11 @@ The cheapest proof is a temporary mutation of the production code: break the beh
 confirm a named test fails, restore, confirm the tree is byte-identical. Report which
 mutation was applied and which tests caught it.
 
+Good mutations in this domain, because they are the defects that actually occur:
+flip a comparison boundary (`>` to `>=`) on a credit-limit or price-band check;
+change a `Money` scale from 4 to 2; swap `termStart` and `termEnd`; drop a column
+from an `update`.
+
 ---
 
 # 3. Ordering Across the Layers
@@ -152,11 +171,11 @@ Work **inside-out**: the domain first, then outward through the ports.
 |------|------------------------------------|-------------------|
 | 1 | Domain test (§ 2.1) — invariants, state transitions, negative cases | `<context>.core.domain.<aggregate>` |
 | 2 | Use case test (§ 2.2) — orchestration, events, failure paths, ports stubbed | `<context>.inbound.driver` + the `core.inport` triple |
-| 3 | API/web test (§ 2.4) — status mapping, validation, error contract | `<context>.inbound.rest` **and** `rest/uc<nn>-*.http` |
-| 4 | Adapter integration test `*IT` (§ 2.3) — roundtrip, query semantics | `<context>.outbound.persistence` |
+| 3 | GraphQL test (§ 2.4) — operation, argument validation, error classification | `<context>.inbound.graphql`, the schema file, **and** `graphql/uc<nn>-*.graphql` |
+| 4 | Adapter integration test `*IT` (§ 2.3) — roundtrip, scale, query semantics | `<context>.outbound.persistence` + the Flyway migration |
 
 Why inside-out rather than outside-in: in this architecture the invariants *are*
-the product. Driving from the REST edge inward produces adapters that work and
+the product. Driving from the transport edge inward produces adapters that work and
 aggregates that merely comply, and it invites the anemic model that
 `modelling.definition.md` forbids. Starting at the aggregate forces the domain
 language to be settled before anything depends on it.
@@ -165,8 +184,13 @@ Deviation is allowed but must be justified in the increment's report — e.g. a
 persistence-only change legitimately starts at step 4.
 
 New outbound ports: write the use case test with a **stub** implementation first
-(`test.definition.md` § 2.2 — "always prefer good stubs before mocks"), then the
-real adapter with its own `*IT`.
+(`test.definition.md` § 2.2), then the real adapter with its own `*IT`.
+
+**Cross-context use cases run the ladder twice.** UC04 cancels a master contract and
+terminates the leases under it. The domain step is done in each context separately —
+`MasterLeasingContract.cancel`, then `IndividualLeasingContract.terminate` — before
+either driver exists. Driving from the orchestrating driver instead produces two
+aggregates shaped by one caller's convenience.
 
 ---
 
@@ -188,12 +212,17 @@ These are the specific ways TDD is faked. Each is a `DRIFT`-level finding.
 - **Test-after.** Writing production code, then a test that describes it.
   Detectable and detected: no quoted RED failure means no RED.
 - **Weakening the test to reach green.** Loosening an assertion, widening an
-  expected exception type, deleting a case, or relaxing a boundary value because
-  the implementation disagreed with it. If a test is wrong, fix it as its own
-  RED with the reason stated — never silently, and never while chasing green.
+  expected exception type to a supertype, deleting a case, or relaxing a boundary
+  value because the implementation disagreed with it. If a test is wrong, fix it as
+  its own RED with the reason stated — never silently, and never while chasing green.
+- **Relaxing a monetary assertion to `isCloseTo`** because the implementation
+  rounds differently. The test was right; the rounding is the defect.
 - **`@Disabled` / `@Ignore`.** Already forbidden by `test.definition.md` § 7.
   A test that cannot pass is either a spec defect or an unfinished increment;
   both are reportable, neither is skippable.
+- **Widening `PostgresAvailability`'s skip** to cover a test that is failing rather
+  than one whose database is absent. That converts a red test into a silent skip,
+  which is the worst available outcome (`test.definition.md` § 2.3).
 - **Over-implementing during GREEN.** Building the whole use case while one
   criterion is red. Leaves untested branches behind a green suite.
 - **Modifying a test during REFACTOR.** See § 1.3.

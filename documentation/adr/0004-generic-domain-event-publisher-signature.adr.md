@@ -3,84 +3,73 @@
 ## Status
 Accepted
 
-Recorded **retroactively**. The decision this ADR describes is already implemented;
-see *Why this ADR is retroactive* below.
-
 ## Context
 
-`DomainEventPublisher` is the outbound port through which use cases hand domain
+`DomainEventPublisher` is the outbound port through which drivers hand domain
 events off for post-commit delivery (ADR 0002).
 
-When it was introduced for UC01 it was deliberately narrow:
+Its signature is a real choice with two candidates, and the narrow one is
+tempting because it is more type-safe on its face:
 
-```java
-void publish(TourBookingRequested event);
+```kotlin
+// Candidate A — per-event-type overloads
+fun publish(event: MasterLeasingContractRegistered)
+fun publish(event: MasterLeasingContractActivated)
+// ... one per event type
+
+// Candidate B — typed to the marker
+fun publish(event: DomainEvent)
 ```
 
-`documentation/ports/domain-event-publisher.outport.spec.md` § 2.1 recorded that
-choice and attached an explicit condition to changing it:
-
-> **Scope:** The method signature is specific to `TourBookingRequested` for UC01.
-> Additional overloads or a generic signature may be introduced in later use cases
-> **via ADR**.
-
-The signature is now generic:
-
-```java
-void publish(DomainEvent event);
-```
-
-Six event types implement the `DomainEvent` marker today — `TourBookingRequested`,
-`TourBookingConfirmed`, `TourBookingCancelled`, `ParticipantsChanged`,
-`BookingActivated`, `TourStarted` — and UC07, UC11 and UC12 specify three more
-(`BookingCompleted`, `TourCompleted`, `TourCancelledByGuide`).
-
-Every driver publishes the same way, by draining the aggregate:
-
-```java
-booking.pullDomainEvents().forEach(domainEventPublisher::publish);
-```
-
-No ADR was written when the signature widened. Neither ADR 0002 nor ADR 0003
-mentions it, so the condition the port spec attached to the change was never met.
+There are nine event types across the two contexts today
+(`MasterLeasingContractRegistered`, `MasterLeasingContractActivated`,
+`MlcConfigurationAmended`, `MasterLeasingContractCancelled`,
+`IndividualLeasingContractIssued`, `IndividualLeasingContractActivated`,
+`IndividualLeasingContractTerminatedByLessee`,
+`IndividualLeasingContractTerminatedByMasterContract`, and any added later), and
+no reason to expect that number to stop growing.
 
 ## Decision
 
-`DomainEventPublisher` exposes exactly one method, typed to the `DomainEvent`
+`DomainEventPublisher` exposes exactly one function, typed to the `DomainEvent`
 marker interface:
 
-```java
-public interface DomainEventPublisher {
-    void publish(DomainEvent event);
+```kotlin
+interface DomainEventPublisher {
+    fun publish(event: DomainEvent)
 }
 ```
 
-- The port stays in `shared.outport`, because both bounded contexts publish events
+- The port lives in `shared.outport`, because both bounded contexts publish events
   (`architecture.definition.md` § 9, § 11).
 - Per-event-type overloads are **not** added. A new domain event requires no change
   to this port.
+- `DomainEvent` is **not** a sealed interface — see below.
 - The port remains framework-free; the Spring `ApplicationEventPublisher`
   integration stays entirely inside `LoggingDomainEventPublisher`.
-- `documentation/ports/domain-event-publisher.outport.spec.md` § 2.1 is updated to
-  specify the generic signature and to cite this ADR instead of the "via ADR"
-  condition it previously carried.
 
 ## Rationale
 
-### Why generic rather than per-type overloads?
+### Why generic rather than per-type overloads
 
-The narrow signature could not survive contact with a second event type. Drivers
-publish by draining `pullDomainEvents()`, which returns `List<DomainEvent>` — the
-aggregate decides what it emitted, and the driver forwards whatever it finds. A
-per-type API cannot consume that list without either downcasting or an
-`instanceof` ladder in every driver, both of which push knowledge of the event
-taxonomy into the application layer where it does not belong.
+The narrow signature cannot survive contact with the drain pattern. Drivers publish
+by draining `pullDomainEvents()`, which returns `List<DomainEvent>` — the aggregate
+decides what it emitted, and the driver forwards whatever it finds:
 
-With nine event types specified, the overload approach would mean nine methods on
-a port whose entire responsibility is "hand this fact to the delivery mechanism" —
-a responsibility that does not vary by event type.
+```kotlin
+contract.pullDomainEvents().forEach(domainEventPublisher::publish)
+```
 
-### Why is the marker interface the right boundary?
+A per-type API cannot consume that list without a `when (event) { is X -> ... }`
+ladder in every driver, which pushes knowledge of the event taxonomy into the
+application layer where it does not belong, and grows by one branch in eight
+drivers every time an event is added.
+
+With nine event types, the overload approach would mean nine functions on a port
+whose entire responsibility is "hand this fact to the delivery mechanism" — a
+responsibility that does not vary by event type.
+
+### Why the marker interface is the right boundary
 
 `DomainEvent` carries no members. That is the point: the port's contract is about
 *timing and delivery*, not payload. The publisher never inspects the event, so the
@@ -88,31 +77,50 @@ narrowest type it can accept is the widest type the domain defines. Anything mor
 specific would be the port claiming knowledge it does not use.
 
 Type safety is not lost where it matters. Consumers are typed —
-`@TransactionalEventListener` methods bind to concrete event classes — so the
-untyped hop is confined to the one call that genuinely does not care.
+`@TransactionalEventListener` binds to a concrete event class — so the untyped hop
+is confined to the one call that genuinely does not care.
 
-### Why not the alternative: a generic method `<E extends DomainEvent> void publish(E)`?
+### Why `DomainEvent` is not sealed, although Kotlin makes it easy
+
+This is the question the Kotlin version of this decision has to answer and the Java
+version did not.
+
+A `sealed interface DomainEvent` would give exhaustive `when` handling over every
+event in the system, which is normally a benefit this project actively seeks
+(`coding-style.definition.md` § 2.3). It is rejected for two reasons:
+
+1. **Sealing requires all implementations in the same package and module.** Every
+   event from both contexts would have to live in `shared.domain.event`, which
+   directly contradicts `modelling.definition.md`: a context-local event belongs in
+   `<context>.core.domain.<aggregate>.event`, and only cross-context events belong
+   in `shared`. Sealing would promote eight context-local types into the shared
+   kernel to satisfy a language feature.
+
+2. **Nobody wants the exhaustiveness.** Exhaustive `when` is valuable where a piece
+   of code must handle every case — a state machine, a command dispatcher. No code
+   here switches over all events; consumers subscribe to the one they care about.
+   An exhaustiveness guarantee nothing consumes is a constraint with no beneficiary.
+
+The one place a sealed hierarchy *would* help — catching an event type that no
+consumer handles — is not what sealing checks. It checks that a `when` is
+exhaustive, not that a subscriber exists.
+
+### Why not a generic function `<E : DomainEvent> publish(event: E)`
 
 It would add no capability. The implementation still erases to `DomainEvent`, and
 no call site needs the type parameter — nothing returns a value or takes a second
-argument whose type must agree. It is ceremony without benefit.
-
-### Why accept this retroactively rather than revert the code?
-
-The implementation is right, and reverting would break five drivers to satisfy a
-scope note that was always provisional — the port spec itself anticipated the
-generic signature and merely required it be recorded. The defect is procedural,
-not technical: a documented gate was bypassed. The correct remedy for a bypassed
-recording requirement is to make the record, not to undo a correct decision.
+argument whose type must agree. It is ceremony without benefit, and in Kotlin it
+additionally breaks the `::publish` method reference the drain pattern uses.
 
 ## Consequences
 
 Positive:
 
 - Adding a domain event touches the aggregate, the event type and its consumers —
-  never this port. UC07, UC11 and UC12 add three events with no change here.
+  never this port.
 - The port has one reason to change (delivery semantics), not one per event type.
-- The `booking`/`guide` split needs no per-context publisher.
+- The two-context split needs no per-context publisher.
+- The drain idiom is one line and identical everywhere.
 
 Negative / accepted trade-offs:
 
@@ -120,39 +128,20 @@ Negative / accepted trade-offs:
   the publisher does not read the event, and consumers are typed.
 - `DomainEvent` becomes load-bearing. Any type implementing it is publishable, so
   the marker must not be applied to non-events. `architecture.definition.md` § 9
-  already constrains what may live in `shared.domain.event`.
+  already constrains what may live in `shared.domain.event`, and
+  `ddd-hex-reviewer` checks the rest.
 - A malformed event fails at delivery rather than at compile time. Mitigated by
-  events being immutable records validated at construction
+  events being immutable `data class`es validated at construction
   (`modelling.definition.md`, Always-Valid).
-
-## Why this ADR is retroactive
-
-Recorded on 2026-08-20, after the fact, during the reconciliation pass that
-introduced `tdd.definition.md`, `loop.playbook.md` and the `spec-documenter` /
-`ddd-hex-reviewer` subagents.
-
-The divergence was found by `spec-documenter`, which detected that
-`domain-event-publisher.outport.spec.md` § 2.1 contracted
-`publish(TourBookingRequested)` while `shared/outport/DomainEventPublisher.java:27`
-declared `publish(DomainEvent)`. Per its Conflicts protocol it refused to edit
-either side and escalated, rather than silently updating the spec to match the
-code — which would have laundered the bypassed gate into a requirement.
-
-This is the failure mode the review agents exist to catch: not wrong code, but a
-correct decision that was never recorded, leaving the spec authoritative and wrong.
-ADRs are immutable once accepted, so 0002 and 0003 are not amended; this ADR
-supplies the missing record.
 
 ## Future Considerations
 
 - **Delivery guarantees.** ADR 0002 defers the Transactional Outbox pattern. If it
   is adopted, this signature is unaffected — serialising a `DomainEvent` to an
   outbox row is an adapter concern.
-- **Event metadata.** Should events need envelope data (occurredAt, correlation id,
-  causation id), prefer adding it to `DomainEvent` as accessors over widening this
-  method. That keeps the port at one method and makes the metadata available to
-  every consumer. Note that `TourStarted` and `BookingActivated` currently carry
-  `guideTourId` as a bare `String`, which `modelling.definition.md` disallows for
-  identities — see the open question raised by `ddd-hex-reviewer` about ADR 0003's
-  "plain string correlation ID" permission conflicting with the higher-ranked
-  modelling doctrine.
+- **Event metadata.** Should events need envelope data (`occurredAt`, correlation
+  id, causation id), prefer adding it to `DomainEvent` as properties over widening
+  this function. That keeps the port at one function and makes the metadata
+  available to every consumer. Note that adding a property to `DomainEvent` is a
+  breaking change for every event type, which is an argument for doing it early if
+  at all.

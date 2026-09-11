@@ -2,10 +2,11 @@
 
 ## Purpose
 
-Defines the boundary for publishing domain events after a use case completes.
-This outport decouples the application layer from the event delivery mechanism.
+The outbound port through which drivers hand domain events off for **post-commit**
+delivery.
 
-SDD: See `documentation/adr/0002-domain-event-publication.adr.md` for the post-commit strategy.
+SDD: See `adr/0002-domain-event-publication.adr.md` and
+`adr/0004-generic-domain-event-publisher-signature.adr.md`.
 
 
 ## 1. Interface
@@ -14,72 +15,143 @@ SDD: See `documentation/adr/0002-domain-event-publication.adr.md` for the post-c
 shared.outport.DomainEventPublisher
 ```
 
-Lives in `shared.outport`, not a context's `core.outport`: both `booking` and
-`guide` need it, so it is shared-kernel infrastructure
-(`architecture.definition.md` § 9, § 11). Moved there during the guide-context
-extraction (`adr/0003-separate-guide-bounded-context.adr.md`).
+Lives in `shared.outport` because both bounded contexts publish events
+(`architecture.definition.md` § 9, § 11).
+
+Framework-free: no Spring type appears here. The `ApplicationEventPublisher`
+integration is confined to the adapter.
+
 
 ## 2. Method Contract
 
 ### 2.1 publish
 
-```
-void publish(DomainEvent event)
+```kotlin
+fun publish(event: DomainEvent)
 ```
 
-**Responsibility:** Hand off a domain event for delivery after the active transaction commits.
+**Responsibility:** Hand one domain event to the delivery mechanism for publication
+after the current transaction commits.
 
-**Preconditions:**
-- `event` must be non-null.
-- Must be called within an active transaction (the implementation handles the post-commit timing).
+**Preconditions:** the caller is inside a transaction. Publishing outside one is a
+programming error: there is no commit to defer to, and the event would be delivered
+immediately, asserting a fact that was never persisted.
 
 **Postconditions:**
-- The event is queued for delivery after the transaction commits successfully.
-- If the transaction rolls back, the event MUST NOT be delivered.
+- The event is scheduled for delivery after the active transaction commits.
+- **Nothing is delivered if the transaction rolls back.**
+- The publisher does not inspect, validate, transform or persist the event.
 
-**Exceptions:** No checked exceptions. Infrastructure failures in event delivery are logged and do not roll back the transaction.
+**Exceptions:** none as part of the contract. A consumer's failure is the
+consumer's, and does not propagate back — consumers run in their own
+`REQUIRES_NEW` transaction (ADR 0002).
 
-**Scope:** The signature is generic — typed to the `DomainEvent` marker interface,
-not to any concrete event type. Per-event-type overloads are **not** added; a new
-domain event requires no change to this port.
+**Idempotency:** not provided. Publishing the same event twice delivers it twice.
+Idempotency is the **consumer's** responsibility, which is why
+`IndividualLeasingContract.activate` is an idempotent no-op when already `ACTIVE`
+(that aggregate's spec § 4).
 
-Decided in `adr/0004-generic-domain-event-publisher-signature.adr.md`.
+### 2.2 The signature is typed to the marker, deliberately
 
-This section previously specified `void publish(TourBookingRequested event)`,
-specific to UC01, and stated that a generic signature "may be introduced in later
-use cases **via ADR**". The code widened to `publish(DomainEvent)` without that
-ADR being written — a bypassed recording gate, found by `spec-documenter` and
-escalated under its Conflicts protocol rather than being silently reconciled.
-ADR 0004 supplies the missing record and accepts the implementation as correct.
+`publish(DomainEvent)` rather than one overload per event type. The full argument is
+ADR 0004; the short version is that drivers publish by draining:
+
+```kotlin
+contract.pullDomainEvents().forEach(domainEventPublisher::publish)
+```
+
+`pullDomainEvents()` returns `List<DomainEvent>`, so a per-type API could not consume
+it without a `when (event) { is X -> ... }` ladder in every driver — pushing the
+event taxonomy into the application layer and growing by one branch in eight drivers
+per new event.
+
+`DomainEvent` is a marker with no members and is **not sealed** (ADR 0004 § Why
+`DomainEvent` is not sealed). Sealing it would require every event from both contexts
+to live in one package, contradicting `modelling.definition.md`'s placement rule.
 
 
-## 3. Post-Commit Guarantee
+## 3. The Drain Pattern
 
-As specified in ADR 0002, the driver calls this port within the `@Transactional` boundary.
-The implementation uses Spring's `ApplicationEventPublisher` to publish the domain event as a Spring application event.
-A `@TransactionalEventListener(phase = AFTER_COMMIT)` listener in the `listeners` package receives the event after commit.
+Every driver publishes the same way, and the uniformity is the point:
 
-This guarantees:
-- Events are not delivered if the transaction rolls back.
-- The domain layer has no awareness of the delivery mechanism.
+```kotlin
+repository.update(contract)
+contract.pullDomainEvents().forEach(domainEventPublisher::publish)
+```
+
+`pullDomainEvents()` returns a snapshot **and clears the aggregate's list**, so a
+second call returns empty. That makes the drain a transfer of ownership rather than
+a read, and it is what stops a driver that loads, mutates and mutates again from
+publishing the first event twice.
+
+**A driver that forgets to drain loses its events silently.** Nothing structural
+prevents it — the aggregate cannot publish (that would put infrastructure in
+`core.domain`) and the port cannot know it was never called. The use-case test
+asserting the publication is the only thing that catches it, which is why
+`test.definition.md` § 2.2 lists emitted events as mandatory coverage rather than as
+a nice-to-have.
 
 
 ## 4. Reference Implementation
 
-Class: `shared.outbound.integration.LoggingDomainEventPublisher`, wired by
+`shared.outbound.integration.LoggingDomainEventPublisher`, wired by
 `bootstrap.SharedConfig`.
 
-Behaviour: Calls Spring `ApplicationEventPublisher.publishEvent(event)`. The listener logs the event via SLF4J.
+Behaviour: logs the event at DEBUG and delegates to Spring's
+`ApplicationEventPublisher`. Consumers bind with
+`@TransactionalEventListener(phase = AFTER_COMMIT)` plus
+`@Transactional(propagation = REQUIRES_NEW)`.
 
-It previously lived in `booking.outbound.integration` and was wired by `BookingConfig`,
-so the `guide` context published its events through `booking`'s configuration
-(`architecture.definition.md` § 9). Spring is permitted here: `shared.outbound` is an
-adapter package, and only `shared.domain` and `shared.outport` are framework-free.
+`REQUIRES_NEW` on the consumer is not optional: an `AFTER_COMMIT` listener runs when
+the publisher's transaction is already gone, so without it each repository call would
+run in auto-commit, one statement at a time, and a fan-out that failed halfway would
+leave half its work committed with nothing to indicate it (ADR 0002).
+
+It lives in `shared.outbound` rather than inside a context for the same reason
+`SystemClockPort` does (`architecture.definition.md` § 9).
+
+**Logging must not include the event's payload verbatim.** Several events carry
+monetary terms, and `technical.spec.md` names salary-sacrifice amounts as sensitive:
+a `conversion_rate_per_month` in a log line discloses what someone earns net.
 
 
-## 5. Constraints
+## 5. Test Usage
+
+Replaced by a **recording stub** that appends to a list. Driver tests then assert on
+the recorded events by type and payload.
+
+This is the only reasonable shape: there is no mocking framework
+(`technical.spec.md`, Testing), and asserting "the publisher was called" would be an
+implementation-detail assertion anyway. What the tests assert is *which facts were
+published*, which is behaviour.
+
+
+## 6. Constraints
 
 - The interface MUST remain framework-free.
-- MUST NOT be called outside of a transaction boundary.
-- MUST NOT attempt synchronous external delivery (no HTTP calls, no broker writes inside this method).
-- Domain events MUST NOT be leaked as integration events without explicit mapping.
+- Aggregates MUST NOT hold a reference to it — they record events, the driver
+  publishes them (ADR 0002).
+- The implementation MUST NOT deliver before commit.
+- The implementation MUST NOT swallow a delivery failure silently; log it.
+- Adding a second function (a batch `publishAll`, a `publish(event, metadata)`) is a
+  change to the port's contract. Prefer adding properties to `DomainEvent` over
+  widening this function (ADR 0004, Future Considerations).
+
+
+## 7. Known Gaps
+
+- **Delivery is not guaranteed.** A JVM death between commit and the listener
+  running loses the event with no record that it existed (ADR 0002, Known
+  limitation). For UC06 that means a lease stays `PENDING_ACTIVATION` under an
+  `ACTIVE` master contract, and nothing retries.
+
+  This is survivable **only because of which fan-out uses events**. Cancellation
+  (UC04) deliberately does not: it shares a transaction, precisely so that the
+  dangerous state — a cancelled master contract with live leases — cannot be
+  produced by a lost event (`architecture.definition.md` § 10).
+
+  A transactional outbox is the fix and is deferred while every consumer is
+  in-process. Adopting it does not change this signature: serialising a
+  `DomainEvent` to an outbox row is an adapter concern.
+- **No ordering guarantee between events** published in one drain. Nothing today
+  depends on order; a consumer that did would be relying on an unspecified property.

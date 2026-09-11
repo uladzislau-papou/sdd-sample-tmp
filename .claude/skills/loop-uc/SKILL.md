@@ -1,7 +1,7 @@
 ---
 name: loop-uc
 description: Run the outer loop-driven-development cycle on one use case until its Definition of Done is met. Iterates RED → GREEN → REFACTOR → drift review → document, re-reading the spec's DoD each pass, and stops on DoD-complete, BLOCKED (no progress), max-iterations, or an ADR trigger. Use when asked to implement or finish a use case end-to-end.
-argument-hint: UC07 [--max-iterations=10] [--dry-run]
+argument-hint: UC05 [--max-iterations=10] [--dry-run]
 ---
 
 # Loop-Driven Development on a Use Case
@@ -17,7 +17,7 @@ stopping decision.
 
 | Argument | Default | Meaning |
 |----------|---------|---------|
-| `UC<nn>` | required | Use case to drive, e.g. `UC07` |
+| `UC<nn>` | required | Use case to drive, e.g. `UC05` |
 | `--max-iterations=<n>` | `10` | Hard ceiling (`loop.playbook.md` § 4.1) |
 | `--dry-run` | off | Do steps 0–2 and step 6's evaluation, then stop and report the plan. Writes the scoreboard; writes no code. |
 
@@ -33,7 +33,11 @@ stopping decision.
    the traceability key (`file-naming.definition.md`).
 4. Confirm `git status` is clean enough to attribute a diff to this loop. If
    there are unrelated staged changes, say so before starting.
-5. Initialise state:
+5. **Start Postgres if the use case touches persistence**: `make devup`. The
+   `*IT` tests skip silently without it, and a skipped persistence suite is
+   indistinguishable from a passing one (`test.definition.md` § 2.3). If Docker is
+   unavailable, say so now — it will cap which DoD boxes can close.
+6. Initialise state:
 
 ```
 iteration        = 0
@@ -66,15 +70,15 @@ authoritative (`loop.playbook.md` § 1).
 Rebuild the mirror in `tasks.md`:
 
 ```markdown
-## DoD Scoreboard – UC07 (iteration 3/10)
+## DoD Scoreboard – UC05 (iteration 3/10)
 
-Mirrored from documentation/use-cases/uc07-mark-booking-completed.spec.md § 10.
+Mirrored from documentation/use-cases/uc05-issue-individual-leasing-contract.spec.md § 10.
 Authoritative source is the spec; this table is rebuilt each iteration.
 
-- [x] AC-01 covered by TourBookingTest.should_complete_when_active
-- [x] AC-02 covered by TourBookingTest.should_reject_completion_when_not_active
-- [ ] MarkBookingCompletedDriver orchestration covered by MarkBookingCompletedDriverTest
-- [ ] rest/uc07-mark-booking-completed.http covers 200, 404, 409
+- [x] AC-01 covered by IndividualLeasingContractTest.issue_createsContractPendingActivation
+- [x] AC-03 covered by IndividualLeasingContractTest.issue_acceptsPriceAtEitherBandBoundary
+- [ ] IssueIndividualLeasingContractDriver orchestration covered by IssueIndividualLeasingContractDriverTest
+- [ ] graphql/uc05-issue-individual-leasing-contract.graphql covers success, NOT_FOUND, CONFLICT, BAD_REQUEST
 - [ ] ddd-hex-reviewer: PASS
 - [ ] Quality gates (test.definition.md § 7) green
 ```
@@ -90,8 +94,12 @@ Priority (`loop.playbook.md` § 2.2):
 1. any entry in `open_findings` — **always first**
 2. domain-layer criteria
 3. use-case-layer criteria
-4. adapter / REST criteria
+4. adapter, schema and persistence criteria
 5. gate-shaped criteria — never selected; they are evaluated in step 6
+
+**A cross-context use case still gets one criterion per iteration.** UC04, UC05,
+UC08 and UC09 each touch two contexts; split by aggregate rather than doing "the
+whole interaction" in one pass.
 
 State the selection explicitly before doing any work: *"Iteration 3/10 —
 working: `<criterion>`"*.
@@ -106,16 +114,19 @@ If `--dry-run`, stop here and report.
 
 ### RED
 
-Pick the layer from `tdd.definition.md` § 3 (inside-out: domain → driver → rest
+Pick the layer from `tdd.definition.md` § 3 (inside-out: domain → driver → GraphQL
 → persistence). Write **one** test. Run it:
 
 ```bash
-./gradlew :app:test --tests '*<TestClass>.<method>'
+./gradlew test --tests '*<TestClass>.<method>'
 ```
+
+Single module — there is no `:app:` prefix.
 
 **Quote the actual failure output** — command, test name, assertion message.
 This is a gate, not a formality (`tdd.definition.md` § 2). No quoted RED, no
-GREEN. A predicted failure is not a failure.
+GREEN. A predicted failure is not a failure. A Kotlin compile failure *is* a valid
+RED, but you still have to run the command and quote it.
 
 If the test unexpectedly **passes**: that is a finding. Either the behaviour
 already exists — close the criterion and note it — or the test does not test what
@@ -126,8 +137,12 @@ it claims. Do not proceed as if RED happened.
 Least production code that passes that one test. Nothing more — do not implement
 criteria that are not currently red.
 
+Kotlin-specific trap: a `when` over a sealed type or enum will not compile until
+every branch is handled. Handle the others with `TODO()`. Implementing them because
+the compiler asked is over-implementing.
+
 ```bash
-./gradlew :app:test
+./gradlew test
 ```
 
 Exit: new test passes, nothing previously green broke.
@@ -151,8 +166,8 @@ Agent(subagent_type: "ddd-hex-reviewer",
 
 Agent(subagent_type: "spec-documenter",
       prompt: "Document UC<nn> iteration <n>. Criterion completed: <criterion>.
-               Files changed: <paths>. Reconcile specs, rest/*.http, and the
-               tasks.md DoD scoreboard.")
+               Files changed: <paths>. Reconcile specs, graphql/*.graphql request
+               files, and the tasks.md DoD scoreboard.")
 ```
 
 ---
@@ -182,6 +197,10 @@ criteria, run them:
 ./gradlew build
 ```
 
+**Check whether the persistence suite actually ran.** If every `*IT` skipped,
+persistence criteria stay unticked regardless of the green tick, and the report says
+so (`loop.playbook.md` § 3).
+
 Update `tasks.md`. Append the new ticked-count to `dod_history`.
 
 ### Exit — all three required (`loop.playbook.md` § 3)
@@ -200,6 +219,10 @@ Update `tasks.md`. Append the new ticked-count to `dod_history`.
 | No progress | last two entries of `dod_history` are equal | `BLOCKED` |
 | Max iterations | `iteration >= max_iterations` | `HALTED (max-iterations)` |
 
+Before raising an ADR halt, check `sdd.playbook.md` § 6.1 — adding a migration, a
+value object, a use case or an optional GraphQL field is **not** a trigger, and a
+false halt wastes the caller's time.
+
 **No-progress detector** — the most important guard (`loop.playbook.md` § 4.2).
 Two consecutive iterations with no box moving from unticked to ticked stops the
 loop. Work that does not close a criterion does not count as progress; that is
@@ -208,7 +231,8 @@ deliberate. Report:
 - the criterion that will not move
 - what was attempted in both iterations
 - most likely cause: under-specified criterion · missing spec · unmet dependency
-  · not objectively checkable · genuine implementation obstacle
+  · not objectively checkable · genuine implementation obstacle · **environment**
+  (Postgres unavailable, so a persistence criterion cannot be evidenced)
 
 `BLOCKED` is a **success**. Surfacing an unsatisfiable criterion in two
 iterations instead of ten is the job.
@@ -223,17 +247,18 @@ Otherwise: `iteration += 1`, go to Step 1.
 
 ```
 Iteration      3/10
-Criterion      MarkBookingCompletedDriver orchestration
-Completed      MarkBookingCompletedDriver + inport triple
-Verification   RED: MarkBookingCompletedDriverTest.should_publish_event_on_completion
-                    → java.lang.AssertionError: Expecting actual not to be empty
-               GREEN: 47 tests passed
+Criterion      IssueIndividualLeasingContractDriver orchestration
+Completed      IssueIndividualLeasingContractDriver + inport triple + InheritedLeasingTerms
+Verification   RED: IssueIndividualLeasingContractDriverTest.issue_derivesRateAndTermEnd
+                    → java.lang.AssertionError: expected 57.0000 but was 57.00
+               GREEN: 61 tests passed
                Gates: ./gradlew clean test OK, ./gradlew build OK
-Specs touched  uc07-mark-booking-completed.spec.md (§ 3, § 10),
-               aggregate-tour-booking.spec.md (§ 4)
+               Persistence: 9 *IT ran (Postgres up)
+Specs touched  uc05-issue-individual-leasing-contract.spec.md (§ 3, § 10),
+               issue-individual-leasing-contract.inport.spec.md (§ 2.2)
 Drift review   PASS
-DoD delta      2/6 → 3/6 (driver orchestration closed)
-Next step      rest/uc07-*.http coverage for 200/404/409
+DoD delta      4/14 → 5/14 (driver orchestration closed)
+Next step      graphql/uc05-*.graphql coverage for the three CONFLICT causes
 ```
 
 Final report adds the terminal state, the full scoreboard, and the last verdict.
@@ -245,6 +270,7 @@ Final report adds the terminal state, the full scoreboard, and the last verdict.
 Each of these defeats the mechanism the loop exists to provide:
 
 - Ticking a box without named evidence, or one a `DRIFT` finding touches
+- **Ticking a persistence box on a run where the `*IT` skipped**
 - **Editing the spec's DoD to make the loop exit.** If the DoD is wrong, fix it
   as a deliberate Spec Phase change and say so — never mid-flight to reach an exit
 - Working several criteria in one iteration
@@ -254,3 +280,4 @@ Each of these defeats the mechanism the loop exists to provide:
 - Deciding an ADR-level question to avoid halting
 - Reporting the scoreboard from memory instead of recomputing it
 - Skipping the RED quote because the failure was "obvious"
+- Suppressing a compiler warning to get past `allWarningsAsErrors`

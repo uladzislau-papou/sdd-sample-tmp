@@ -10,54 +10,124 @@ Accepted
 
 > Application layer is responsible for publishing events AFTER successful transaction commit.
 
-The `RequestTourBookingDriver` (and all future drivers) must publish domain events, but only if the transaction commits successfully. Publishing inside a `@Transactional` method with a naive implementation risks:
+That sentence settles *when* but not *how*. Three questions were open:
 
-1. Events being delivered even when the transaction rolls back.
-2. Premature delivery before the database write is visible to other readers.
+1. Where do events accumulate between being raised and being published?
+2. What guarantees delivery after the transaction commits?
+3. What happens to a consumer's work — does it join the publisher's transaction
+   or run in its own?
 
-At the same time, the reference implementation has no external message broker (Kafka, RabbitMQ, etc.) and must stay self-contained. The Transactional Outbox pattern is intentionally out of scope for this reference project.
+The answers matter more than usual here because one event, 
+`MasterLeasingContractActivated`, drives a cross-context fan-out (UC06): 
+activating a master contract activates every pending lease beneath it.
 
 ## Decision
 
-**The driver publishes domain events within the `@Transactional` boundary via the `DomainEventPublisher` outport.**
+**Aggregates record events; drivers drain and publish them after the transaction
+commits; consumers run in a new transaction.**
 
-The reference implementation of `DomainEventPublisher` delegates to Spring's `ApplicationEventPublisher`:
+Concretely:
 
-1. The driver collects domain events from the aggregate via `booking.pullDomainEvents()`.
-2. The driver calls `domainEventPublisher.publish(event)` inside the `@Transactional` method.
-3. `LoggingDomainEventPublisher` calls `applicationEventPublisher.publishEvent(event)`.
-4. Spring's `ApplicationEventPublisher` queues the event for post-commit delivery because the listener is annotated with `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
-5. If the transaction commits, the listener fires and logs the event.
-6. If the transaction rolls back, the listener does NOT fire.
-
-The `listeners` package hosts all `@TransactionalEventListener` methods.
+1. An aggregate holds a private list of `DomainEvent` and appends to it inside each
+   state-transition function. It never publishes.
+2. The aggregate exposes `pullDomainEvents(): List<DomainEvent>`, which returns an
+   immutable snapshot **and clears the list**. A second call returns empty.
+3. The driver drains after persisting, inside its transaction:
+   ```kotlin
+   contract.pullDomainEvents().forEach(domainEventPublisher::publish)
+   ```
+4. `DomainEventPublisher` is a `shared.outport` interface (ADR 0004). Its adapter,
+   `LoggingDomainEventPublisher`, delegates to Spring's `ApplicationEventPublisher`.
+5. Consumers annotate `@TransactionalEventListener(phase = AFTER_COMMIT)` with
+   `@Transactional(propagation = REQUIRES_NEW)`.
 
 ## Rationale
 
-### Why not publish directly inside `@Transactional`?
+### Why the aggregate records rather than publishes
 
-Direct publication (e.g., calling a side-effect service inline) would fire even on rollback, violating the "after commit" requirement.
+An aggregate that publishes needs a publisher, which means a collaborator, which
+means either constructor injection into a domain object or a service locator.
+Both put infrastructure inside `core.domain`, which
+`architecture.definition.md` § 4.1 forbids and which would make the aggregate
+untestable without a stub.
 
-### Why Spring `ApplicationEventPublisher` + `@TransactionalEventListener`?
+Recording is the only option that leaves the aggregate a pure object. The cost is
+that something must remember to drain — see *Consequences*.
 
-- Zero infrastructure overhead (no broker, no outbox table).
-- Satisfies the post-commit guarantee via Spring's built-in synchronization.
-- The `DomainEventPublisher` outport remains framework-free (the Spring dependency is isolated in the adapter).
-- Easy to replace: a future adapter could write to an outbox table or a broker without changing the driver.
+### Why draining clears the list
 
-### Why not the Transactional Outbox pattern?
+Because the alternative silently double-publishes. If `pullDomainEvents` were a
+plain getter, a driver that loaded, mutated, and mutated again would publish the
+first event twice. Clearing makes the drain a transfer of ownership rather than a
+read, and makes "was this published?" a question with one answer.
 
-The Transactional Outbox pattern provides stronger at-least-once delivery guarantees across process restarts. This is a valid production concern but is out of scope for a reference implementation focused on DDD and Hexagonal Architecture concepts.
+### Why `AFTER_COMMIT`
+
+An event published before commit is a claim about a fact that may not survive.
+A downstream consumer acting on `MasterLeasingContractActivated` for a transaction
+that then rolls back would activate leases under a contract that is still pending.
+
+`AFTER_COMMIT` means a rollback publishes nothing. The converse — a commit whose
+event is then lost — is discussed under *Known limitation*.
+
+### Why `REQUIRES_NEW` on the consumer
+
+An `AFTER_COMMIT` listener runs after the publisher's transaction has committed, so
+there is no transaction to join. Without `REQUIRES_NEW`, a consumer's repository
+call would run in auto-commit mode, one statement at a time — so a fan-out that
+failed halfway would leave half the leases activated and no way to tell.
+
+`REQUIRES_NEW` gives the consumer its own atomic unit. UC06 activates every pending
+lease under a contract in that one transaction
+(`architecture.definition.md` § 10).
+
+### Why not an outbox, and why not a broker
+
+Both were considered and deferred.
+
+A **transactional outbox** would close the known limitation below by writing the
+event to a table inside the same transaction as the state change, and delivering it
+from there. It is the correct answer for a system with external consumers. It is
+deferred because every consumer today is in-process: the outbox would add a table,
+a poller, a delivery-attempt column and a backoff policy to make in-memory
+publication reliable against a failure mode that costs one pending lease.
+
+A **message broker** (Kafka, Rabbit) is a separate ADR trigger
+(`sdd.playbook.md` § 6 item 7) and is out of scope while there is one process.
+
+## Known limitation
+
+**Delivery is not guaranteed.** If the JVM dies between commit and the listener
+running, the event is lost with no record that it existed. For UC06 that means a
+lease stays `PENDING_ACTIVATION` under an `ACTIVE` master contract, and nothing
+retries.
+
+This is accepted, and it is accepted *because of which fan-out uses events*.
+`architecture.definition.md` § 10 splits the two: activation is eventual and
+recoverable, so it goes through an event; cancellation is not, so it goes through a
+shared transaction and never touches this mechanism. The limitation therefore
+cannot produce the dangerous state — a cancelled master contract with live leases
+under it — because cancellation was deliberately kept off this path.
+
+Recovering a missed activation is a manual re-trigger today. An outbox is the fix
+when that stops being acceptable.
 
 ## Consequences
 
-- Spring `ApplicationEventPublisher` is used inside `outbound.integration` (adapter layer). The domain and inport/outport interfaces remain framework-free.
-- `TourBookingEventListener` in the `listeners` package is the single integration point between domain events and side-effect execution.
-- This strategy provides in-process, at-most-once delivery. If the JVM crashes after commit but before the listener fires, events are lost. This is acceptable for the reference scope.
-- Replacing this with an outbox or broker in production requires only a new `DomainEventPublisher` implementation and potentially a new listener. No driver or domain changes are needed.
+Positive:
 
-## Future Considerations
+- `core.domain` has no infrastructure dependency.
+- A rollback cannot leak an event.
+- Consumers fail independently of publishers.
+- The drain pattern is identical in every driver, so it reads as one idiom rather
+  than as a decision per use case.
 
-- Outbox pattern: introduce `OutboxEntry` table and a scheduled relay process.
-- Broker integration: replace `LoggingDomainEventPublisher` with a Kafka/RabbitMQ publisher adapter.
-- Generic event type: extend `DomainEventPublisher` to handle all domain event types rather than per-event overloads.
+Negative / accepted trade-offs:
+
+- **A driver that forgets to drain loses the events silently.** Nothing structural
+  prevents it; the use-case test asserting the publication is what catches it, which
+  is why `test.definition.md` § 2.2 lists emitted events as mandatory coverage.
+- Delivery is best-effort (above).
+- `@TransactionalEventListener` is Spring-specific. It lives in `inbound.listener`,
+  which is an adapter package, so the coupling is where it belongs — but a move off
+  Spring would rewrite every listener.

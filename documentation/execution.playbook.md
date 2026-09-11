@@ -3,7 +3,7 @@
 ## Purpose
 
 This Playbook makes SDD executable:
-It describes how Agents MUST plan, create specs, implement, verify and closes tasks.
+It describes how Agents MUST plan, create specs, implement, verify and close tasks.
 
 
 # 1. Operating Mode
@@ -49,8 +49,8 @@ Goal: Understand domain impact before touching code.
 Before anything else, read these four documents:
 
 - [ ] `documentation/architecture.definition.md` – package structure, layering rules, dependency directions, registered bounded contexts (§ 11)
-- [ ] `documentation/coding-style.definition.md` – naming conventions, class roles (`*RestAPI`, `*Controller`, `*Driver`, …), visibility rules
-- [ ] `documentation/modelling.definition.md` – Always-Valid doctrine, DDD building blocks
+- [ ] `documentation/coding-style.definition.md` – naming conventions, class roles (`*GraphQLController`, `*Driver`, `*Entity`, …), null policy, visibility rules
+- [ ] `documentation/modelling.definition.md` – Always-Valid doctrine, DDD building blocks, the four identity categories
 - [ ] `documentation/tdd.definition.md` – the RED-first rule and its evidence requirement
 
 These define conventions that apply to every class written. Missing them causes implementation to violate established patterns.
@@ -66,12 +66,16 @@ Agent MUST then:
   - Inbound Port(s)
   - Outbound Port(s)
   - Adapter(s)
-- Check whether a corresponding use-case.spec.md exists. If not → create it first
+  - GraphQL schema file(s)
+- Check whether a corresponding use-case spec exists. If not → create it first
 - Check:
   - Are domain invariants affected?
-  - Is a new Domain Event required?
-  - Does persistence schema change?
-  - Is a public API contract affected?
+  - Is a new Domain Event required, and is it context-local or cross-context
+    (`modelling.definition.md`, Domain Event)?
+  - Does the persistence schema change? A Flyway migration and an entity change
+    always arrive together
+  - Is the GraphQL schema affected, and is the change breaking
+    (`sdd.playbook.md` § 6 item 12)?
   - Review relevant ADRs for conflicts or constraints
 
 No implementation before full scope clarity.
@@ -95,7 +99,6 @@ If a use case is created or modified, the spec MUST define:
 - Definition of Done (§ 10 of the spec) — every `AC-NN` cited by at least one
   objectively checkable item
 
-
 ### 3.2.2 Domain Spec (if domain model changes)
 
 For new or modified domain objects:
@@ -107,7 +110,6 @@ For new or modified domain objects:
 
 No anemic domain models.
 
-
 ### 3.2.3 Port Specification (if integration changes)
 
 For new inbound/outbound ports:
@@ -116,7 +118,6 @@ For new inbound/outbound ports:
 - Exception model
 - Transactional expectations
 - Idempotency expectations (if applicable)
-
 
 ### 3.2.4 ADR (if architectural decision required)
 
@@ -148,20 +149,20 @@ Standing rules for the whole phase:
 - Smallest safe increment
 - No refactoring outside scope
 - No layering violations
-- Domain logic only inside domain package
-- No business logic inside controllers or adapters
+- Domain logic only inside the domain package
+- No business logic inside GraphQL controllers or adapters
 - Always-Valid domain model enforcement
 
 Technical constraints:
-- Java 25 features allowed (records, sealed types, pattern matching, flexible
-  constructor bodies, unnamed variables, stream gatherers) — matches the toolchain
-  declared in `gradle/libs.versions.toml`; raising the baseline is an ADR trigger
-  (`sdd.playbook.md` § 6 item 13, `adr/0006-java-25-baseline.adr.md`)
-- **No preview features.** `--enable-preview` is not enabled and enabling it is a
-  separate ADR — it changes the artifact's compatibility guarantees
-- No field injection
-- Constructor injection only
-- No framework types inside domain layer
+- Kotlin 2.3 targeting JVM 17, matching the toolchain declared in
+  `build.gradle.kts`; raising the baseline is an ADR trigger
+  (`sdd.playbook.md` § 6 item 13, `adr/0006-jvm-and-kotlin-baseline.adr.md`)
+- `allWarningsAsErrors` is on. A deprecation warning fails the build; do not
+  suppress it to get green — fix it or raise it
+- No field injection; constructor injection only
+- No framework types inside the domain layer, `jakarta.persistence` most of all
+- No `!!` and no `java.util.Optional` in `core.*` or `shared.*`
+  (`coding-style.definition.md` § 1.4)
 
 ### 3.4.1 RED
 
@@ -197,7 +198,7 @@ After REFACTOR, dispatch both subagents **in parallel** on the working diff:
 | Agent | Returns |
 |-------|---------|
 | `ddd-hex-reviewer` | `PASS` or `DRIFT` + `file:line` findings |
-| `spec-documenter` | reconciled specs, `rest/*.http`, DoD scoreboard |
+| `spec-documenter` | reconciled specs, `graphql/*.graphql`, DoD scoreboard |
 
 Rules:
 
@@ -206,7 +207,7 @@ Rules:
   by arguing with it in the report.
 - Drift is never traded away for progress, and a DoD box is never ticked while a
   `DRIFT` finding touches it.
-- `spec-documenter` never edits `app/src/**`. Where the code contradicts a spec
+- `spec-documenter` never edits `src/**`. Where the code contradicts a spec
   it reports the contradiction; the agent driving the increment decides which
   side is wrong.
 - Documentation is part of the increment, not a follow-up. An increment whose
@@ -221,6 +222,11 @@ Commands (`technical.spec.md`, Build & Quality Gates):
 ./gradlew clean test
 ./gradlew build
 ```
+
+If the increment touched persistence, the gates are only meaningful with Postgres
+running (`make devup`). A green run in which every `*IT` skipped has not verified
+the persistence layer, and the report must say so rather than claiming the gate
+passed (`test.definition.md` § 2.3).
 
 Test rules, taxonomy, and coverage expectations are owned by
 `test.definition.md` — this playbook does not redefine them
@@ -245,13 +251,15 @@ No silent assumptions.
 # 4. Manual Verification Checklist (Lightweight)
 
 When applicable:
-- REST endpoints return correct status codes
+- GraphQL operations return the documented error classification, not a bare 200 with a
+  null field
 - Validation errors are meaningful
 - Domain invariants enforced
-- No stack traces leaked in API responses
+- No stack traces leaked in GraphQL error extensions
 - Transaction boundaries respected
 - Idempotency preserved where required
-- Logging does not expose sensitive data
+- Logging does not expose salary-sacrifice amounts or employee identifiers
+  (`technical.spec.md`, Observability)
 - Build artifact generated successfully
 
 ---
@@ -273,6 +281,7 @@ Rules:
 
 - `Verification` without a quoted RED failure fails the contract, even if every
   gate is green (`tdd.definition.md` § 2).
+- `Verification` must state whether the persistence suite ran or skipped.
 - `Drift review` is never omitted and never self-assessed. It carries the
   `ddd-hex-reviewer` verdict verbatim.
 - Plain-text labels, not emoji. The contract must read identically in a
@@ -286,10 +295,12 @@ Structured and precise.
 
 # 6. Anti-Patterns (Strictly Forbidden)
 
-- Business logic in controllers
+- Business logic in GraphQL controllers
 - Business logic in adapters
 - Anemic domain models
-- Direct repository calls from controller
+- Direct repository calls from a controller
+- A `@SchemaMapping` that loads another aggregate to resolve a field
+- A JPA entity or `Optional` crossing into the core
 - Skipping spec updates
 - Introducing new libraries without ADR
 - Bypassing domain invariants
@@ -298,6 +309,7 @@ Structured and precise.
 - Modifying unrelated modules “while here”
 - Writing production code before a quoted RED failure exists
 - Weakening or disabling a test to reach green
+- Suppressing a compiler warning to get past `allWarningsAsErrors`
 - Ticking a DoD box that no named passing test backs
 - Overruling a `DRIFT` verdict instead of fixing the finding
 

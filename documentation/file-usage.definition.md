@@ -12,9 +12,7 @@ It prevents rule duplication, circular governance, and specification drift.
 **The ranked authority order lives in [`../CLAUDE.md`](../CLAUDE.md) and nowhere else.**
 
 `CLAUDE.md` is loaded into every agent's context automatically, so it must be
-self-contained — which makes it the only sensible home for the order. This file
-previously carried a second, divergent ranking; that copy has been removed under
-§ 4 (No Duplication Rule).
+self-contained — which makes it the only sensible home for the order.
 
 This document defines what each file is **responsible for**. `CLAUDE.md` defines
 which file **wins** when two disagree.
@@ -31,7 +29,7 @@ Defines:
 - Vision
 - Strategic intent
 - Non-goals
-- Success criteria
+- Scope boundary (which entities of the data model are built)
 
 No technical detail belongs here.
 
@@ -42,6 +40,8 @@ Defines:
 - Package ontology
 - Ports & Adapters rules
 - Framework boundary rules
+- **Registered bounded contexts — canonical location** (§ 11)
+- GraphQL error classification mapping (§ 4.5)
 
 Does NOT define domain modeling semantics.
 
@@ -53,6 +53,7 @@ Defines:
 - Value Objects
 - Domain Events
 - Always-Valid doctrine
+- **The four identity categories — canonical location**
 
 Does NOT define use case orchestration.
 
@@ -64,6 +65,7 @@ Defines:
 - Database strategy
 - Migration strategy
 - SQL classification rules
+- Column type choices for money, percentages and time
 
 Does NOT define governance or workflow.
 
@@ -158,7 +160,7 @@ Immutable once accepted.
 
 
 ## coding-style.definition.md
-Defines how the actual code should look like.
+Defines how the actual code should look.
 Does not introduce any architectural decisions or functionality.
 Changes over time.
 
@@ -196,10 +198,10 @@ Copy-paste duplication is forbidden.
 
 When modifying rules:
 
-1. Identify highest authoritative file.
+1. Identify the highest authoritative file.
 2. Update that file.
 3. Remove duplicated rules from lower documents.
-4. Document change in ADR if architectural.
+4. Document the change in an ADR if architectural.
 5. **Commit the doctrine change on its own, before any code that relies on it** (§ 5.1).
 
 ## 5.1 Doctrine Lands First
@@ -208,7 +210,7 @@ When modifying rules:
 code that relies on it.**
 
 Why this is a rule and not a preference: `tdd.definition.md` § 2 makes TDD auditable for
-code — the quoted RED failure is the evidence. Nothing made spec-before-code auditable
+code — the quoted RED failure is the evidence. Nothing makes spec-before-code auditable
 for *rules*. A doctrine change and the code it sanctions, arriving in one commit, are
 indistinguishable from the code arriving first and the rule being written afterwards to
 authorise it. Both produce an identical diff, so "this was spec-first" becomes an
@@ -229,50 +231,24 @@ Rules:
 - A doctrine commit that *loosens* a rule deserves particular scrutiny: tightening a rule
   cannot retroactively legalise existing code, but loosening one can.
 - `ddd-hex-reviewer` verifies ordering with
-  `git log --diff-filter=M -- documentation/`, replacing its previous
-  "ordering unverifiable from a single snapshot" finding.
-
-Adopted after `ddd-hex-reviewer` observed that a `test.definition.md` § 1.3 rule naming
-`WebTestApplication`/`GuideWebTestApplication` had arrived in the same uncommitted tree
-as those classes. It declined to call it drift — the rule tightened rather than
-legalised — but correctly reported that the ordering could not be verified.
+  `git log --diff-filter=M -- documentation/`.
 
 ### Recorded violations
 
 Kept deliberately. A rule that lists the times it was broken is more credible than one
-that reads as though it never has been, and the two entries here are exactly the cases a
-carve-out would have been written to excuse.
+that reads as though it never has been.
 
-- **`a87d98c`** — the commit that adopted this rule. Doctrine and code co-evolved across
-  one exploratory session; slicing it retroactively into doctrine-then-code would have
-  fabricated an ordering that did not happen. The rule applies from `9f14103` onward.
-- **`d7c494e`** — added `spotlessCheck` to the § 7 gate list *and* applied the Spotless
-  plugin that satisfies it, in one commit. Found by self-audit
-  (`git log --diff-filter=M -- documentation/`). This is what prompted the build-config
-  clarification above: the ambiguity was real, and the honest resolution is that build
-  config counts, not that this commit was fine.
+- **The adaptation commit(s).** This repository's documentation set and its build
+  configuration arrived together, as one conversion of a prior reference
+  implementation to this domain and this stack. Slicing that retroactively into
+  doctrine-then-build would fabricate an ordering that did not happen. The rule
+  applies from the first increment that implements a use case onward.
 
-- **The § 1.4 nullable-record-component commit** (UC08 increment) — bundled the § 1.4
-  doctrine change with a production deletion (`TourBookingCancelled.java`) and two Javadoc
-  edits. The deletion was UC08 work with no connection to § 1.4; it arrived because an
-  earlier `git rm` had staged it and committing with explicit paths still commits the whole
-  index. The result was worse than a § 5.1 breach: `TourBooking` at that commit still
-  imported and instantiated the deleted class, so **the commit did not compile** and gates
-  1–2 failed at it. Found by `ddd-hex-reviewer`. Nothing had been pushed, so the commit was
-  rebuilt as doctrine-only and the deletion moved to the UC08 commit that follows.
-
-The first two are not corrected by rewriting history: both were settled, and slicing them
-retroactively would have fabricated an ordering that did not happen. The third is
-different, and the distinction is worth stating so it is not read as a licence. What was
-rewritten there was not the *ordering* — the doctrine genuinely preceded the code either
-way — but an unpublished commit that failed to build. Leaving a non-compiling commit in the
-history of a reference project is a defect in its own right, separate from § 5.1.
-
-So the rule is: **never rewrite to improve how the ordering looks; you may rewrite to
-repair a commit that does not build, and when you do, the breach still gets an entry here.**
-A doctrine commit is not amended to accommodate later code, and that applies to the record
-of its own breaches too — which is why this entry exists even though the commit it
-describes no longer does.
+This entry is not corrected by rewriting history, and neither are future ones: the
+ordering either happened or it did not, and a tidier log that says otherwise is
+worse than an accurate one that admits a breach. Rewriting is permitted for exactly
+one reason — repairing a commit that does not build — and when it happens, the
+breach still gets an entry here.
 
 
 # 6. Anti-Patterns
@@ -305,7 +281,28 @@ Rules:
   appropriate `.definition.md` **first**, and the agent references it.
   A checklist item with no upstream citation is a governance bug.
 - Agents that review MUST NOT edit. Agents that document MUST NOT touch
-  `app/src/**`. Enforced by their `tools:` frontmatter, not by good intentions.
+  `src/**`. Enforced by their `tools:` frontmatter, not by good intentions.
 - A hardcoded list inside an agent prompt is duplication under § 4. Machine-checkable
   facts belong in the documents — e.g. the registered bounded contexts live in
   `architecture.definition.md` § 11, and the agent reads them from there.
+
+
+# 8. On the argumentative style of these documents
+
+A rule in this repository is usually written with the reasoning that produced it,
+and often with the alternative that was rejected. That is deliberate and it is worth
+saying why, because it reads as verbose against a conventional style guide.
+
+A bare rule can only be obeyed or violated. A rule with its reasoning can also be
+**correctly set aside** when a case genuinely falls outside it, and — more
+importantly — can be recognised as wrong when it is. In a project whose premise is
+that documents govern code, a document nobody can argue with is a document nobody
+can fix.
+
+Two consequences:
+
+- **When a rule is changed, change the argument too.** A rule whose stated reason no
+  longer supports it is worse than one with no reason at all.
+- **When a rule turns out to have been wrong, say so in the document rather than
+  quietly editing it.** The record of a rule that was too broad, and how it was
+  narrowed, is what stops the same over-broad rule being written again.

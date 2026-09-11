@@ -14,7 +14,7 @@ agent and into the spec. An agent asked "are you done?" will eventually say yes.
 An agent asked "are all nine DoD boxes ticked?" cannot.
 
 Executable entry point: `.claude/skills/loop-uc/SKILL.md`, invoked as
-`/loop-uc UC07`.
+`/loop-uc UC05`.
 
 ---
 
@@ -25,12 +25,12 @@ objectively checkable criteria (`sdd.playbook.md` § 4.2). That list, and nothin
 else, decides when the loop stops.
 
 ```
-documentation/use-cases/uc07-mark-booking-completed.spec.md
+documentation/use-cases/uc05-issue-individual-leasing-contract.spec.md
   ## 10. Definition of Done      ← authoritative
         │
         │ mirrored each iteration
         ▼
-  tasks.md  ## DoD Scoreboard – UC07   ← working copy, rebuilt from the spec
+  tasks.md  ## DoD Scoreboard – UC05   ← working copy, rebuilt from the spec
 ```
 
 The spec is authoritative. `tasks.md` is a scoreboard for humans watching the
@@ -89,12 +89,17 @@ Choose **exactly one** unmet criterion per iteration. Priority order:
 2. Domain-layer criteria (invariants, state transitions) — the inside-out
    ordering of `tdd.definition.md` § 3.
 3. Use-case-layer criteria (orchestration, events, failure paths).
-4. Adapter and REST criteria.
+4. Adapter, schema and persistence criteria.
 5. Gate-shaped criteria (`ddd-hex-reviewer: PASS`, build green) — these are
    *consequences*, evaluated in step 6, never "worked on" directly.
 
 One criterion per iteration is a real constraint. Batching them reintroduces the
 untested-branch problem that `tdd.definition.md` § 1.2 exists to prevent.
+
+**A cross-context use case still gets one criterion per iteration.** UC04 and UC05
+each touch two contexts, and the temptation is to do "the whole interaction" in one
+pass. Split by aggregate: the master-contract criterion and the individual-contract
+criterion are separate iterations even though one calls the other.
 
 ## 2.3 Inner Loop
 
@@ -113,7 +118,7 @@ Dispatch both subagents **in parallel** on the working diff
 | Agent | Model | Returns |
 |-------|-------|---------|
 | `ddd-hex-reviewer` | opus | `PASS` or `DRIFT` + `file:line` findings |
-| `spec-documenter` | fable | reconciled specs, `rest/*.http`, scoreboard refresh |
+| `spec-documenter` | fable | reconciled specs, `graphql/*.graphql`, scoreboard refresh |
 
 They are independent. Neither waits for the other.
 
@@ -152,6 +157,10 @@ The loop exits successfully only when **all three** hold simultaneously:
 Two of three is not done. In particular, green tests with an open `DRIFT` finding
 is not done, and a `PASS` verdict on an incomplete DoD is not done.
 
+**A gate evaluated with Postgres absent has not been evaluated.** If the use case
+touched persistence and every `*IT` skipped, condition 3 is unmet regardless of the
+green tick (`test.definition.md` § 2.3). Start the database and re-run.
+
 ---
 
 # 4. Hard Stops
@@ -184,7 +193,8 @@ The `BLOCKED` report must name:
 - what was attempted, in both iterations
 - the most likely cause: under-specified criterion · missing spec · unmet
   dependency · criterion not objectively checkable · genuine implementation
-  obstacle
+  obstacle · **environment** (Postgres unavailable, so a persistence criterion
+  cannot be evidenced)
 
 `BLOCKED` is a **successful** outcome for the loop. Surfacing an unsatisfiable
 criterion in two iterations is exactly the job.
@@ -239,6 +249,7 @@ last drift verdict.
 
 - Ticking a DoD box without named evidence
 - Ticking a box a `DRIFT` finding touches
+- Ticking a persistence box on a run where the `*IT` skipped
 - Editing the spec's DoD to make the loop exit — if the DoD is wrong, fix it as a
   deliberate Spec Phase change and say so; never mid-flight to reach an exit
 - Working several criteria in one iteration

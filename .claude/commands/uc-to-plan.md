@@ -22,11 +22,24 @@ The plan MUST account for:
   not objectively checkable, say so. It is the exit condition for `/loop-uc`
   (`loop.playbook.md` § 1), so a vague DoD is a blocking spec defect.
 - **`AC-NN` identifiers** in § 7, and which test will cover each
-  (`sdd.playbook.md` § 4).
+  (`sdd.playbook.md` § 4). A criterion about money or a derived date must state an
+  **exact** expected value; if it does not, that is a spec defect to fix before
+  planning.
 - **TDD ordering** — the plan's steps are RED-first, inside-out per
-  `tdd.definition.md` § 3. Do not plan "implement X, then test X".
-- **ADR triggers** — check `sdd.playbook.md` § 6. Any trigger means the ADR comes
-  before implementation.
+  `tdd.definition.md` § 3: domain → driver → GraphQL → persistence. Do not plan
+  "implement X, then test X".
+- **ADR triggers** — check `sdd.playbook.md` § 6, and check § 6.1 before raising
+  one. Any genuine trigger means the ADR comes before implementation.
+- **Cross-context use cases run the ladder twice.** UC04, UC05, UC08 and UC09 each
+  touch two contexts. Plan the domain step in each context separately, before either
+  driver exists.
+- **The three artefacts a persisted change always needs together**: the Flyway
+  migration, the `*Entity` + `*Mapper`, and the round-trip assertion the repository
+  port spec demands. A plan that adds a mutable property without all three is
+  incomplete.
 - **A `SUPERSEDED` spec is not a target.** Point at its successors instead.
+- **Which schema file and which `graphql/uc<nn>-*.graphql` request file** the
+  increment touches — or state explicitly that the use case has no GraphQL surface
+  (UC06, UC08, UC09) and therefore no request file.
 
 Ask questions to clarify if necessary.

@@ -8,46 +8,59 @@ goal: Humans take notes and share them
 Non-authoritative scratchpad. May not contradict formal definitions
 (`file-usage.definition.md`).
 
-## DomainEvent List inside AggregateRoot
-Thinking about the DomainEvents. This is pretty neat when keeping the core clean.
-On the other hand, its a little bit weird design. As long as we recall it weird,
-I think we are fine.
+## Inheritance mode is specified but not implemented
 
-Still open as a design musing. Worth noting that ADR 0004 settled the *port* side
-of this (`publish(DomainEvent)` rather than per-type overloads), and that the drain
-pattern `pullDomainEvents().forEach(publisher::publish)` is now identical in all eight
-drivers — so the weirdness is at least uniform.
+`MLC_CONFIGURATION.inheritance_mode` and `ILC_CONFIGURATION.inheritance_mode`
+distinguish *live-linked* from *copied-once* inheritance of terms. Only
+`COPIED_ONCE` is implemented: UC05 reads the master contract's terms through
+`ReadLeasingTermsUseCase` and copies the ones it needs onto the lease's own
+configuration.
 
-## Missing ReadModel
-The reference implementation would benefit a read model. Attendees can then
-see how ReadModels and Queries are placed.
+`LIVE_LINKED` is the interesting one and is deliberately deferred, because it is
+not a feature so much as a question about the context boundary. A live link means
+the lease's effective terms change when the master contract is amended, which
+means either:
 
-Confirmed by `spec-documenter`: only `outbound/persistence/write` exists, and
+- `individualleasing` reads `masterleasing`'s configuration on every access —
+  making the master contract's inport a query hot path and the lease's own terms
+  partially undefined without it; or
+- amending a master configuration (UC03) fans out to every live-linked lease under
+  it, which is a third cross-context interaction with its own consistency question
+  — and by `architecture.definition.md` § 10 the choice between event and shared
+  transaction would need making explicitly.
+
+The second reading is probably right and it is an ADR, not an increment.
+
+## The data model has a `dynamic_fields` slot
+
+`MLC_CONFIGURATION.dynamic_fields` is described in the source data model as "a
+named extensibility slot for future fields; no concrete fields were ever defined".
+It is not modelled, and nothing here should model it until somebody names a field
+that needs it. An untyped bag on an aggregate is the opposite of everything
+`modelling.definition.md` asks for, and "we might need it" has never in the history
+of software been a sufficient reason for one.
+
+Worth revisiting only with a concrete field and an ADR.
+
+## Missing read side
+
 `architecture.definition.md` § 4.6 documents an `outbound.persistence.read` side
-that has no implementation. A read-side use case would exercise it — currently every
-use case is a command, so the CQRS half of the package ontology is unused.
+that currently has no implementation: every use case is a command. A GraphQL API
+makes this gap more visible than a REST one did, because the natural shape of a
+`query` is a projection and the natural shape of the CQRS half we have is not.
 
----
+A "list contracts for an employer" query would exercise it and is the obvious
+first read-side use case.
 
-*Closed notes*
+## Affiliated contracts are in the model and not in the code
 
-- ~~UC12's DELETE verb vs the UC08 verb ruling~~ — closed by the maintainer's ruling:
-  UC12 § 9 became `POST /api/v1/guide-tours/{guideTourId}/cancel`, for the same reasons
-  as UC08 (`DELETE` bodies dropped by intermediaries; cancellation is a state transition,
-  not a removal). Implemented as ruled — `GuideTourRestAPI.cancel` and
-  `rest/uc12-cancel-tour-by-guide.http` both use `POST .../cancel`. Raised by
-  `spec-documenter` during the UC08 reconciliation.
+`parent_mlc_id` and `parent_service_agreement_id` carry the corporate-group
+structure: a base contract with affiliated contracts hanging off it, and
+`kuv_joint_liability` recording whether the group shares liability. The aggregate
+carries `parentMasterLeasingContractId` as a nullable reference so the shape is
+not lost, but no use case creates or reasons about the hierarchy, and no invariant
+guards it — nothing today stops a cycle.
 
-- ~~UC07 drops the guide-tour correlation id — deliberate?~~ — closed, **not** deliberate.
-  `TourCompleted` carries `guideTourId` and UC06 threaded it all the way through
-  (`MarkBookingActiveCommand` → `BookingActivated`), but the first UC07 implementation
-  discarded it at every hop while UC07 § 2 still listed it as an input. Reported by
-  `spec-documenter`. Resolved by propagating it rather than by amending the spec: half a
-  correlation trail is worse than none, because it looks complete. `BookingCompleted`,
-  `MarkBookingCompletedCommand` and `TourBooking.markCompleted` now all carry it, and
-  each of the three hops has its own test, mutation-verified.
-- ~~Documentation, especially in the domain directory, is missing the definitions for
-  the guide bc~~ — closed. `documentation/domain/aggregate-guide-tour.spec.md`,
-  `documentation/ports/guide-tour-repository.outport.spec.md` and
-  `documentation/ports/start-tour.inport.spec.md` now exist. The guide domain spec
-  records three enforcement gaps it found (G-01 to G-03) as open work.
+That is a known gap rather than a design: a cycle check is a genuine invariant and
+it spans aggregates, which by `modelling.definition.md` means it is either a domain
+service reading a chain, or the boundary is wrong. Not decided.

@@ -1,8 +1,8 @@
 name: build
 
-# Runs the canonical quality gates from documentation/test.definition.md section 7.
-# ADR 0007 exists because these rules were previously enforced only when a human or an
-# agent remembered to check them.
+# Runs the canonical quality gates from documentation/test.definition.md § 7.
+# adr/0007-archunit-boundary-enforcement.adr.md exists because these rules were
+# previously enforced only when a human or an agent remembered to check them.
 
 on:
   push:
@@ -17,51 +17,73 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # The integration tests skip themselves when Postgres is unreachable
+    # (test.definition.md § 2.3). That is the right behaviour on a laptop and the
+    # wrong behaviour in CI, where a silently skipped persistence suite is
+    # indistinguishable from a passing one. So CI always provides the server, and the
+    # step below fails the build if the tests skipped anyway.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: contract_management
+          POSTGRES_PASSWORD: contract_management
+          POSTGRES_DB: contract_management_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U contract_management -d contract_management_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
       # Pinned explicitly rather than inheriting the runner default. ADR 0006 requires
-      # this: the toolchain and the environment diverging is exactly the drift that ADR
+      # it: the toolchain and the environment diverging is exactly the drift that ADR
       # fixed, and a runner default is an environment we do not control.
-      # Temurin, because java.net builds do not maintain LTS patch releases.
-      - name: Set up JDK 25 (Temurin)
+      - name: Set up JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Covers spotlessCheck (wired into `check`) and the ArchUnit suite.
+      # Covers spotlessCheck (wired into `check`), detekt, and the ArchUnit suite.
       - name: Quality gates
-        run: ./gradlew clean test build
+        env:
+          TEST_DATASOURCE_URL: jdbc:postgresql://localhost:5433/contract_management_test
+          TEST_DATASOURCE_USERNAME: contract_management
+          TEST_DATASOURCE_PASSWORD: contract_management
+        run: ./gradlew clean detekt test build
 
-      # test.definition.md section 1.3: no test may create a file-based database.
-      # A test that boots the app without the "test" profile writes app/data/ and leaks
-      # state between runs, which `./gradlew clean` does not remove.
-      - name: Assert no file-based test database was created
-        run: |
-          if [ -d app/data ]; then
-            echo "::error::app/data/ exists after the test run. A test booted the"
-            echo "::error::application without @ActiveProfiles(\"test\"), so it ran against"
-            echo "::error::the production datasource. See test.definition.md section 1.3."
-            ls -la app/data
-            exit 1
-          fi
-          echo "app/data/ absent, as required."
-
-      # A green architecture suite is not evidence that ArchUnit read anything:
-      # versions before 1.4.1 import zero classes from Java 25 bytecode, silently.
-      # ContextRegistryTest asserts the import size; this makes its absence visible in CI.
+      # A green architecture suite is not evidence that ArchUnit read anything: a version
+      # whose bundled ASM cannot parse the current bytecode imports zero classes,
+      # silently. ContextRegistryTest asserts the import size; this makes its absence
+      # visible in CI.
       - name: Assert the architecture suite actually ran
         run: |
-          if ! grep -rq 'ContextRegistryTest' app/build/test-results/test/; then
+          if ! grep -rq 'ContextRegistryTest' build/test-results/test/; then
             echo "::error::No ContextRegistryTest results found. The architecture suite"
             echo "::error::did not run. See technical.spec.md, Testing."
             exit 1
           fi
           echo "Architecture suite ran."
+
+      # test.definition.md § 2.3: a skipped persistence suite in CI is a failure.
+      - name: Assert the persistence suite was not skipped
+        run: |
+          if grep -rlq '<skipped' build/test-results/test/*IT.xml 2>/dev/null; then
+            echo "::error::An integration test skipped itself. CI provides Postgres as a"
+            echo "::error::service, so PostgresAvailability should never trip here. See"
+            echo "::error::test.definition.md section 2.3."
+            grep -rl '<skipped' build/test-results/test/*IT.xml
+            exit 1
+          fi
+          echo "Persistence suite ran against Postgres."
 
       - name: Upload test results
         if: always()
@@ -69,6 +91,6 @@ jobs:
         with:
           name: test-results
           path: |
-            app/build/reports/tests/
-            app/build/test-results/
+            build/reports/tests/
+            build/test-results/
           retention-days: 7
