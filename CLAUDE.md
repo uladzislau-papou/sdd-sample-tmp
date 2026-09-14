@@ -147,6 +147,8 @@ Rules:
 | `/plan-to-task` | `plan.md` → phased checkbox `tasks.md` |
 | `/execute-task <N.M>` | implement one task block, TDD-first |
 | `/loop-uc <UCNN>` | run the outer loop until the use case's DoD is met |
+| `/code-review [<base-ref>]` | review the diff since a base ref for logic errors, architecture drift, and security issues |
+| `/pr-review <PR-URL-or-number>` | review a GitHub pull request the same way, without checking out its branch |
 
 ---
 
