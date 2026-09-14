@@ -21,6 +21,8 @@ built-ins.
 **No `jakarta.persistence` type, no `org.springframework.data` type, and no
 `java.util.Optional` appears in any signature** (`architecture.definition.md` § 6
 rule 6, `coding-style.definition.md` § 1.4). Absence is `T?`.
+`DependencyRulesTest.optional_doesNotAppearInCoreOrShared` enforces the `Optional`
+prohibition mechanically.
 
 This is the rule JPA erodes most easily. Spring Data's own
 `MasterLeasingContractJpaRepository` is a **different** interface living in

@@ -1,0 +1,59 @@
+# The contract for masterleasing GraphQL operations (architecture.definition.md § 4.5).
+# There is no root Query type in this system yet — no read-side use case has been
+# built (UC09 ReadLeasingTerms will be the first, per architecture.definition.md § 5).
+# GraphQL requires a Query root operation type to exist, so a placeholder stands in
+# until then.
+type Query {
+  _placeholder: Boolean
+}
+
+enum ContractType {
+  SALARY_SACRIFICE
+  EMPLOYER_FUNDED
+  MIXED
+}
+
+enum SalesChannel {
+  DIRECT
+  PARTNER
+  PORTAL
+}
+
+enum InheritanceMode {
+  LIVE_LINKED
+  COPIED_ONCE
+}
+
+input MlcConfigurationInput {
+  contractType: ContractType!
+  salesChannel: SalesChannel!
+  inheritanceMode: InheritanceMode!
+  currency: String!
+  creditLimitAmount: String!
+  priceRangeMin: String!
+  priceRangeMax: String!
+  eligibleEmployees: Int!
+  jointLiability: Boolean!
+  returnQuotaPercentage: String!
+  noticePeriodMonths: Int!
+}
+
+input RegisterMasterLeasingContractInput {
+  employerId: String!
+  lessorId: String!
+  partnerNumber: String!
+  parentMasterLeasingContractId: ID
+  configuration: MlcConfigurationInput!
+}
+
+type RegisterMasterLeasingContractPayload {
+  masterLeasingContractId: ID!
+  status: String!
+  configurationVersion: Int!
+}
+
+type Mutation {
+  registerMasterLeasingContract(
+    input: RegisterMasterLeasingContractInput!
+  ): RegisterMasterLeasingContractPayload!
+}

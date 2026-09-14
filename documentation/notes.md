@@ -64,3 +64,21 @@ guards it — nothing today stops a cycle.
 That is a known gap rather than a design: a cycle check is a genuine invariant and
 it spans aggregates, which by `modelling.definition.md` means it is either a domain
 service reading a chain, or the boundary is wrong. Not decided.
+
+## MlcConfiguration is called an entity but carries no identity field
+
+`aggregate-master-leasing-contract.spec.md` § 2a argues `MlcConfiguration` "is an
+entity rather than a value object because it has identity across versions", but its
+property table declares no id field, and the implementation is a `data class` with
+structural equality over all ten fields — which is Value Object equality, not
+Entity equality (`modelling.definition.md` § Entity: "Equality is by identity, not
+by all fields").
+
+Raised by `ddd-hex-reviewer` during UC01's build, flagged rather than resolved. Two
+honest readings: either `(contractId, version)` is the implicit composite identity
+and the property table should say so, or the "entity" label is aspirational and the
+type is in practice a value object nested inside the aggregate (its equality
+behaviour today matches the latter). Worth a deliberate call before UC03
+(`AmendMlcConfiguration`) needs to reason about "is this the same configuration,
+amended" versus "is this a different configuration that happens to look alike" —
+not decided here.

@@ -42,8 +42,15 @@ Fields:
   - `noticePeriodMonths` (Int)
 
 Validation rules:
-- All monetary amounts share one `currency`; mixed currencies are rejected by
-  `Money` and `PriceRange`
+- The command carries **one** `currency` field, applied to every amount
+  (`register-master-leasing-contract.inport.spec.md` § 2.1) — a credit-limit-vs-band
+  mismatch is therefore not reachable through this input contract; only
+  `priceRangeMin` vs `priceRangeMax` could ever differ, and only if a future input
+  shape ever gave them independent currencies. `PriceRange` still guards this
+  defensively at the value-object level (Always-Valid holds for direct domain
+  construction too, not just for command-driven construction), which is what
+  `PriceRangeTest.throwsInvalidMasterLeasingContractException_whenCurrenciesDiffer`
+  exercises
 - `priceRangeMin <= priceRangeMax` (I-09)
 - `creditLimitAmount >= 0` (I-10), `eligibleEmployees >= 0` (I-11),
   `noticePeriodMonths` in `1..36` (I-12), `returnQuotaPercentage` in `0..100` (I-13)
@@ -141,9 +148,12 @@ Then `InvalidMasterLeasingContractException` is raised with classification
   `BAD_REQUEST` and nothing is persisted
 
 **AC-05 – Mixed Currency Rejected**
-Given a credit limit in `EUR` and a price band in `CHF`
-When RegisterMasterLeasingContract is executed
-Then the request is rejected with classification `BAD_REQUEST`
+Given a `PriceRange` whose `min` and `max` are constructed with different
+currencies (a value-object-level guard — see § 2's validation-rules note on why a
+credit-limit-vs-band mismatch is not reachable through this use case's input)
+When the value object is constructed
+Then `InvalidMasterLeasingContractException` is raised with classification
+  `BAD_REQUEST`
 
 **AC-06 – Notice Period Bounds**
 Given `noticePeriodMonths = 0`, and separately `noticePeriodMonths = 37`
@@ -165,6 +175,7 @@ And the GraphQL input type exposes no `version` field
 | Any value-object invariant violated | `InvalidMasterLeasingContractException` | `BAD_REQUEST` |
 | `Money` / `Percentage` invariant violated | `IllegalArgumentException` | `BAD_REQUEST` |
 | Malformed `ID` argument | `IllegalArgumentException` | `BAD_REQUEST` |
+| `currency` is not a valid ISO-4217 code | `InvalidMasterLeasingContractException` | `BAD_REQUEST` |
 
 **Deliberately absent: referential checks.** The employer, the lessor and the parent
 contract are not verified to exist.
@@ -183,6 +194,21 @@ one. Recorded as an open gap in `documentation/notes.md` rather than half-solved
 ## 9. GraphQL Contract
 
 Schema (`src/main/resources/graphql/masterleasing/master-leasing-contract.graphqls`):
+
+**The schema file also declares a placeholder `Query` root type**, not shown below
+because it is not part of this use case's contract:
+
+```graphql
+type Query {
+  _placeholder: Boolean
+}
+```
+
+This is the first schema file in the application, and GraphQL requires a `Query`
+root operation type to exist even when — as here — the only operation being added
+is a mutation. The placeholder is temporary: it is removed the moment a real
+read-side use case exists to populate `Query` (UC09 `ReadLeasingTerms` is the first
+candidate, per `architecture.definition.md` § 5).
 
 ```graphql
 input MlcConfigurationInput {
@@ -262,30 +288,49 @@ Every classification listed here MUST have a matching operation in
 ## 10. Definition of Done
 
 ### Behaviour
-- [ ] AC-01 covered by `MasterLeasingContractTest.register_createsContractInDraft`
+- [x] AC-01 covered by `MasterLeasingContractTest.register_createsContractInDraft`
       and `RegisterMasterLeasingContractDriverTest.register_savesAndPublishes`
-- [ ] AC-02 covered by `MasterLeasingContractTest.register_storesParentReference`
-- [ ] AC-03 covered by `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenParentIsSelf`
-- [ ] AC-04 covered by `PriceRangeTest.throwsInvalidMasterLeasingContractException_whenMinExceedsMax`
+- [x] AC-02 covered by `MasterLeasingContractTest.register_storesParentReference`
+- [x] AC-03 covered by `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenParentIsSelf`
+- [x] AC-04 covered by `PriceRangeTest.throwsInvalidMasterLeasingContractException_whenMinExceedsMax`
       and `RegisterMasterLeasingContractGraphQLControllerTest.register_returnsBadRequest_whenPriceBandInverted`
-- [ ] AC-05 covered by `PriceRangeTest.throwsIllegalArgumentException_whenCurrenciesDiffer`
-- [ ] AC-06 covered by `NoticePeriodTest` (boundary cases at 0, 1, 36, 37)
-- [ ] AC-07 covered by `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenInitialVersionIsNotOne`
+- [x] AC-05 covered by `PriceRangeTest.throwsInvalidMasterLeasingContractException_whenCurrenciesDiffer`
+- [x] AC-06 covered by `NoticePeriodTest` (boundary cases at 0, 1, 36, 37)
+- [x] AC-07 covered by `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenInitialVersionIsNotOne`
       and `RegisterMasterLeasingContractGraphQLControllerTest.schema_exposesNoVersionField`
-- [ ] Domain invariants for `MasterLeasingContract` covered by `MasterLeasingContractTest`
-- [ ] Driver orchestration and event emission covered by `RegisterMasterLeasingContractDriverTest`
-- [ ] Every failure scenario in § 8 has a negative test
+- [x] Domain invariants for `MasterLeasingContract` covered by `MasterLeasingContractTest`
+- [x] Driver orchestration and event emission covered by `RegisterMasterLeasingContractDriverTest`
+- [x] Every failure scenario in § 8 has a negative test — self-parent:
+      `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenParentIsSelf`;
+      VO invariant, every value object in the configuration: `PriceRangeTest`
+      (I-09, all three clauses), `NoticePeriodTest` (I-12), `PartnerNumberTest`
+      (I-01), `CreditLimitTest` (I-10), `EligibleEmployeesTest` (I-11),
+      `ReturnQuotaTest` (I-13), `ConfigurationVersionTest`, `CancellationReasonTest`
+      (I-14); Money/Percentage invariant:
+      `MoneyTest.compareTo_throwsIllegalArgumentException_whenCurrenciesDiffer`,
+      `EmployerIdTest`, `LessorIdTest`; malformed ID:
+      `RegisterMasterLeasingContractDriverTest.register_throwsIllegalArgumentException_whenParentIdIsMalformed`
+      (also asserts nothing is persisted or published); currency is not a valid
+      ISO-4217 code:
+      `RegisterMasterLeasingContractDriverTest.register_throwsInvalidMasterLeasingContractException_whenCurrencyIsNotIso4217`
+      (also GraphQL-level: `RegisterMasterLeasingContractGraphQLControllerTest.register_returnsBadRequest_whenIllegalArgumentExceptionThrown`
+      covers the `IllegalArgumentException → BAD_REQUEST` resolver mapping this
+      and the malformed-ID/Money-Percentage rows both rely on)
 
 ### Contracts
-- [ ] `src/main/resources/graphql/masterleasing/master-leasing-contract.graphqls` declares `registerMasterLeasingContract`
-- [ ] `graphql/uc01-register-master-leasing-contract.graphql` covers success and `BAD_REQUEST`
+- [x] `src/main/resources/graphql/masterleasing/master-leasing-contract.graphqls` declares `registerMasterLeasingContract`
+- [x] `graphql/uc01-register-master-leasing-contract.graphql` covers success and `BAD_REQUEST`
 - [ ] Persistence roundtrip covered by `MasterLeasingContractPersistenceAdapterIT`,
       including that every monetary column round-trips at scale 4
 - [ ] Flyway `V1__DDL_create_master_leasing_contract.sql` exists
-- [ ] `documentation/ports/master-leasing-contract-repository.outport.spec.md` reflects `save`
-- [ ] `documentation/ports/register-master-leasing-contract.inport.spec.md` reflects the inport
+- [x] `documentation/ports/master-leasing-contract-repository.outport.spec.md` reflects `save`
+- [x] `documentation/ports/register-master-leasing-contract.inport.spec.md` reflects the inport
 
 ### Governance
-- [ ] This spec reconciled against the code by `spec-documenter`
-- [ ] `ddd-hex-reviewer` returns `PASS`
-- [ ] Quality gates green (`test.definition.md` § 7)
+- [x] This spec reconciled against the code by `spec-documenter`
+- [x] `ddd-hex-reviewer` returns `PASS` — reached on the seventh pass, after six
+      DRIFT rounds across the increment's review history (see `tasks.md`
+      "DoD Scoreboard – UC01" for the finding-by-finding history)
+- [ ] Quality gates green (`test.definition.md` § 7) — awaits a verified
+      `./gradlew build` run; blocked structurally until the persistence roundtrip
+      and Flyway migration boxes above are closed, since the gate is all-or-nothing

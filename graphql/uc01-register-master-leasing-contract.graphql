@@ -1,0 +1,79 @@
+# UC01 — RegisterMasterLeasingContract
+#
+# Worked examples of the operation defined in
+# documentation/use-cases/uc01-register-master-leasing-contract.spec.md § 9,
+# exercised against the GraphQL endpoint (default: /contractmanagement/v1/graphql).
+#
+# Every classification named in the use-case spec's error table has a matching
+# operation here — currently just BAD_REQUEST (UC01 has no NOT_FOUND or CONFLICT
+# path; see § 8 "Deliberately absent: referential checks").
+
+# --- Success -----------------------------------------------------------------
+
+mutation RegisterMasterLeasingContract($input: RegisterMasterLeasingContractInput!) {
+  registerMasterLeasingContract(input: $input) {
+    masterLeasingContractId
+    status
+    configurationVersion
+  }
+}
+
+# Variables:
+# {
+#   "input": {
+#     "employerId": "employer-1",
+#     "lessorId": "lessor-1",
+#     "partnerNumber": "PN-0001",
+#     "parentMasterLeasingContractId": null,
+#     "configuration": {
+#       "contractType": "SALARY_SACRIFICE",
+#       "salesChannel": "DIRECT",
+#       "inheritanceMode": "COPIED_ONCE",
+#       "currency": "EUR",
+#       "creditLimitAmount": "50000.0000",
+#       "priceRangeMin": "500.0000",
+#       "priceRangeMax": "3000.0000",
+#       "eligibleEmployees": 100,
+#       "jointLiability": false,
+#       "returnQuotaPercentage": "10",
+#       "noticePeriodMonths": 3
+#     }
+#   }
+# }
+#
+# Response:
+# {
+#   "data": {
+#     "registerMasterLeasingContract": {
+#       "masterLeasingContractId": "3f1c1b1e-0000-0000-0000-000000000000",
+#       "status": "DRAFT",
+#       "configurationVersion": 1
+#     }
+#   }
+# }
+
+# --- BAD_REQUEST — inverted price band (I-09) ---------------------------------
+
+mutation RegisterMasterLeasingContract_InvertedPriceBand($input: RegisterMasterLeasingContractInput!) {
+  registerMasterLeasingContract(input: $input) {
+    masterLeasingContractId
+    status
+    configurationVersion
+  }
+}
+
+# Variables: identical to the success case, except:
+#   "priceRangeMin": "3000.0000",
+#   "priceRangeMax": "1000.0000"
+#
+# Response:
+# {
+#   "data": { "registerMasterLeasingContract": null },
+#   "errors": [
+#     {
+#       "message": "priceRangeMin must not exceed priceRangeMax",
+#       "path": ["registerMasterLeasingContract"],
+#       "extensions": { "classification": "BAD_REQUEST" }
+#     }
+#   ]
+# }

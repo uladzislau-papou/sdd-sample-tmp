@@ -259,7 +259,7 @@ Postconditions:
 Emitted events: none. **Persistence mapper only** — `MasterLeasingContractMapper`
 is its sole caller. It must stay public because the mapper lives in another
 package, so visibility cannot express the restriction;
-`ClassRoleRulesTest.reconstitute_isCalledOnlyByPersistenceMappers` enforces it and
+`ContextRegistryTest.reconstitute_isCalledOnlyByPersistenceMappers` enforces it and
 fails the build if anything outside `..outbound.persistence..` calls it (ADR 0007).
 
 ### activate(activationDate, now)
@@ -398,10 +398,14 @@ exception resolver.
 Expressed as checkable items naming the test that satisfies each.
 
 ### Covered
-- [ ] Creation invariants I-01 to I-03 — `MasterLeasingContractTest.register_*`
-- [ ] Value object invariants I-09 to I-14 — `PriceRangeTest`, `CreditLimitTest`,
-      `NoticePeriodTest`, `ReturnQuotaTest`, `CancellationReasonTest`,
-      `PartnerNumberTest`, `EligibleEmployeesTest`
+- [x] Creation invariants I-01 to I-03 — `PartnerNumberTest.throwsInvalidMasterLeasingContractException_whenBlank`
+      (I-01), `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenParentIsSelf`
+      (I-02), `MasterLeasingContractTest.register_throwsInvalidMasterLeasingContractException_whenInitialVersionIsNotOne`
+      (I-03)
+- [x] Value object invariants I-09 to I-14 — `PriceRangeTest` (I-09, all three
+      clauses: currency, non-negative, ordering), `NoticePeriodTest` (I-12),
+      `CreditLimitTest` (I-10), `EligibleEmployeesTest` (I-11), `ReturnQuotaTest`
+      (I-13), `CancellationReasonTest` (I-14)
 - [ ] `DRAFT → ACTIVE` transition and its guard (I-04) —
       `MasterLeasingContractTest.activate_*`
 - [ ] Configuration amendment, version rule (I-05) and state guard (I-06) —
@@ -411,8 +415,11 @@ Expressed as checkable items naming the test that satisfies each.
 - [ ] Event emission and drain semantics — `MasterLeasingContractTest.pullDomainEvents_*`
 - [ ] Persistence round-trip of every mutable property, at the declared scale —
       `MasterLeasingContractPersistenceAdapterIT`
-- [ ] No setters, no framework import, no `Instant.now()` in the domain — enforced
-      mechanically by `DependencyRulesTest` and `ClassRoleRulesTest` (ADR 0007)
+- [x] No setters, no framework import, no `Instant.now()` in the domain — enforced
+      mechanically by `DependencyRulesTest.coreAndSharedKernel_areFrameworkFree` and
+      `ClassRoleRulesTest.clockNowMethods_areNotCalledOutsideSystemClockPort`
+      (ADR 0007); no-setters is structural (`MasterLeasingContract`'s five mutable
+      properties are all `var ... private set`)
 
 ### Open
 - [ ] **`ENDED` is declared and reachable from no function.** It needs a time-based

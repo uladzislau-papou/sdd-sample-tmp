@@ -124,6 +124,15 @@ Rules:
 - Must not reference adapters (no GraphQL input types, no JPA entities).
 - `usecase` interfaces may only reference types from `inport.command`, `inport.result`,
   and `core.domain.<aggregate>.exception`.
+- **A `command` or `result` MAY reference a `core.domain` enum directly.** An enum
+  carries no behaviour and no invariant, so referencing one crosses no meaningful
+  boundary — unlike a value object or the aggregate itself, which a command must
+  never carry. `RegisterMasterLeasingContractCommand.configuration.contractType`
+  (`ContractType`, a `core.domain` enum) is the worked example. This is *not* an
+  exception to "inport types are stable contracts": the enum's values are the
+  contract, and a `.graphqls` schema re-declares them independently rather than
+  serialising the Kotlin type, so a schema change and an enum change remain
+  independently versionable.
 - Inport types are stable contracts: keep them small and intention-revealing.
 
 ### 4.3 `core.outport`
@@ -213,6 +222,16 @@ Rules:
   a nested field by reaching into another aggregate is how a graph API grows an N+1
   problem and a business rule at the same time. If a payload needs a field the use case
   did not return, widen the result or add a read-side query — do not traverse.
+- **A schema needs a `Query` root type before any read-side use case exists.**
+  GraphQL requires exactly one `Query` root operation type, and it must declare at
+  least one field. Until the first read-side use case is built (`ReadLeasingTermsUseCase`,
+  UC09, is expected to be first), a schema file MAY declare a placeholder —
+  `type Query { _placeholder: Boolean }` — solely to satisfy this structural
+  requirement. The placeholder MUST be removed in the same increment that adds the
+  first real query field. **It is exempt from the "every operation MUST have exactly
+  one resolver" rule above, by construction** — it exists to have no resolver, since
+  writing one would mean implementing a use case for a field with no purpose beyond
+  satisfying the schema. This is the only sanctioned exception to that rule.
 - Mapping responsibility:
     - `*Input` → Command
     - Result / read data → `*Payload`
@@ -428,7 +447,16 @@ the transport does not decide where logic lives.
    map domain exceptions to error classifications, which § 4.5 assigns it as its job.
    It must not depend on `core.outport`, on `inbound.driver`, or on any `outbound.*`
    implementation. The § 4.5 prohibition on `core.domain` is about **the schema**: no
-   domain object appears in a GraphQL type.
+   domain object appears in a GraphQL type. **A `core.domain` enum is a third
+   sanctioned exception to this rule**, not a violation of it: § 4.2 permits inport
+   commands and results to reference domain enums directly (they carry no
+   behaviour and no invariant), so a controller that builds such a command
+   necessarily imports the enum type to construct one — and, by the same
+   reasoning, an `inbound.graphql.input`/`.payload` type MAY declare a `core.domain`
+   enum as a field type for the same reason, rather than only importing it inside
+   a method body. This is distinct from the schema prohibition — the enum's
+   *values* are re-declared independently in the `.graphqls` file, so no domain
+   type is serialised over the wire; only the Kotlin import crosses.
 4. `inbound.driver` depends on `core.domain`, `core.inport`, `core.outport` only.
 5. `outbound.*` packages implement `core.outport` and must not be referenced as concrete types from drivers/controllers.
 6. Persistence types must not cross boundaries into the core (no JPA entity, no
@@ -505,6 +533,7 @@ shared
 │   ├── EmployerId                ← identity owned by no context (ADR 0005 category 3)
 │   ├── LessorId                  ← likewise
 │   ├── Money                     ← value type both contexts denominate amounts in
+│   ├── Percentage                ← rates and quotas; same ownership argument as Money
 │   └── event
 │       ├── DomainEvent           ← marker interface
 │       └── <CrossContextEvent>   ← e.g. MasterLeasingContractActivated
@@ -529,6 +558,12 @@ shared
   concept. A `Money` per context would be two copies of the same rounding rule, and
   rounding rules that drift are the classic way a leasing system starts disagreeing
   with itself by cents.
+- `Percentage` — the same ownership argument as `Money`, for rates and quotas: today
+  its only consumer is `masterleasing.ReturnQuota`, and neither context owns the
+  concept. `Percentage` itself enforces only scale; the `0..100` bound is
+  `ReturnQuota`'s own invariant (I-13), not `Percentage`'s — a bound belongs on the
+  context-owned type that has a domain exception to throw
+  (`coding-style.definition.md` § 6.2), not on the shared-kernel wrapper.
 - Framework-free; no Spring, no IO.
 
 **Not everything both contexts mention belongs here.** `CancellationReason` is
@@ -673,7 +708,7 @@ top-level packages on disk and diffs them against this table on every increment,
 |---------|------|------|-----|
 | `masterleasing` | Bounded Context | `MasterLeasingContract` aggregate (LRV) — register, activate, amend configuration, cancel; publishes the leasing terms its leases inherit | — (original context) |
 | `individualleasing` | Bounded Context | `IndividualLeasingContract` aggregate (ELV) — issue under a master contract, activate, terminate by lessee, terminate by master contract | `adr/0003-separate-individual-leasing-context.adr.md` |
-| `shared` | Shared Kernel | Cross-context building blocks only (`EmployerId`, `LessorId`, `Money`, `DomainEvent`, cross-context events, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | `adr/0003-…`, `adr/0005-…` |
+| `shared` | Shared Kernel | Cross-context building blocks only (`EmployerId`, `LessorId`, `Money`, `Percentage`, `DomainEvent`, cross-context events, `ClockPort`, `DomainEventPublisher`). Not a context. See § 9. | `adr/0003-…`, `adr/0005-…` |
 | `bootstrap` | Composition Root | Wiring only. Not a context. See § 4.9. | — |
 
 ### Rules

@@ -83,12 +83,17 @@ transport shape, and exposing the enum would make adding a state a schema concer
 
 | Exception | Condition | Classification |
 |---|---|---|
-| `InvalidMasterLeasingContractException` | any creation or value-object invariant (I-01, I-02, I-03, I-09 to I-13) | `BAD_REQUEST` |
+| `InvalidMasterLeasingContractException` | any creation or value-object invariant (I-01, I-02, I-03, I-09 to I-13), or the `currency` field is not a valid ISO-4217 code | `BAD_REQUEST` |
 | `IllegalArgumentException` | `Money`/`Percentage` invariant, or a malformed parent id | `BAD_REQUEST` |
 
 `IllegalArgumentException` appears because `Money` and `Percentage` live in
 `shared.domain` and cannot reference a context's exception type — the shared-kernel
-exemption in `coding-style.definition.md` § 6.2.
+exemption in `coding-style.definition.md` § 6.2. The `currency` code itself is
+**not** covered by that exemption: it is a plain `String` field on the command,
+parsed by the driver before any `Money` is constructed, so `coding-style.definition.md`
+§ 6.2's first clause applies (a value constructed from a command), and the driver
+catches `java.util.Currency`'s own `IllegalArgumentException` and rethrows the
+domain exception.
 
 
 ## 3. Transaction Boundary
@@ -96,6 +101,14 @@ exemption in `coding-style.definition.md` § 6.2.
 Owned by the driver. The GraphQL controller is transaction-unaware.
 
 One aggregate, one transaction. No cross-context call.
+
+**Not yet wired.** `RegisterMasterLeasingContractDriver` carries no `@Service` or
+`@Transactional` annotation as of this writing, because no
+`MasterLeasingContractRepository` implementation exists yet to make the driver a
+meaningful Spring bean — an inert annotation on an unwired class would assert a
+guarantee nothing currently provides. This is tracked against the persistence
+increment (`MasterLeasingContractPersistenceAdapter` + `bootstrap.MasterLeasingConfig`),
+not forgotten; the annotation and the `@Bean` wiring land together with the adapter.
 
 
 ## 4. Implementation
