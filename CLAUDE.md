@@ -152,6 +152,41 @@ Rules:
 
 ---
 
+## Token Efficiency Tooling
+
+Long increments burn context on raw command output and full-file reads before
+any reasoning happens. Two tools keep that spend down; one is transparent, one
+needs a deliberate choice.
+
+### RTK (Rust Token Killer) — transparent, no action needed
+
+A `PreToolUse` hook (`rtk hook claude`, configured globally in
+`~/.claude/settings.json`) rewrites shell commands before they run and
+compacts their output. `git`, `./gradlew`, `docker`, `make`, and most other
+CLI tools used in this repo are covered automatically for every Bash call.
+Treat compacted output as the complete result, not a truncation — if a result
+looks wrong (empty when output was clearly expected, contradicts its exit
+code, or garbled), re-run it raw with `rtk proxy <cmd>` rather than assume
+data was lost.
+
+### ast-grep (`sg`) — explicit, for structural search
+
+`ast-grep` matches code by AST pattern instead of text, and its output is only
+the matches, not whole files — far cheaper than `Read`-ing entire Kotlin files
+to enumerate every place a construct occurs. Reach for it instead of
+`Grep`/`Read` when the search is structural rather than textual — every call
+site of a pattern, or every class of a given shape, ahead of a refactor:
+
+```bash
+sg -p '$X.let { $$$ }' -l kotlin src/                  # every `.let { }` block
+sg -p 'class $NAME : $BASE' -l kotlin src/main/kotlin  # every subclass of $BASE
+```
+
+Plain string/regex lookups (a log message, an error string, an import) stay a
+job for `Grep` — `ast-grep` earns its keep on structure, not text.
+
+---
+
 ## GraphQL Operation Documentation
 
 GraphQL is the **only** inbound adapter in this system
